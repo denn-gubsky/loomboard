@@ -35,16 +35,16 @@ export default function ConnectionSettings() {
           <input
             type="text"
             inputMode="url"
-            placeholder="leave blank for same-origin (dev proxy)"
+            placeholder="http://truenas.local:8787 — blank = local default"
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             autoComplete="off"
             spellCheck={false}
           />
           <small>
-            Empty = same origin (uses the dev proxy to{" "}
-            <code>http://127.0.0.1:8787</code>). An absolute URL talks to
-            loomcycle directly and needs CORS enabled there.
+            Any reachable loomcycle (local, a LAN box like TrueNAS, or remote).
+            In dev it's reached through the proxy — no CORS needed. Blank ={" "}
+            <code>http://127.0.0.1:8787</code>.
           </small>
         </label>
 
