@@ -5,6 +5,7 @@ import {
   contextPercent,
   emptyMetrics,
   formatCount,
+  formatKBt,
   tokensPerSecond,
 } from "./metrics";
 
@@ -70,5 +71,13 @@ describe("formatCount", () => {
     expect(formatCount(1200)).toBe("1.2k");
     expect(formatCount(48000)).toBe("48k");
     expect(formatCount(1_300_000)).toBe("1.3M");
+  });
+});
+
+describe("formatKBt", () => {
+  it("rounds tokens to kilo-token units", () => {
+    expect(formatKBt(26041)).toBe("26KBt");
+    expect(formatKBt(200000)).toBe("200KBt");
+    expect(formatKBt(1499)).toBe("1KBt");
   });
 });
