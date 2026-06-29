@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type {
+  CompactRunResult,
   InteractiveSession,
   LibraryAgentDefinition,
 } from "@loomcycle/client";
@@ -24,7 +25,7 @@ export interface UseChat {
   tokensPerSec: number;
   send: (text: string) => void;
   cancel: () => void;
-  compact: () => Promise<void>;
+  compact: () => Promise<CompactRunResult | undefined>;
   resolveInterrupt: (answer: string) => Promise<void>;
 }
 
@@ -155,8 +156,9 @@ export function useChat(
   }, []);
 
   const compact = useCallback(async () => {
-    if (!state.runId) return;
-    await client.compactRun(state.runId);
+    if (!state.runId) return undefined;
+    // compactRun 409s on a mid-turn run — callers gate this on awaitingInput.
+    return client.compactRun(state.runId);
   }, [client, state.runId]);
 
   const resolveInterrupt = useCallback(

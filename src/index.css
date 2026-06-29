@@ -417,6 +417,67 @@ button {
   border-color: var(--accent-dim);
 }
 
+.header-spacer {
+  flex: 1;
+}
+
+/* ---- metrics HUD ---- */
+
+.hud {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.hud-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+}
+.hud-gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+.gauge-track {
+  width: 70px;
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.gauge-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+.gauge-fill[data-warn] {
+  background: var(--danger);
+}
+.gauge-pct {
+  min-width: 2.4em;
+}
+
+.compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.compact-note {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .hud {
+    display: none;
+  }
+}
+
 .chat-body {
   flex: 1;
   overflow-y: auto;

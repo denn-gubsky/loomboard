@@ -4,6 +4,7 @@ import {
   accumulateUsage,
   contextPercent,
   emptyMetrics,
+  formatCount,
   tokensPerSecond,
 } from "./metrics";
 
@@ -59,5 +60,15 @@ describe("contextPercent", () => {
   });
   it("clamps to 100", () => {
     expect(contextPercent({ ...emptyMetrics, contextTokens: 300000, maxContextTokens: 200000 })).toBe(100);
+  });
+});
+
+describe("formatCount", () => {
+  it("formats across magnitudes", () => {
+    expect(formatCount(0)).toBe("0");
+    expect(formatCount(942)).toBe("942");
+    expect(formatCount(1200)).toBe("1.2k");
+    expect(formatCount(48000)).toBe("48k");
+    expect(formatCount(1_300_000)).toBe("1.3M");
   });
 });

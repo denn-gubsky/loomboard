@@ -7,6 +7,8 @@ import AgentPicker from "./AgentPicker";
 import AgentConfigPanel from "./AgentConfigPanel";
 import MessageList from "./MessageList";
 import Composer from "./Composer";
+import MetricsHud from "./MetricsHud";
+import CompactButton from "./CompactButton";
 
 export default function ChatPane() {
   const { active, update } = useConversations();
@@ -33,6 +35,7 @@ export default function ChatPane() {
 
   const custom = configIsCustom(active.config);
   const noAgent = !active.baseAgent;
+  const hasUsage = chat.state.metrics.inputTokens > 0 || chat.state.metrics.outputTokens > 0;
 
   return (
     <section className="chat-pane">
@@ -51,6 +54,22 @@ export default function ChatPane() {
         >
           <Settings2 size={16} /> {custom ? "Custom" : "Config"}
         </button>
+
+        <div className="header-spacer" />
+
+        {(hasUsage || chat.running) && (
+          <MetricsHud
+            metrics={chat.state.metrics}
+            tokensPerSec={chat.tokensPerSec}
+            running={chat.running}
+          />
+        )}
+        {chat.state.runId && (
+          <CompactButton
+            enabled={chat.state.awaitingInput && !chat.running}
+            onCompact={chat.compact}
+          />
+        )}
       </header>
 
       {showConfig && (
