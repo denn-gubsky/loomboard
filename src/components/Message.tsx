@@ -1,3 +1,4 @@
+import { FileText } from "lucide-react";
 import type { ChatMessage } from "../lib/eventReducer";
 import Markdown from "./Markdown";
 import ThinkingBlock from "./ThinkingBlock";
@@ -8,7 +9,22 @@ export default function Message({ message }: { message: ChatMessage }) {
     // User text is shown verbatim (not parsed as markdown).
     return (
       <div className="msg user">
-        <div className="bubble">{message.text}</div>
+        <div className="bubble">
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="msg-atts">
+              {message.attachments.map((a, i) =>
+                a.kind === "image" && a.dataUrl ? (
+                  <img key={i} className="msg-att-img" src={a.dataUrl} alt={a.name} />
+                ) : (
+                  <span key={i} className="msg-att-file">
+                    <FileText size={13} /> {a.name}
+                  </span>
+                ),
+              )}
+            </div>
+          )}
+          {message.text}
+        </div>
       </div>
     );
   }

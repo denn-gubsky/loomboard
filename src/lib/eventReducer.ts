@@ -1,5 +1,6 @@
 import { accumulateUsage, emptyMetrics, type TokenMetrics } from "./metrics";
 import { describeFallback, type ChatEvent, type InterruptionInfo } from "./events";
+import type { SentAttachment } from "./attachments";
 
 // ---- View model ----
 
@@ -25,6 +26,9 @@ export type MessagePart =
 export interface UserMessage {
   role: "user";
   text: string;
+  /** Attachments shown with the message (live send only; transcript reload
+   *  rebuilds text but not thumbnails). */
+  attachments?: SentAttachment[];
 }
 
 export interface AssistantMessage {
@@ -64,7 +68,7 @@ export const initialChatState: ChatState = {
 
 export type ChatAction =
   | { kind: "event"; event: ChatEvent }
-  | { kind: "user"; text: string }
+  | { kind: "user"; text: string; attachments?: SentAttachment[] }
   | { kind: "clearInterrupt" }
   | { kind: "reset"; seed?: Partial<ChatState> };
 
@@ -148,8 +152,12 @@ function attachToolResult(
   return m;
 }
 
-function pushUser(messages: ChatMessage[], text: string): ChatMessage[] {
-  return [...closeOpen(messages), { role: "user", text }];
+function pushUser(
+  messages: ChatMessage[],
+  text: string,
+  attachments?: SentAttachment[],
+): ChatMessage[] {
+  return [...closeOpen(messages), { role: "user", text, attachments }];
 }
 
 // ---- Reducer ----
@@ -161,7 +169,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "clearInterrupt":
       return { ...state, pendingInterrupt: null };
     case "user":
-      return { ...state, awaitingInput: false, messages: pushUser(state.messages, action.text) };
+      return {
+        ...state,
+        awaitingInput: false,
+        messages: pushUser(state.messages, action.text, action.attachments),
+      };
     case "event":
       return applyEvent(state, action.event);
   }

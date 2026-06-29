@@ -36,7 +36,12 @@ export default function ChatPane() {
 
   const custom = configIsCustom(active.config);
   const noAgent = !active.baseAgent;
-  const hasUsage = chat.state.metrics.inputTokens > 0 || chat.state.metrics.outputTokens > 0;
+  const m = chat.state.metrics;
+  const hasUsage = m.inputTokens > 0 || m.outputTokens > 0;
+  // Tokens left in the model's window, for the attachment budget (null = the
+  // model didn't report a window, so we can't enforce).
+  const freeTokens =
+    m.maxContextTokens > 0 ? Math.max(0, m.maxContextTokens - m.contextTokens) : null;
 
   return (
     <section className="chat-pane">
@@ -95,6 +100,7 @@ export default function ChatPane() {
       <Composer
         disabled={noAgent || !!chat.state.pendingInterrupt}
         running={chat.running}
+        freeTokens={freeTokens}
         onSend={chat.send}
         onStop={chat.cancel}
         placeholder={

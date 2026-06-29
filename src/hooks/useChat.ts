@@ -13,15 +13,16 @@ import {
 } from "../lib/eventReducer";
 import { transcriptToEvents, type ChatEvent } from "../lib/events";
 import { tokensPerSecond } from "../lib/metrics";
-import { userSegment } from "../lib/segments";
+import { buildUserSegments } from "../lib/segments";
 import { resolveConversationAgent } from "../lib/agentFork";
+import type { SentAttachment, StagedAttachment } from "../lib/attachments";
 import { describeError, isAbortError } from "../lib/loomcycle";
 
 export interface UseChat {
   state: ChatState;
   running: boolean;
   tokensPerSec: number;
-  send: (text: string) => void;
+  send: (text: string, attachments?: StagedAttachment[]) => void;
   cancel: () => void;
   compact: () => Promise<CompactRunResult | undefined>;
   resolveInterrupt: (answer: string) => Promise<void>;
@@ -34,10 +35,11 @@ function titleFrom(text: string): string {
 
 // Drives one conversation's interactive run (RFC AI). A conversation is a single
 // long-lived interactive run: the first message starts it (parking at end_turn),
-// follow-ups steer the SAME run via sendRunInput, and reopening re-attaches by
-// run_id — or, if that run has aged out, replays the transcript read-only and
-// resumes the session on the next send. The reducer is pure; this hook owns the
-// stream lifecycle, wall-clock timing, and persistence of run/session ids.
+// plain follow-ups steer it via sendRunInput, and reopening re-attaches by
+// run_id (or replays the transcript). Turns carrying attachments can't use the
+// text-only steer path, so they (re)start the run with rich segments via
+// continueSession/runStreaming. A monotonic `gen` token marks the active stream
+// so a superseding turn never races the one it replaced.
 export function useChat(
   conversation: Conversation | null,
   baseDef: LibraryAgentDefinition | undefined,
@@ -49,18 +51,14 @@ export function useChat(
   const [tokensPerSec, setTps] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
-  const convoIdRef = useRef<string | null>(null);
+  const genRef = useRef(0); // active-stream generation
   const runIdRef = useRef("");
   const agentIdRef = useRef("");
-  // True while a run's event stream is open — only then can we steer it.
   const liveRef = useRef(false);
 
   const turnStartRef = useRef(0);
   const outputTokensRef = useRef(0);
   const outputAtTurnStartRef = useRef(0);
-  // Live throughput estimate from streamed text — many providers only emit a
-  // usage event at end of turn, so we approximate tokens as chars/4 during the
-  // stream and refine with the real count when usage arrives.
   const turnCharsRef = useRef(0);
   const lastTpsTsRef = useRef(0);
 
@@ -72,20 +70,21 @@ export function useChat(
     setTps(0);
   }, []);
 
-  // Consume an event stream into the reducer. `rethrowStartError` lets the
-  // re-attach path detect a dead run (error before any frame) and fall back to
-  // the transcript; mid-stream errors always surface as an error message.
+  // Consume an event stream into the reducer, tagged with its generation. A
+  // newer stream (gen bump) makes this one stop dispatching and stop owning the
+  // running/live flags. `rethrowStartError` lets the re-attach path detect a
+  // dead run (error before any frame) and fall back to the transcript.
   const consume = useCallback(
     async (
       stream: AsyncIterable<AgentEvent>,
-      convoId: string,
+      gen: number,
       rethrowStartError = false,
     ) => {
       let received = 0;
       liveRef.current = true;
       try {
         for await (const ev of stream) {
-          if (convoIdRef.current !== convoId) break;
+          if (genRef.current !== gen) break;
           received++;
           const event = ev as ChatEvent;
           if (event.type === "agent") {
@@ -94,12 +93,8 @@ export function useChat(
           }
           dispatch({ kind: "event", event });
 
-          // tokens/sec only for a live turn (turnStart set by send). On a
-          // re-attach/transcript replay turnStart is 0 — historical events must
-          // not produce a bogus near-zero rate.
           const liveTurn = turnStartRef.current > 0;
           if (liveTurn && event.type === "text" && event.text) {
-            // Live estimate, throttled so it doesn't add a render per delta.
             turnCharsRef.current += event.text.length;
             const now = Date.now();
             if (now - lastTpsTsRef.current > 150) {
@@ -112,7 +107,6 @@ export function useChat(
           if (event.type === "usage" && event.usage) {
             outputTokensRef.current += event.usage.output_tokens ?? 0;
             if (liveTurn) {
-              // Refine with the authoritative count when the provider reports it.
               setTps(
                 tokensPerSecond(
                   outputTokensRef.current - outputAtTurnStartRef.current,
@@ -132,14 +126,14 @@ export function useChat(
       } catch (e) {
         if (isAbortError(e)) return;
         if (rethrowStartError && received === 0) throw e;
-        if (convoIdRef.current === convoId) {
+        if (genRef.current === gen) {
           dispatch({
             kind: "event",
             event: { type: "error", error: describeError(e) } as ChatEvent,
           });
         }
       } finally {
-        if (convoIdRef.current === convoId) {
+        if (genRef.current === gen) {
           setRunning(false);
           liveRef.current = false;
         }
@@ -149,31 +143,52 @@ export function useChat(
   );
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, attachments: StagedAttachment[] = []) => {
       const convo = conversation;
       const trimmed = text.trim();
-      if (!convo || !trimmed || !convo.baseAgent) return;
+      if (!convo || !convo.baseAgent) return;
+      const ready = attachments.filter((a) => a.status === "ready");
+      if (!trimmed && ready.length === 0) return;
 
-      dispatch({ kind: "user", text: trimmed });
-      if (convo.title === "New chat") update(convo.id, { title: titleFrom(trimmed) });
+      const sent: SentAttachment[] = ready.map((a) => ({
+        name: a.name,
+        kind: a.kind,
+        dataUrl: a.dataUrl,
+      }));
+      dispatch({
+        kind: "user",
+        text: trimmed,
+        attachments: sent.length ? sent : undefined,
+      });
+      if (convo.title === "New chat" && trimmed) {
+        update(convo.id, { title: titleFrom(trimmed) });
+      }
       setRunning(true);
       beginTurnTiming();
 
       try {
-        // Steer the live run if one is open.
-        if (liveRef.current && runIdRef.current) {
+        // Fast path: steer a live run with plain text (no attachments).
+        if (ready.length === 0 && liveRef.current && runIdRef.current) {
           await client.sendRunInput(runIdRef.current, trimmed);
           return;
         }
+        // Segments path: attachments, or a fresh/resumed turn. Supersede any
+        // live stream (the abandoned parked run is replayed server-side by
+        // continueSession).
+        const segments = buildUserSegments(trimmed, ready);
+        if (segments.length === 0) {
+          setRunning(false);
+          return;
+        }
+        const gen = ++genRef.current;
+        abortRef.current?.abort();
         const ac = new AbortController();
         abortRef.current = ac;
         let stream: AsyncIterable<AgentEvent>;
         if (convo.sessionId) {
-          // Resume an existing session with a fresh interactive run (server
-          // replays the transcript; the stream carries only new events).
           stream = client.continueSession({
             sessionId: convo.sessionId,
-            segments: [userSegment(trimmed)],
+            segments,
             interactive: true,
             signal: ac.signal,
           });
@@ -181,12 +196,12 @@ export function useChat(
           const agentName = await resolveConversationAgent(client, convo, baseDef, update);
           stream = client.runStreaming({
             agent: agentName,
-            segments: [userSegment(trimmed)],
+            segments,
             interactive: true,
             signal: ac.signal,
           });
         }
-        void consume(stream, convo.id);
+        void consume(stream, gen);
       } catch (e) {
         if (!isAbortError(e)) {
           setRunning(false);
@@ -240,12 +255,11 @@ export function useChat(
     if (Object.keys(patch).length) update(conversation.id, patch);
   }, [state.runId, state.sessionId, conversation, update]);
 
-  // Conversation switch: tear down the old stream, reset, and reload prior
-  // history (re-attach to a live run, else read-only transcript). Keyed on id
-  // only so persisting ids doesn't tear down the live stream.
+  // Conversation switch: tear down the old stream, reset, reload history
+  // (re-attach to a live run, else read-only transcript). Keyed on id only.
   useEffect(() => {
     const convo = conversation;
-    convoIdRef.current = convo?.id ?? null;
+    const gen = ++genRef.current;
     abortRef.current?.abort();
     abortRef.current = null;
     runIdRef.current = "";
@@ -253,6 +267,7 @@ export function useChat(
     liveRef.current = false;
     outputTokensRef.current = 0;
     outputAtTurnStartRef.current = 0;
+    turnStartRef.current = 0;
     setTps(0);
     setRunning(false);
 
@@ -270,34 +285,28 @@ export function useChat(
     const ac = new AbortController();
     abortRef.current = ac;
     void (async () => {
-      // Prefer re-attaching to a live run (replays history + live-tails).
       if (convo.runId) {
         try {
           runIdRef.current = convo.runId;
           setRunning(true);
-          await consume(
-            client.streamRunByID(convo.runId, { signal: ac.signal }),
-            convo.id,
-            true,
-          );
+          await consume(client.streamRunByID(convo.runId, { signal: ac.signal }), gen, true);
           return;
         } catch (e) {
           if (isAbortError(e)) return;
-          // Run has aged out — fall back to a read-only transcript.
           runIdRef.current = "";
           liveRef.current = false;
           setRunning(false);
         }
       }
-      if (convo.sessionId && convoIdRef.current === convo.id) {
+      if (convo.sessionId && genRef.current === gen) {
         try {
           const t = await client.getTranscript(convo.sessionId, { signal: ac.signal });
-          if (convoIdRef.current !== convo.id) return;
+          if (genRef.current !== gen) return;
           for (const event of transcriptToEvents(t)) {
             dispatch({ kind: "event", event });
           }
         } catch (e) {
-          if (!isAbortError(e) && convoIdRef.current === convo.id) {
+          if (!isAbortError(e) && genRef.current === gen) {
             dispatch({
               kind: "event",
               event: { type: "error", error: describeError(e) } as ChatEvent,
