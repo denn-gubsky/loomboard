@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type {
+  AgentEvent,
   CompactRunResult,
-  InteractiveSession,
   LibraryAgentDefinition,
 } from "@loomcycle/client";
 import { useLoomcycle } from "../state/connection";
@@ -11,7 +11,7 @@ import {
   initialChatState,
   type ChatState,
 } from "../lib/eventReducer";
-import type { ChatEvent } from "../lib/events";
+import { transcriptToEvents, type ChatEvent } from "../lib/events";
 import { tokensPerSecond } from "../lib/metrics";
 import { userSegment } from "../lib/segments";
 import { resolveConversationAgent } from "../lib/agentFork";
@@ -19,9 +19,7 @@ import { describeError, isAbortError } from "../lib/loomcycle";
 
 export interface UseChat {
   state: ChatState;
-  /** Currently producing output (composer disabled, stop button shown). */
   running: boolean;
-  /** Live generation throughput for the current turn. */
   tokensPerSec: number;
   send: (text: string) => void;
   cancel: () => void;
@@ -29,11 +27,17 @@ export interface UseChat {
   resolveInterrupt: (answer: string) => Promise<void>;
 }
 
+function titleFrom(text: string): string {
+  const t = text.trim().replace(/\s+/g, " ");
+  return t.length > 48 ? t.slice(0, 47) + "…" : t;
+}
+
 // Drives one conversation's interactive run (RFC AI). A conversation is a single
 // long-lived interactive run: the first message starts it (parking at end_turn),
-// follow-ups steer the SAME run, and reopening re-attaches by run_id. The event
-// stream feeds the pure reducer; this hook owns only the impure parts (the
-// driver lifecycle, wall-clock timing, persistence of run/session ids).
+// follow-ups steer the SAME run via sendRunInput, and reopening re-attaches by
+// run_id — or, if that run has aged out, replays the transcript read-only and
+// resumes the session on the next send. The reducer is pure; this hook owns the
+// stream lifecycle, wall-clock timing, and persistence of run/session ids.
 export function useChat(
   conversation: Conversation | null,
   baseDef: LibraryAgentDefinition | undefined,
@@ -44,22 +48,43 @@ export function useChat(
   const [running, setRunning] = useState(false);
   const [tokensPerSec, setTps] = useState(0);
 
-  const driverRef = useRef<InteractiveSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Guards async dispatches against a conversation switch mid-stream.
   const convoIdRef = useRef<string | null>(null);
+  const runIdRef = useRef("");
+  const agentIdRef = useRef("");
+  // True while a run's event stream is open — only then can we steer it.
+  const liveRef = useRef(false);
 
-  // tokens/sec bookkeeping (the reducer is pure, so timing lives here).
   const turnStartRef = useRef(0);
   const outputTokensRef = useRef(0);
   const outputAtTurnStartRef = useRef(0);
 
+  const beginTurnTiming = useCallback(() => {
+    turnStartRef.current = Date.now();
+    outputAtTurnStartRef.current = outputTokensRef.current;
+    setTps(0);
+  }, []);
+
+  // Consume an event stream into the reducer. `rethrowStartError` lets the
+  // re-attach path detect a dead run (error before any frame) and fall back to
+  // the transcript; mid-stream errors always surface as an error message.
   const consume = useCallback(
-    async (driver: InteractiveSession, convoId: string) => {
+    async (
+      stream: AsyncIterable<AgentEvent>,
+      convoId: string,
+      rethrowStartError = false,
+    ) => {
+      let received = 0;
+      liveRef.current = true;
       try {
-        for await (const ev of driver.events()) {
+        for await (const ev of stream) {
           if (convoIdRef.current !== convoId) break;
+          received++;
           const event = ev as ChatEvent;
+          if (event.type === "agent") {
+            if (event.run_id) runIdRef.current = event.run_id;
+            if (event.agent_id) agentIdRef.current = event.agent_id;
+          }
           dispatch({ kind: "event", event });
 
           if (event.type === "usage" && event.usage) {
@@ -81,7 +106,9 @@ export function useChat(
           }
         }
       } catch (e) {
-        if (!isAbortError(e) && convoIdRef.current === convoId) {
+        if (isAbortError(e)) return;
+        if (rethrowStartError && received === 0) throw e;
+        if (convoIdRef.current === convoId) {
           dispatch({
             kind: "event",
             event: { type: "error", error: describeError(e) } as ChatEvent,
@@ -90,18 +117,12 @@ export function useChat(
       } finally {
         if (convoIdRef.current === convoId) {
           setRunning(false);
-          driverRef.current = null;
+          liveRef.current = false;
         }
       }
     },
     [],
   );
-
-  const beginTurnTiming = useCallback(() => {
-    turnStartRef.current = Date.now();
-    outputAtTurnStartRef.current = outputTokensRef.current;
-    setTps(0);
-  }, []);
 
   const send = useCallback(
     async (text: string) => {
@@ -110,28 +131,38 @@ export function useChat(
       if (!convo || !trimmed || !convo.baseAgent) return;
 
       dispatch({ kind: "user", text: trimmed });
+      if (convo.title === "New chat") update(convo.id, { title: titleFrom(trimmed) });
       setRunning(true);
       beginTurnTiming();
 
       try {
-        const driver = driverRef.current;
-        if (driver && driver.runId) {
-          // Follow-up: steer the live run. Response arrives on the same stream.
-          await driver.send(trimmed);
+        // Steer the live run if one is open.
+        if (liveRef.current && runIdRef.current) {
+          await client.sendRunInput(runIdRef.current, trimmed);
           return;
         }
-        // First turn: resolve the agent (forking a private def if the chat has
-        // custom config), then open the interactive run.
-        const agentName = await resolveConversationAgent(client, convo, baseDef, update);
         const ac = new AbortController();
         abortRef.current = ac;
-        const fresh = client.interactiveSession({
-          agent: agentName,
-          segments: [userSegment(trimmed)],
-          signal: ac.signal,
-        });
-        driverRef.current = fresh;
-        void consume(fresh, convo.id);
+        let stream: AsyncIterable<AgentEvent>;
+        if (convo.sessionId) {
+          // Resume an existing session with a fresh interactive run (server
+          // replays the transcript; the stream carries only new events).
+          stream = client.continueSession({
+            sessionId: convo.sessionId,
+            segments: [userSegment(trimmed)],
+            interactive: true,
+            signal: ac.signal,
+          });
+        } else {
+          const agentName = await resolveConversationAgent(client, convo, baseDef, update);
+          stream = client.runStreaming({
+            agent: agentName,
+            segments: [userSegment(trimmed)],
+            interactive: true,
+            signal: ac.signal,
+          });
+        }
+        void consume(stream, convo.id);
       } catch (e) {
         if (!isAbortError(e)) {
           setRunning(false);
@@ -147,13 +178,14 @@ export function useChat(
 
   const cancel = useCallback(async () => {
     try {
-      await driverRef.current?.cancel();
+      if (agentIdRef.current) await client.cancelAgent(agentIdRef.current);
     } catch {
       // best-effort
     }
     abortRef.current?.abort();
+    liveRef.current = false;
     setRunning(false);
-  }, []);
+  }, [client]);
 
   const compact = useCallback(async () => {
     if (!state.runId) return undefined;
@@ -184,15 +216,17 @@ export function useChat(
     if (Object.keys(patch).length) update(conversation.id, patch);
   }, [state.runId, state.sessionId, conversation, update]);
 
-  // Conversation switch: tear down the old stream, reset state, and re-attach to
-  // a live run if one exists. Keyed on id only so persisting run/session ids
-  // (which mutate the conversation object) doesn't tear down the live stream.
+  // Conversation switch: tear down the old stream, reset, and reload prior
+  // history (re-attach to a live run, else read-only transcript). Keyed on id
+  // only so persisting ids doesn't tear down the live stream.
   useEffect(() => {
     const convo = conversation;
     convoIdRef.current = convo?.id ?? null;
     abortRef.current?.abort();
     abortRef.current = null;
-    driverRef.current = null;
+    runIdRef.current = "";
+    agentIdRef.current = "";
+    liveRef.current = false;
     outputTokensRef.current = 0;
     outputAtTurnStartRef.current = 0;
     setTps(0);
@@ -207,16 +241,47 @@ export function useChat(
       seed: { sessionId: convo.sessionId ?? null, runId: convo.runId ?? null },
     });
 
-    if (convo.runId) {
-      const ac = new AbortController();
-      abortRef.current = ac;
-      const driver = client.attachInteractiveSession(convo.runId, {
-        signal: ac.signal,
-      });
-      driverRef.current = driver;
-      setRunning(true);
-      void consume(driver, convo.id);
-    }
+    if (!convo.runId && !convo.sessionId) return;
+
+    const ac = new AbortController();
+    abortRef.current = ac;
+    void (async () => {
+      // Prefer re-attaching to a live run (replays history + live-tails).
+      if (convo.runId) {
+        try {
+          runIdRef.current = convo.runId;
+          setRunning(true);
+          await consume(
+            client.streamRunByID(convo.runId, { signal: ac.signal }),
+            convo.id,
+            true,
+          );
+          return;
+        } catch (e) {
+          if (isAbortError(e)) return;
+          // Run has aged out — fall back to a read-only transcript.
+          runIdRef.current = "";
+          liveRef.current = false;
+          setRunning(false);
+        }
+      }
+      if (convo.sessionId && convoIdRef.current === convo.id) {
+        try {
+          const t = await client.getTranscript(convo.sessionId, { signal: ac.signal });
+          if (convoIdRef.current !== convo.id) return;
+          for (const event of transcriptToEvents(t)) {
+            dispatch({ kind: "event", event });
+          }
+        } catch (e) {
+          if (!isAbortError(e) && convoIdRef.current === convo.id) {
+            dispatch({
+              kind: "event",
+              event: { type: "error", error: describeError(e) } as ChatEvent,
+            });
+          }
+        }
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversation?.id]);
 

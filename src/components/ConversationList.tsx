@@ -1,8 +1,17 @@
 import { MessageSquare, Trash2 } from "lucide-react";
-import { useConversations } from "../state/conversations";
+import { useConversations, type Conversation } from "../state/conversations";
+import { useLoomcycle } from "../state/connection";
+import { deleteConversationAgent } from "../lib/agentFork";
 
 export default function ConversationList() {
   const { conversations, activeId, select, remove } = useConversations();
+  const client = useLoomcycle();
+
+  function onDelete(c: Conversation) {
+    // Clean up the conversation's private derived agent, if any (best-effort).
+    if (c.forkDefName) void deleteConversationAgent(client, c.forkDefName);
+    remove(c.id);
+  }
 
   if (conversations.length === 0) {
     return <p className="convo-empty">No conversations yet.</p>;
@@ -27,7 +36,7 @@ export default function ConversationList() {
             title="Delete conversation"
             onClick={(e) => {
               e.stopPropagation();
-              remove(c.id);
+              onDelete(c);
             }}
           >
             <Trash2 size={14} />
