@@ -2,7 +2,6 @@ import { ArrowDown, ArrowUp, Cpu, Gauge, Zap } from "lucide-react";
 import {
   contextPercent,
   formatCount,
-  formatKBt,
   type TokenMetrics,
 } from "../lib/metrics";
 
@@ -63,7 +62,9 @@ export default function MetricsHud({
           </span>
           <span className="gauge-pct">{Math.round(pct)}%</span>
           <span className="gauge-popup" role="tooltip">
-            {formatKBt(metrics.contextTokens)}/{formatKBt(metrics.maxContextTokens)}
+            {`${formatCount(metrics.contextTokens).toUpperCase()} / ${formatCount(
+              metrics.maxContextTokens,
+            ).toUpperCase()} tokens`}
           </span>
         </span>
       )}

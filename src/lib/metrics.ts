@@ -61,8 +61,3 @@ export function formatCount(n: number): string {
   if (n < 1_000_000) return (n / 1000).toFixed(n < 10_000 ? 1 : 0) + "k";
   return (n / 1_000_000).toFixed(1) + "M";
 }
-
-/** Tokens in kilo-token units for the context-size popup, e.g. 26041 -> "26KBt". */
-export function formatKBt(n: number): string {
-  return Math.round(n / 1000) + "KBt";
-}
