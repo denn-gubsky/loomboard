@@ -94,7 +94,11 @@ export function useChat(
           }
           dispatch({ kind: "event", event });
 
-          if (event.type === "text" && event.text) {
+          // tokens/sec only for a live turn (turnStart set by send). On a
+          // re-attach/transcript replay turnStart is 0 — historical events must
+          // not produce a bogus near-zero rate.
+          const liveTurn = turnStartRef.current > 0;
+          if (liveTurn && event.type === "text" && event.text) {
             // Live estimate, throttled so it doesn't add a render per delta.
             turnCharsRef.current += event.text.length;
             const now = Date.now();
@@ -106,15 +110,16 @@ export function useChat(
             }
           }
           if (event.type === "usage" && event.usage) {
-            // Refine with the authoritative count when the provider reports it.
             outputTokensRef.current += event.usage.output_tokens ?? 0;
-            const elapsed = Date.now() - turnStartRef.current;
-            setTps(
-              tokensPerSecond(
-                outputTokensRef.current - outputAtTurnStartRef.current,
-                elapsed,
-              ),
-            );
+            if (liveTurn) {
+              // Refine with the authoritative count when the provider reports it.
+              setTps(
+                tokensPerSecond(
+                  outputTokensRef.current - outputAtTurnStartRef.current,
+                  Date.now() - turnStartRef.current,
+                ),
+              );
+            }
           }
           if (
             event.type === "awaiting_input" ||
