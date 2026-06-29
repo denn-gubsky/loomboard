@@ -46,14 +46,17 @@ export function describeFallback(f: FallbackInfo): string {
   return f.reason ? `${head} (${f.reason})` : head;
 }
 
+// Extract only the role:"user" text from a persisted user_input row. loomcycle
+// stores the first turn's input as [{role:"system", <resolved system prompt>},
+// {role:"user", <the message>}] — we must keep ONLY the user part, or the system
+// prompt leaks into a user bubble on reload.
 function userInputText(payload: unknown): string {
   if (!Array.isArray(payload)) return "";
   const parts: string[] = [];
   for (const seg of payload) {
-    const content =
-      seg && typeof seg === "object" && "content" in seg
-        ? (seg as { content?: unknown }).content
-        : undefined;
+    if (!seg || typeof seg !== "object") continue;
+    if ((seg as { role?: unknown }).role !== "user") continue;
+    const content = (seg as { content?: unknown }).content;
     if (!Array.isArray(content)) continue;
     for (const c of content) {
       if (c && typeof c === "object" && typeof (c as { text?: unknown }).text === "string") {
@@ -73,10 +76,9 @@ export function transcriptToEvents(t: TranscriptResponse): ChatEvent[] {
   for (const te of t.events) {
     if (te.type === "system_prompt") continue;
     if (te.type === "user_input") {
-      out.push({
-        type: "user_input",
-        user_input: { text: userInputText(te.payload) },
-      } as ChatEvent);
+      const text = userInputText(te.payload);
+      // Skip rows with no user-role text (e.g. a pure system-prompt row).
+      if (text) out.push({ type: "user_input", user_input: { text } } as ChatEvent);
       continue;
     }
     const base =

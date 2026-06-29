@@ -267,13 +267,13 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
       };
 
     case "steer":
-      // Live steers are added optimistically by the UI; only replayed turns
-      // (re-attach / transcript) build messages here.
-      if (ev.user_input?.source === "live") return state;
-      return {
-        ...state,
-        messages: pushUser(state.messages, ev.user_input?.text ?? ev.text ?? ""),
-      };
+      // Never render steer frames. A LIVE steer echoes the optimistic user add
+      // (→ duplicate), and loomcycle's interactive/re-attach replay synthesizes
+      // steer(source="replay") frames from stored user_input rows — which
+      // FLATTEN the role:system system prompt into the text, with no role to
+      // filter on. User turns come from the optimistic add (live) or from
+      // role-filtered user_input events (reload via getTranscript).
+      return state;
 
     case "done":
       return { ...state, messages: finalize(state.messages, "done", ev.stop_reason, ev.reasoning) };

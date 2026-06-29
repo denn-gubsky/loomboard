@@ -75,17 +75,11 @@ export function useChat(
   // running/live flags. `rethrowStartError` lets the re-attach path detect a
   // dead run (error before any frame) and fall back to the transcript.
   const consume = useCallback(
-    async (
-      stream: AsyncIterable<AgentEvent>,
-      gen: number,
-      rethrowStartError = false,
-    ) => {
-      let received = 0;
+    async (stream: AsyncIterable<AgentEvent>, gen: number) => {
       liveRef.current = true;
       try {
         for await (const ev of stream) {
           if (genRef.current !== gen) break;
-          received++;
           const event = ev as ChatEvent;
           if (event.type === "agent") {
             if (event.run_id) runIdRef.current = event.run_id;
@@ -125,7 +119,6 @@ export function useChat(
         }
       } catch (e) {
         if (isAbortError(e)) return;
-        if (rethrowStartError && received === 0) throw e;
         if (genRef.current === gen) {
           dispatch({
             kind: "event",
@@ -280,38 +273,28 @@ export function useChat(
       seed: { sessionId: convo.sessionId ?? null, runId: convo.runId ?? null },
     });
 
-    if (!convo.runId && !convo.sessionId) return;
+    if (!convo.sessionId) return;
 
+    // Reload history from the transcript (role-aware: keeps user turns, skips
+    // the system prompt). We deliberately don't re-attach to a live run via
+    // streamRunByID — its replay synthesizes role-blind steer frames that would
+    // leak the system prompt and double user turns. The next send resumes the
+    // session via continueSession.
     const ac = new AbortController();
     abortRef.current = ac;
     void (async () => {
-      if (convo.runId) {
-        try {
-          runIdRef.current = convo.runId;
-          setRunning(true);
-          await consume(client.streamRunByID(convo.runId, { signal: ac.signal }), gen, true);
-          return;
-        } catch (e) {
-          if (isAbortError(e)) return;
-          runIdRef.current = "";
-          liveRef.current = false;
-          setRunning(false);
+      try {
+        const t = await client.getTranscript(convo.sessionId!, { signal: ac.signal });
+        if (genRef.current !== gen) return;
+        for (const event of transcriptToEvents(t)) {
+          dispatch({ kind: "event", event });
         }
-      }
-      if (convo.sessionId && genRef.current === gen) {
-        try {
-          const t = await client.getTranscript(convo.sessionId, { signal: ac.signal });
-          if (genRef.current !== gen) return;
-          for (const event of transcriptToEvents(t)) {
-            dispatch({ kind: "event", event });
-          }
-        } catch (e) {
-          if (!isAbortError(e) && genRef.current === gen) {
-            dispatch({
-              kind: "event",
-              event: { type: "error", error: describeError(e) } as ChatEvent,
-            });
-          }
+      } catch (e) {
+        if (!isAbortError(e) && genRef.current === gen) {
+          dispatch({
+            kind: "event",
+            event: { type: "error", error: describeError(e) } as ChatEvent,
+          });
         }
       }
     })();

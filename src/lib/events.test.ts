@@ -17,7 +17,7 @@ describe("optionsToArray", () => {
 });
 
 describe("transcriptToEvents", () => {
-  it("rebuilds a turn sequence: skips system_prompt, extracts user_input text, passes events through", () => {
+  it("rebuilds a turn sequence: skips system_prompt, extracts only role:user text, passes events through", () => {
     const t: TranscriptResponse = {
       session: { id: "s1", user_id: "u", agent: "chat", created_at: "" },
       events: [
@@ -27,7 +27,12 @@ describe("transcriptToEvents", () => {
           run_id: "r1",
           ts_ns: 1,
           type: "user_input",
-          payload: [{ role: "user", content: [{ type: "trusted-text", text: "hello" }] }],
+          // loomcycle stores the first turn as [system prompt, user message] —
+          // only the user part must survive.
+          payload: [
+            { role: "system", content: [{ type: "trusted-text", text: "You are AGENT." }] },
+            { role: "user", content: [{ type: "trusted-text", text: "hello" }] },
+          ],
         },
         { seq: 2, run_id: "r1", ts_ns: 2, type: "text", event: { type: "text", text: "hi there" } },
         { seq: 3, run_id: "r1", ts_ns: 3, type: "done", event: { type: "done", stop_reason: "end_turn" } },
@@ -39,5 +44,21 @@ describe("transcriptToEvents", () => {
     expect(events[0].user_input?.text).toBe("hello");
     expect(events[1].text).toBe("hi there");
     expect(events[2].stop_reason).toBe("end_turn");
+  });
+
+  it("skips a user_input row that has no role:user text (pure system prompt)", () => {
+    const t: TranscriptResponse = {
+      session: { id: "s1", user_id: "u", agent: "chat", created_at: "" },
+      events: [
+        {
+          seq: 0,
+          run_id: "r1",
+          ts_ns: 0,
+          type: "user_input",
+          payload: [{ role: "system", content: [{ type: "trusted-text", text: "You are AGENT." }] }],
+        },
+      ],
+    } as unknown as TranscriptResponse;
+    expect(transcriptToEvents(t)).toEqual([]);
   });
 });
