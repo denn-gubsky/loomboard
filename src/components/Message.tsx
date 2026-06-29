@@ -1,10 +1,11 @@
 import type { ChatMessage } from "../lib/eventReducer";
+import Markdown from "./Markdown";
+import ThinkingBlock from "./ThinkingBlock";
+import ToolCard from "./ToolCard";
 
-// Step-5 rendering: structurally complete (parts in order, streaming cursor,
-// errors) but plain-text. The rich-rendering step swaps the text/thinking/tool
-// blocks for Markdown + KaTeX, ThinkingBlock, and ToolCard.
 export default function Message({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
+    // User text is shown verbatim (not parsed as markdown).
     return (
       <div className="msg user">
         <div className="bubble">{message.text}</div>
@@ -12,40 +13,22 @@ export default function Message({ message }: { message: ChatMessage }) {
     );
   }
 
+  const streaming = message.status === "streaming";
+
   return (
     <div className="msg assistant">
       <div className="bubble">
         {message.parts.map((part, i) => {
           if (part.type === "text") {
-            return (
-              <div key={i} className="md">
-                {part.text}
-              </div>
-            );
+            return <Markdown key={i}>{part.text}</Markdown>;
           }
           if (part.type === "thinking") {
-            return (
-              <details key={i} className="thinking">
-                <summary>Thinking</summary>
-                <div className="md">{part.text}</div>
-              </details>
-            );
+            return <ThinkingBlock key={i} text={part.text} streaming={streaming} />;
           }
-          return (
-            <div key={i} className="tool">
-              <div className="tool-name">{part.call.name}</div>
-              {part.call.result !== undefined && (
-                <pre
-                  className={part.call.isError ? "tool-result error" : "tool-result"}
-                >
-                  {part.call.result}
-                </pre>
-              )}
-            </div>
-          );
+          return <ToolCard key={i} call={part.call} />;
         })}
 
-        {message.status === "streaming" && <span className="cursor">▋</span>}
+        {streaming && <span className="cursor">▋</span>}
         {message.status === "error" && (
           <div className="msg-error">{message.error}</div>
         )}

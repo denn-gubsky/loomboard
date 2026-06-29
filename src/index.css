@@ -505,12 +505,82 @@ button {
   max-width: 100%;
 }
 
-.md {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+/* rendered markdown */
+.markdown > :first-child {
+  margin-top: 0;
 }
-.md + .md {
-  margin-top: 0.5em;
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown p {
+  margin: 0.5em 0;
+}
+.markdown ul,
+.markdown ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.markdown li {
+  margin: 0.2em 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 0.8em 0 0.4em;
+  line-height: 1.25;
+}
+.markdown blockquote {
+  margin: 0.6em 0;
+  padding-left: 0.9em;
+  border-left: 3px solid var(--border);
+  color: var(--text-dim);
+}
+.markdown a {
+  color: var(--accent);
+}
+.markdown :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 0.08em 0.35em;
+  border-radius: 5px;
+}
+.markdown pre {
+  margin: 0.6em 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7em 0.85em;
+  overflow-x: auto;
+}
+.markdown pre code {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.markdown table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  display: block;
+  overflow-x: auto;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+.markdown img {
+  max-width: 100%;
+}
+.markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.2em 0;
 }
 
 .cursor {
@@ -531,42 +601,108 @@ button {
   font-size: 0.85rem;
 }
 
-/* thinking + tool (basic; enriched in the rich-rendering step) */
+/* ---- thinking block ---- */
 .thinking {
   margin: 0.5em 0;
-  border-left: 2px solid var(--accent-dim);
-  padding-left: 0.7em;
-  color: var(--text-dim);
-  font-size: 0.9em;
 }
-.thinking summary {
-  cursor: pointer;
-  user-select: none;
+.thinking-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 0.2em 0;
+}
+.thinking-head:hover {
+  color: var(--text);
+}
+.thinking .caret {
+  transition: transform 0.15s;
+}
+.thinking.open .caret {
+  transform: rotate(90deg);
+}
+.thinking-body {
+  margin: 0.3em 0 0.3em 0.5em;
+  padding-left: 0.8em;
+  border-left: 2px solid var(--accent-dim);
+  color: var(--text-dim);
+  font-size: 0.92em;
+}
+.pulse {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
 }
 
+/* ---- tool card ---- */
 .tool {
   margin: 0.5em 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
+.tool.err {
+  border-color: rgba(240, 114, 107, 0.5);
+}
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  width: 100%;
+  background: var(--bg-input);
+  border: none;
+  color: var(--text);
+  padding: 0.45em 0.6em;
+  text-align: left;
+}
+.tool .caret {
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.tool-body {
+  padding: 0.5em 0.6em;
+}
 .tool-name {
   font-family: var(--font-mono);
-  font-size: 0.8rem;
-  background: var(--bg-input);
-  padding: 0.35em 0.6em;
+  font-size: 0.82rem;
   color: var(--accent);
+  flex: 1;
 }
-.tool-result {
+.tool .status {
+  flex-shrink: 0;
+}
+.tool .status.ok {
+  color: var(--ok);
+}
+.tool .status.x {
+  color: var(--danger);
+}
+.tool-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin: 0.3em 0 0.2em;
+}
+.tool-pre {
   margin: 0;
-  padding: 0.5em 0.6em;
   font-family: var(--font-mono);
   font-size: 0.8rem;
   white-space: pre-wrap;
   overflow-x: auto;
   max-height: 320px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5em 0.6em;
 }
-.tool-result.error {
+.tool-pre.error {
   color: var(--danger);
 }
 
