@@ -1,0 +1,45 @@
+import type { AgentEvent } from "@loomcycle/client";
+
+// The SDK's AgentEvent type models only a subset of the event types the server
+// emits — the SSE parser passes through unmodeled types (e.g. "thinking",
+// "interruption_pending") with their full payloads, but TypeScript doesn't know
+// their fields. ChatEvent is the loosened view the reducer consumes: `type` is a
+// string, plus the extra payload fields we render.
+export interface InterruptionInfo {
+  interrupt_id: string;
+  kind: string;
+  question?: string;
+  /** Raw JSON from the interrupt row — an array of option strings, or a
+   *  JSON-encoded string of one. Normalize with optionsToArray. */
+  options?: unknown;
+  context?: string;
+  priority?: string;
+  expires_at?: string;
+}
+
+export type ChatEvent = Omit<AgentEvent, "type"> & {
+  type: string;
+  /** Payload on `interruption_pending`. */
+  interruption?: InterruptionInfo;
+  /** Accumulated reasoning trace, present on `done` for some providers. */
+  reasoning?: string;
+};
+
+/** Normalize an interrupt's `options` (array | JSON string | absent) to a
+ *  string[]. Returns [] for free-text answers. */
+export function optionsToArray(options: unknown): string[] {
+  if (Array.isArray(options)) {
+    return options.filter((o): o is string => typeof o === "string");
+  }
+  if (typeof options === "string" && options.trim()) {
+    try {
+      const parsed = JSON.parse(options);
+      return Array.isArray(parsed)
+        ? parsed.filter((o): o is string => typeof o === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
