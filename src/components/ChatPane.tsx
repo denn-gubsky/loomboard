@@ -9,6 +9,7 @@ import MessageList from "./MessageList";
 import Composer from "./Composer";
 import MetricsHud from "./MetricsHud";
 import CompactButton from "./CompactButton";
+import InterruptCard from "./InterruptCard";
 
 export default function ChatPane() {
   const { active, update } = useConversations();
@@ -82,13 +83,24 @@ export default function ChatPane() {
 
       <MessageList messages={chat.state.messages} running={chat.running} />
 
+      {chat.state.pendingInterrupt && (
+        <InterruptCard
+          interrupt={chat.state.pendingInterrupt}
+          onResolve={chat.resolveInterrupt}
+        />
+      )}
+
       <Composer
-        disabled={noAgent}
+        disabled={noAgent || !!chat.state.pendingInterrupt}
         running={chat.running}
         onSend={chat.send}
         onStop={chat.cancel}
         placeholder={
-          noAgent ? "Pick an agent to start" : `Message ${active.baseAgent}…`
+          chat.state.pendingInterrupt
+            ? "Answer the agent's question above"
+            : noAgent
+              ? "Pick an agent to start"
+              : `Message ${active.baseAgent}…`
         }
       />
     </section>
