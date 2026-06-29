@@ -64,6 +64,7 @@ export default function ChatPane() {
             tokensPerSec={chat.tokensPerSec}
             running={chat.running}
             servingModel={chat.state.servingModel}
+            servingProvider={chat.state.servingProvider}
           />
         )}
         {chat.state.runId && (

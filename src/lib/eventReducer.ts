@@ -43,9 +43,10 @@ export interface ChatState {
   pendingInterrupt: InterruptionInfo | null;
   /** True when the run has parked at end_turn (interactive, ready for input). */
   awaitingInput: boolean;
-  /** The model actually serving the run, from usage events. This is the truth a
-   *  config override is checked against — it reflects any provider fallback. */
+  /** The provider/model actually serving the run, from usage events. This is the
+   *  truth a config override is checked against — it reflects any fallback. */
   servingModel: string | null;
+  servingProvider: string | null;
   runId: string | null;
   sessionId: string | null;
 }
@@ -56,6 +57,7 @@ export const initialChatState: ChatState = {
   pendingInterrupt: null,
   awaitingInput: false,
   servingModel: null,
+  servingProvider: null,
   runId: null,
   sessionId: null,
 };
@@ -216,13 +218,16 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
       };
 
     case "usage":
-      return ev.usage
-        ? {
-            ...state,
-            metrics: accumulateUsage(state.metrics, ev.usage),
-            servingModel: ev.usage.model ?? state.servingModel,
-          }
-        : state;
+      if (!ev.usage) return state;
+      return {
+        ...state,
+        metrics: accumulateUsage(state.metrics, ev.usage),
+        servingModel: ev.usage.model ?? state.servingModel,
+        // The SDK's Usage type omits `provider`, but the wire includes the
+        // provider that actually served the call.
+        servingProvider:
+          (ev.usage as { provider?: string }).provider ?? state.servingProvider,
+      };
 
     case "provider_fallback":
       // Surface the switch inline so an override that failed over is visible.
@@ -230,6 +235,7 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
         ? {
             ...state,
             servingModel: ev.fallback.new_model ?? state.servingModel,
+            servingProvider: ev.fallback.new_provider ?? state.servingProvider,
             messages: updateOpenAssistant(state.messages, (m) =>
               addNotice(m, "warn", describeFallback(ev.fallback!)),
             ),

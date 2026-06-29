@@ -58,10 +58,17 @@ export function useChat(
   const turnStartRef = useRef(0);
   const outputTokensRef = useRef(0);
   const outputAtTurnStartRef = useRef(0);
+  // Live throughput estimate from streamed text — many providers only emit a
+  // usage event at end of turn, so we approximate tokens as chars/4 during the
+  // stream and refine with the real count when usage arrives.
+  const turnCharsRef = useRef(0);
+  const lastTpsTsRef = useRef(0);
 
   const beginTurnTiming = useCallback(() => {
     turnStartRef.current = Date.now();
     outputAtTurnStartRef.current = outputTokensRef.current;
+    turnCharsRef.current = 0;
+    lastTpsTsRef.current = 0;
     setTps(0);
   }, []);
 
@@ -87,7 +94,19 @@ export function useChat(
           }
           dispatch({ kind: "event", event });
 
+          if (event.type === "text" && event.text) {
+            // Live estimate, throttled so it doesn't add a render per delta.
+            turnCharsRef.current += event.text.length;
+            const now = Date.now();
+            if (now - lastTpsTsRef.current > 150) {
+              lastTpsTsRef.current = now;
+              setTps(
+                tokensPerSecond(turnCharsRef.current / 4, now - turnStartRef.current),
+              );
+            }
+          }
           if (event.type === "usage" && event.usage) {
+            // Refine with the authoritative count when the provider reports it.
             outputTokensRef.current += event.usage.output_tokens ?? 0;
             const elapsed = Date.now() - turnStartRef.current;
             setTps(

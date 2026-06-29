@@ -171,11 +171,19 @@ describe("chatReducer — lifecycle", () => {
 });
 
 describe("chatReducer — serving model & provider fallback", () => {
-  it("captures the serving model from usage.model", () => {
+  it("captures the serving provider/model from usage", () => {
     const s = run([
-      ev("usage", { usage: { input_tokens: 10, output_tokens: 2, model: "deepseek-v4-flash" } }),
+      ev("usage", {
+        usage: {
+          input_tokens: 10,
+          output_tokens: 2,
+          model: "deepseek-v4-flash",
+          provider: "deepseek",
+        },
+      } as unknown as Partial<ChatEvent>),
     ]);
     expect(s.servingModel).toBe("deepseek-v4-flash");
+    expect(s.servingProvider).toBe("deepseek");
   });
 
   it("renders provider_fallback inline and updates the serving model", () => {
@@ -192,6 +200,7 @@ describe("chatReducer — serving model & provider fallback", () => {
       }),
     ]);
     expect(s.servingModel).toBe("deepseek-v4-flash");
+    expect(s.servingProvider).toBe("deepseek");
     const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
     expect(notice).toBeTruthy();
     if (notice && notice.type === "notice") {

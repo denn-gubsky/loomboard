@@ -10,24 +10,27 @@ interface Props {
   tokensPerSec: number;
   running: boolean;
   servingModel: string | null;
+  servingProvider: string | null;
 }
 
-// Live token HUD: the model actually serving the run (reflects any provider
-// fallback), cumulative ▲ input / ▼ output, current tokens/sec while
-// generating, and a context-window gauge when the model reports its ceiling.
+// Live token HUD: the provider/model actually serving the run (reflects any
+// provider fallback), cumulative ▲ input / ▼ output, tokens/sec, and a
+// context-window gauge when the model reports its ceiling.
 export default function MetricsHud({
   metrics,
   tokensPerSec,
   running,
   servingModel,
+  servingProvider,
 }: Props) {
   const pct = contextPercent(metrics);
+  const serving = [servingProvider, servingModel].filter(Boolean).join("/");
   return (
     <div className="hud">
-      {servingModel && (
-        <span className="hud-item" title="Model actually serving this run">
+      {serving && (
+        <span className="hud-item model" title="Provider/model actually serving this run">
           <Cpu size={13} />
-          {servingModel}
+          {serving}
         </span>
       )}
       <span className="hud-item" title="Input tokens (cumulative)">
@@ -38,8 +41,11 @@ export default function MetricsHud({
         <ArrowDown size={13} />
         {formatCount(metrics.outputTokens)}
       </span>
-      {running && tokensPerSec > 0 && (
-        <span className="hud-item" title="Tokens per second">
+      {tokensPerSec > 0 && (
+        <span
+          className={running ? "hud-item live" : "hud-item"}
+          title="Tokens per second"
+        >
           <Zap size={13} />
           {tokensPerSec.toFixed(1)}/s
         </span>

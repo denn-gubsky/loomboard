@@ -733,6 +733,51 @@ button {
   padding: 0.2em 0;
 }
 
+/* typing / waiting indicator */
+.bubble.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.8rem 0.95rem;
+}
+.bubble.typing .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  animation: typing 1.2s infinite ease-in-out;
+}
+.bubble.typing .dot:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.bubble.typing .dot:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.hud-item.live {
+  color: var(--accent);
+}
+.hud-item.model {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cursor {
   display: inline-block;
   margin-left: 1px;
