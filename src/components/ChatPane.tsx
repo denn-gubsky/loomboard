@@ -1,17 +1,24 @@
 import { useState } from "react";
 import { Settings2 } from "lucide-react";
-import {
-  configIsCustom,
-  useConversations,
-} from "../state/conversations";
+import { configIsCustom, useConversations } from "../state/conversations";
 import { useAgents } from "../hooks/useAgents";
+import { useChat } from "../hooks/useChat";
 import AgentPicker from "./AgentPicker";
 import AgentConfigPanel from "./AgentConfigPanel";
+import MessageList from "./MessageList";
+import Composer from "./Composer";
 
 export default function ChatPane() {
   const { active, update } = useConversations();
   const { agents, loading, error } = useAgents();
   const [showConfig, setShowConfig] = useState(false);
+
+  const baseDef = active
+    ? agents.find((a) => a.name === active.baseAgent)?.static_definition
+    : undefined;
+
+  // Hooks must run unconditionally — useChat handles a null conversation.
+  const chat = useChat(active, baseDef);
 
   if (!active) {
     return (
@@ -24,9 +31,8 @@ export default function ChatPane() {
     );
   }
 
-  const baseDef = agents.find((a) => a.name === active.baseAgent)
-    ?.static_definition;
   const custom = configIsCustom(active.config);
+  const noAgent = !active.baseAgent;
 
   return (
     <section className="chat-pane">
@@ -55,18 +61,17 @@ export default function ChatPane() {
         />
       )}
 
-      <div className="chat-body">
-        <div className="chat-empty">
-          {active.baseAgent ? (
-            <p>
-              Chatting with <strong>{active.baseAgent}</strong>. Message
-              streaming lands in the next step.
-            </p>
-          ) : (
-            <p>Pick an agent above to start.</p>
-          )}
-        </div>
-      </div>
+      <MessageList messages={chat.state.messages} running={chat.running} />
+
+      <Composer
+        disabled={noAgent}
+        running={chat.running}
+        onSend={chat.send}
+        onStop={chat.cancel}
+        placeholder={
+          noAgent ? "Pick an agent to start" : `Message ${active.baseAgent}…`
+        }
+      />
     </section>
   );
 }
