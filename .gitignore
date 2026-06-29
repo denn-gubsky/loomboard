@@ -29,3 +29,6 @@ pnpm-debug.log*
 # local env files (secrets live here — never commit, never read .env*.local)
 .env
 .env*.local
+
+# browser test artifacts (playwright MCP)
+.playwright-mcp/
