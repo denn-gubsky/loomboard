@@ -440,6 +440,28 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 0.35em;
+  position: relative;
+  cursor: default;
+}
+.gauge-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3em 0.55em;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  color: var(--text);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+  z-index: 5;
+}
+.hud-gauge:hover .gauge-popup {
+  opacity: 1;
 }
 .gauge-track {
   width: 70px;
@@ -919,15 +941,145 @@ button {
 
 /* ---- composer ---- */
 
+.composer-wrap {
+  border-top: 1px solid var(--border);
+  position: relative;
+}
+.composer-wrap.dragging::after {
+  content: "Drop files to attach";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(110, 168, 254, 0.12);
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  color: var(--accent);
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .composer {
   display: flex;
   align-items: flex-end;
   gap: 0.5rem;
   padding: 0.8rem 1rem 1rem;
-  border-top: 1px solid var(--border);
   max-width: 820px;
   width: 100%;
   margin: 0 auto;
+}
+
+/* ---- attachment strip + chips ---- */
+.att-strip,
+.att-warn {
+  max-width: 820px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+.att-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.7rem;
+}
+.att-warn {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  color: #e6b873;
+  font-size: 0.8rem;
+  padding-top: 0.5rem;
+}
+.att-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3em 0.5em;
+  font-size: 0.8rem;
+  max-width: 240px;
+}
+.att-chip.error {
+  border-color: rgba(240, 114, 107, 0.5);
+  color: var(--danger);
+}
+.att-thumb {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.att-icon {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.att-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.att-err {
+  color: var(--danger);
+  flex-shrink: 0;
+}
+.att-x {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 0;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.att-x:hover {
+  color: var(--text);
+}
+.att-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 10px;
+  width: 2.7em;
+  height: 2.7em;
+  flex-shrink: 0;
+}
+.att-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+.att-btn:disabled {
+  opacity: 0.5;
+}
+
+/* ---- attachments shown on a sent user message ---- */
+.msg-atts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+.msg-att-img {
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 8px;
+  display: block;
+}
+.msg-att-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 0.25em 0.5em;
 }
 .composer-input {
   flex: 1;

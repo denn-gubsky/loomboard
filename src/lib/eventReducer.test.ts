@@ -134,12 +134,25 @@ describe("chatReducer — user turns and multi-turn replay", () => {
     expect(assistant(s, 3).parts).toEqual<MessagePart[]>([{ type: "text", text: "a2" }]);
   });
 
-  it("treats replayed steers as user turns but ignores live steers", () => {
-    const replay = run([ev("steer", { user_input: { text: "steered", source: "replay" } })]);
-    expect(replay.messages).toEqual([{ role: "user", text: "steered" }]);
+  it("ignores ALL steer frames — live echoes and replays alike", () => {
+    // Live steers (source api/webui/none) echo the optimistic add; replay steers
+    // flatten the role:system system prompt with no role to filter on. None are
+    // rendered — user turns come from the optimistic add (live) or role-filtered
+    // user_input (reload).
+    for (const source of ["api", "webui", "replay", undefined]) {
+      const s = run([ev("steer", { user_input: { text: "x", source } })]);
+      expect(s.messages).toEqual([]);
+    }
+  });
 
-    const live = run([ev("steer", { user_input: { text: "steered", source: "live" } })]);
-    expect(live.messages).toEqual([]);
+  it("does not duplicate a live turn: optimistic user add + the steer echo", () => {
+    let s = chatReducer(initialChatState, { kind: "user", text: "hi there" });
+    // The live run drains the steer and echoes it back on the same stream.
+    s = chatReducer(s, {
+      kind: "event",
+      event: ev("steer", { user_input: { text: "hi there", source: "api" } }),
+    });
+    expect(s.messages.filter((m) => m.role === "user")).toHaveLength(1);
   });
 });
 

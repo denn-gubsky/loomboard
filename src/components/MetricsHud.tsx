@@ -51,12 +51,7 @@ export default function MetricsHud({
         </span>
       )}
       {pct !== null && (
-        <span
-          className="hud-gauge"
-          title={`Context used ${formatCount(metrics.contextTokens)} / ${formatCount(
-            metrics.maxContextTokens,
-          )}`}
-        >
+        <span className="hud-gauge">
           <Gauge size={13} />
           <span className="gauge-track">
             <span
@@ -66,6 +61,11 @@ export default function MetricsHud({
             />
           </span>
           <span className="gauge-pct">{Math.round(pct)}%</span>
+          <span className="gauge-popup" role="tooltip">
+            {`${formatCount(metrics.contextTokens).toUpperCase()} / ${formatCount(
+              metrics.maxContextTokens,
+            ).toUpperCase()} tokens`}
+          </span>
         </span>
       )}
     </div>

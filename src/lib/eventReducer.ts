@@ -1,5 +1,6 @@
 import { accumulateUsage, emptyMetrics, type TokenMetrics } from "./metrics";
 import { describeFallback, type ChatEvent, type InterruptionInfo } from "./events";
+import type { SentAttachment } from "./attachments";
 
 // ---- View model ----
 
@@ -25,6 +26,9 @@ export type MessagePart =
 export interface UserMessage {
   role: "user";
   text: string;
+  /** Attachments shown with the message (live send only; transcript reload
+   *  rebuilds text but not thumbnails). */
+  attachments?: SentAttachment[];
 }
 
 export interface AssistantMessage {
@@ -64,7 +68,7 @@ export const initialChatState: ChatState = {
 
 export type ChatAction =
   | { kind: "event"; event: ChatEvent }
-  | { kind: "user"; text: string }
+  | { kind: "user"; text: string; attachments?: SentAttachment[] }
   | { kind: "clearInterrupt" }
   | { kind: "reset"; seed?: Partial<ChatState> };
 
@@ -148,8 +152,12 @@ function attachToolResult(
   return m;
 }
 
-function pushUser(messages: ChatMessage[], text: string): ChatMessage[] {
-  return [...closeOpen(messages), { role: "user", text }];
+function pushUser(
+  messages: ChatMessage[],
+  text: string,
+  attachments?: SentAttachment[],
+): ChatMessage[] {
+  return [...closeOpen(messages), { role: "user", text, attachments }];
 }
 
 // ---- Reducer ----
@@ -161,7 +169,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "clearInterrupt":
       return { ...state, pendingInterrupt: null };
     case "user":
-      return { ...state, awaitingInput: false, messages: pushUser(state.messages, action.text) };
+      return {
+        ...state,
+        awaitingInput: false,
+        messages: pushUser(state.messages, action.text, action.attachments),
+      };
     case "event":
       return applyEvent(state, action.event);
   }
@@ -255,13 +267,13 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
       };
 
     case "steer":
-      // Live steers are added optimistically by the UI; only replayed turns
-      // (re-attach / transcript) build messages here.
-      if (ev.user_input?.source === "live") return state;
-      return {
-        ...state,
-        messages: pushUser(state.messages, ev.user_input?.text ?? ev.text ?? ""),
-      };
+      // Never render steer frames. A LIVE steer echoes the optimistic user add
+      // (→ duplicate), and loomcycle's interactive/re-attach replay synthesizes
+      // steer(source="replay") frames from stored user_input rows — which
+      // FLATTEN the role:system system prompt into the text, with no role to
+      // filter on. User turns come from the optimistic add (live) or from
+      // role-filtered user_input events (reload via getTranscript).
+      return state;
 
     case "done":
       return { ...state, messages: finalize(state.messages, "done", ev.stop_reason, ev.reasoning) };

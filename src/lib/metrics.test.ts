@@ -72,3 +72,4 @@ describe("formatCount", () => {
     expect(formatCount(1_300_000)).toBe("1.3M");
   });
 });
+

@@ -13,10 +13,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@loomcycle/client": "^1.4.0",
+    "@loomcycle/client": "^1.7.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.47",
     "lucide-react": "^0.460.0",
+    "mammoth": "^1.12.0",
+    "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^9.1.0",
