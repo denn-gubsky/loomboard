@@ -1,9 +1,12 @@
-import { Loader2, LogOut } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { ConnectionProvider, useConnection } from "./state/connection";
+import { ConversationsProvider } from "./state/conversations";
 import ConnectionSettings from "./components/ConnectionSettings";
+import Sidebar from "./components/Sidebar";
+import ChatPane from "./components/ChatPane";
 
 function Shell() {
-  const { status, principal, settings, disconnect } = useConnection();
+  const { status } = useConnection();
 
   if (status === "connecting") {
     return (
@@ -18,24 +21,13 @@ function Shell() {
     return <ConnectionSettings />;
   }
 
-  // Placeholder home for now — the sidebar + chat surface land in the next
-  // steps. Proves the whoami gate works end to end.
   return (
-    <div className="app-shell">
-      <main className="app-placeholder">
-        <h1>loomboard</h1>
-        <p>
-          Connected to <code>{settings?.baseUrl || "(same origin)"}</code> as{" "}
-          <strong>{principal?.subject}</strong>
-          {" @ "}
-          <strong>{principal?.tenant_id}</strong>
-          {principal?.open_mode ? " (open mode)" : ""}.
-        </p>
-        <button className="btn-ghost" onClick={disconnect}>
-          <LogOut size={16} /> Disconnect
-        </button>
-      </main>
-    </div>
+    <ConversationsProvider>
+      <div className="app-shell">
+        <Sidebar />
+        <ChatPane />
+      </div>
+    </ConversationsProvider>
   );
 }
 

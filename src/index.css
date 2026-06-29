@@ -213,3 +213,252 @@ button {
   padding: 0.6em 0.7em;
   font-size: 0.85rem;
 }
+
+/* ---- sidebar ---- */
+
+.sidebar {
+  width: 270px;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 0.8rem;
+  gap: 0.7rem;
+}
+
+.sidebar-head .brand {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 1.05rem;
+}
+
+.new-chat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55em 0.8em;
+  font-weight: 500;
+}
+.new-chat:hover {
+  border-color: var(--accent-dim);
+}
+
+.convo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.convo-empty {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 0.3rem 0.2rem;
+  flex: 1;
+}
+
+.convo {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.5em 0.55em;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.convo:hover {
+  background: var(--bg-input);
+  color: var(--text);
+}
+.convo.active {
+  background: var(--bg-input);
+  color: var(--text);
+}
+.convo-icon {
+  flex-shrink: 0;
+}
+.convo-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+.convo-agent {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.05em 0.4em;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.convo-del {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 2px;
+}
+.convo:hover .convo-del {
+  display: inline-flex;
+}
+.convo-del:hover {
+  color: var(--danger);
+}
+
+.sidebar-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
+.who {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  overflow: hidden;
+}
+.who strong {
+  font-size: 0.85rem;
+}
+.who span {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+.btn-ghost.sm {
+  padding: 0.4em;
+}
+
+/* ---- chat pane ---- */
+
+.chat-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.chat-pane.empty {
+  align-items: center;
+  justify-content: center;
+}
+.chat-empty {
+  color: var(--text-dim);
+  text-align: center;
+  margin: auto;
+  padding: 2rem;
+}
+.chat-empty h2 {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  color: var(--text-dim);
+}
+.agent-picker.error {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+.agent-picker select {
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4em 0.6em;
+  font: inherit;
+}
+.agent-picker select:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.config-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 0.4em 0.7em;
+  font-size: 0.85rem;
+}
+.config-toggle:hover {
+  color: var(--text);
+}
+.config-toggle.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.chat-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+}
+
+/* ---- config panel ---- */
+
+.config-panel {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 0.9rem 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.7rem 1rem;
+}
+.config-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+.config-field > span {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+.config-field select,
+.config-field input {
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.45em 0.6em;
+  font: inherit;
+}
+.config-field select:focus,
+.config-field input:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
