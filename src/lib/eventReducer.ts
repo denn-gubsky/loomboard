@@ -1,5 +1,5 @@
 import { accumulateUsage, emptyMetrics, type TokenMetrics } from "./metrics";
-import type { ChatEvent, InterruptionInfo } from "./events";
+import { describeFallback, type ChatEvent, type InterruptionInfo } from "./events";
 
 // ---- View model ----
 
@@ -18,7 +18,9 @@ export interface ToolCall {
 export type MessagePart =
   | { type: "text"; text: string }
   | { type: "thinking"; text: string }
-  | { type: "tool"; call: ToolCall };
+  | { type: "tool"; call: ToolCall }
+  // Inline runtime notice (e.g. a provider fallback) shown where it happened.
+  | { type: "notice"; level: "warn" | "info"; text: string };
 
 export interface UserMessage {
   role: "user";
@@ -41,6 +43,9 @@ export interface ChatState {
   pendingInterrupt: InterruptionInfo | null;
   /** True when the run has parked at end_turn (interactive, ready for input). */
   awaitingInput: boolean;
+  /** The model actually serving the run, from usage events. This is the truth a
+   *  config override is checked against — it reflects any provider fallback. */
+  servingModel: string | null;
   runId: string | null;
   sessionId: string | null;
 }
@@ -50,6 +55,7 @@ export const initialChatState: ChatState = {
   metrics: emptyMetrics,
   pendingInterrupt: null,
   awaitingInput: false,
+  servingModel: null,
   runId: null,
   sessionId: null,
 };
@@ -112,6 +118,14 @@ function appendDelta(
 
 function addTool(m: AssistantMessage, call: ToolCall): AssistantMessage {
   return { ...m, parts: [...m.parts, { type: "tool", call }] };
+}
+
+function addNotice(
+  m: AssistantMessage,
+  level: "warn" | "info",
+  text: string,
+): AssistantMessage {
+  return { ...m, parts: [...m.parts, { type: "notice", level, text }] };
 }
 
 /** Attach a tool_result to the FIRST tool call still awaiting one — results
@@ -203,7 +217,23 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
 
     case "usage":
       return ev.usage
-        ? { ...state, metrics: accumulateUsage(state.metrics, ev.usage) }
+        ? {
+            ...state,
+            metrics: accumulateUsage(state.metrics, ev.usage),
+            servingModel: ev.usage.model ?? state.servingModel,
+          }
+        : state;
+
+    case "provider_fallback":
+      // Surface the switch inline so an override that failed over is visible.
+      return ev.fallback
+        ? {
+            ...state,
+            servingModel: ev.fallback.new_model ?? state.servingModel,
+            messages: updateOpenAssistant(state.messages, (m) =>
+              addNotice(m, "warn", describeFallback(ev.fallback!)),
+            ),
+          }
         : state;
 
     case "interruption_pending":

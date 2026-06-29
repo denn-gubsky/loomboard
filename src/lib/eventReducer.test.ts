@@ -170,6 +170,38 @@ describe("chatReducer — lifecycle", () => {
   });
 });
 
+describe("chatReducer — serving model & provider fallback", () => {
+  it("captures the serving model from usage.model", () => {
+    const s = run([
+      ev("usage", { usage: { input_tokens: 10, output_tokens: 2, model: "deepseek-v4-flash" } }),
+    ]);
+    expect(s.servingModel).toBe("deepseek-v4-flash");
+  });
+
+  it("renders provider_fallback inline and updates the serving model", () => {
+    const s = run([
+      ev("text", { text: "working" }),
+      ev("provider_fallback", {
+        fallback: {
+          failed_provider: "ollama-local",
+          failed_model: "gemma4:latest",
+          new_provider: "deepseek",
+          new_model: "deepseek-v4-flash",
+          reason: "UNAVAILABLE",
+        },
+      }),
+    ]);
+    expect(s.servingModel).toBe("deepseek-v4-flash");
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice).toBeTruthy();
+    if (notice && notice.type === "notice") {
+      expect(notice.level).toBe("warn");
+      expect(notice.text).toContain("ollama-local/gemma4:latest");
+      expect(notice.text).toContain("deepseek/deepseek-v4-flash");
+    }
+  });
+});
+
 describe("chatReducer — reset", () => {
   it("resets to initial, optionally seeding ids", () => {
     const dirty = run([ev("text", { text: "stuff" }), ev("usage", { usage: { input_tokens: 5, output_tokens: 5 } })]);

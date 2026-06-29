@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Gauge, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, Cpu, Gauge, Zap } from "lucide-react";
 import {
   contextPercent,
   formatCount,
@@ -9,14 +9,27 @@ interface Props {
   metrics: TokenMetrics;
   tokensPerSec: number;
   running: boolean;
+  servingModel: string | null;
 }
 
-// Live token HUD: cumulative ▲ input / ▼ output, current tokens/sec while
+// Live token HUD: the model actually serving the run (reflects any provider
+// fallback), cumulative ▲ input / ▼ output, current tokens/sec while
 // generating, and a context-window gauge when the model reports its ceiling.
-export default function MetricsHud({ metrics, tokensPerSec, running }: Props) {
+export default function MetricsHud({
+  metrics,
+  tokensPerSec,
+  running,
+  servingModel,
+}: Props) {
   const pct = contextPercent(metrics);
   return (
     <div className="hud">
+      {servingModel && (
+        <span className="hud-item" title="Model actually serving this run">
+          <Cpu size={13} />
+          {servingModel}
+        </span>
+      )}
       <span className="hud-item" title="Input tokens (cumulative)">
         <ArrowUp size={13} />
         {formatCount(metrics.inputTokens)}

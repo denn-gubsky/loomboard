@@ -751,6 +751,22 @@ button {
   font-size: 0.85rem;
 }
 
+.notice {
+  margin: 0.4em 0;
+  padding: 0.4em 0.7em;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+}
+.notice.warn {
+  color: #e6b873;
+  background: rgba(230, 184, 115, 0.1);
+  border-color: rgba(230, 184, 115, 0.35);
+}
+.notice.info {
+  color: var(--text-dim);
+}
+
 /* ---- thinking block ---- */
 .thinking {
   margin: 0.5em 0;

@@ -25,6 +25,13 @@ export default function Message({ message }: { message: ChatMessage }) {
           if (part.type === "thinking") {
             return <ThinkingBlock key={i} text={part.text} streaming={streaming} />;
           }
+          if (part.type === "notice") {
+            return (
+              <div key={i} className={`notice ${part.level}`}>
+                {part.text}
+              </div>
+            );
+          }
           return <ToolCard key={i} call={part.call} />;
         })}
 

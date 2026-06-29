@@ -17,13 +17,34 @@ export interface InterruptionInfo {
   expires_at?: string;
 }
 
+/** Payload on a `provider_fallback` event — the loop switched providers after
+ *  the picked one failed (e.g. the model was UNAVAILABLE). */
+export interface FallbackInfo {
+  failed_provider?: string;
+  failed_model?: string;
+  new_provider?: string;
+  new_model?: string;
+  reason?: string;
+}
+
 export type ChatEvent = Omit<AgentEvent, "type"> & {
   type: string;
   /** Payload on `interruption_pending`. */
   interruption?: InterruptionInfo;
+  /** Payload on `provider_fallback`. */
+  fallback?: FallbackInfo;
   /** Accumulated reasoning trace, present on `done` for some providers. */
   reasoning?: string;
 };
+
+/** A short human-readable description of a provider fallback for an inline
+ *  notice ("ollama-local/gemma4 → deepseek/deepseek-v4-flash"). */
+export function describeFallback(f: FallbackInfo): string {
+  const from = [f.failed_provider, f.failed_model].filter(Boolean).join("/");
+  const to = [f.new_provider, f.new_model].filter(Boolean).join("/");
+  const head = to ? `Switched model: ${from || "?"} → ${to}` : `Model ${from || "?"} unavailable`;
+  return f.reason ? `${head} (${f.reason})` : head;
+}
 
 function userInputText(payload: unknown): string {
   if (!Array.isArray(payload)) return "";
