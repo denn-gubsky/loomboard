@@ -5,6 +5,7 @@ import {
   contextPercent,
   emptyMetrics,
   formatCount,
+  formatDuration,
   tokensPerSecond,
 } from "./metrics";
 
@@ -70,6 +71,16 @@ describe("formatCount", () => {
     expect(formatCount(1200)).toBe("1.2k");
     expect(formatCount(48000)).toBe("48k");
     expect(formatCount(1_300_000)).toBe("1.3M");
+  });
+});
+
+describe("formatDuration", () => {
+  it("formats reasoning durations", () => {
+    expect(formatDuration(400)).toBe("0.4s");
+    expect(formatDuration(3200)).toBe("3.2s");
+    expect(formatDuration(12000)).toBe("12s");
+    expect(formatDuration(65000)).toBe("1m 5s");
+    expect(formatDuration(-50)).toBe("0.0s");
   });
 });
 

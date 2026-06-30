@@ -19,7 +19,12 @@ const PROVIDERS = [
 const TIERS = ["low", "middle", "high"];
 // effort = thinking-mode depth (Anthropic thinking budget / OpenAI
 // reasoning_effort / DeepSeek toggle). Empty = inherit the agent's setting.
-const EFFORTS = ["low", "medium", "high"];
+// On Anthropic/Gemini `low` disables extended thinking; medium/high enable it.
+const EFFORTS: { value: string; label: string }[] = [
+  { value: "low", label: "low (no extended thinking)" },
+  { value: "medium", label: "medium" },
+  { value: "high", label: "high" },
+];
 
 // Per-conversation model overrides. Anything set here diverges from the base
 // agent and triggers a private AgentDef fork at first send. Empty fields
@@ -91,8 +96,8 @@ export default function AgentConfigPanel({ config, baseDef, onChange }: Props) {
         >
           <option value="">{inherit(baseDef?.effort)}</option>
           {EFFORTS.map((e) => (
-            <option key={e} value={e}>
-              {e}
+            <option key={e.value} value={e.value}>
+              {e.label}
             </option>
           ))}
         </select>
