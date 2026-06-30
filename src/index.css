@@ -1050,13 +1050,28 @@ button {
   width: 2.7em;
   height: 2.7em;
   flex-shrink: 0;
+  cursor: pointer;
 }
-.att-btn:hover:not(:disabled) {
+.att-btn:hover:not(.disabled) {
   color: var(--text);
   border-color: var(--accent-dim);
 }
-.att-btn:disabled {
+.att-btn.disabled {
   opacity: 0.5;
+  pointer-events: none;
+  cursor: default;
+}
+/* visually-hidden file input (kept in layout so the label can activate it) */
+.att-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ---- attachments shown on a sent user message ---- */
