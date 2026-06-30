@@ -61,12 +61,17 @@ export function useChat(
   const outputAtTurnStartRef = useRef(0);
   const turnCharsRef = useRef(0);
   const lastTpsTsRef = useRef(0);
+  // Reasoning-phase timing: start on the first `thinking` delta, stop when the
+  // model starts answering (or the turn ends) → "Thought for N s".
+  const thinkingActiveRef = useRef(false);
+  const thinkingStartRef = useRef(0);
 
   const beginTurnTiming = useCallback(() => {
     turnStartRef.current = Date.now();
     outputAtTurnStartRef.current = outputTokensRef.current;
     turnCharsRef.current = 0;
     lastTpsTsRef.current = 0;
+    thinkingActiveRef.current = false;
     setTps(0);
   }, []);
 
@@ -85,6 +90,26 @@ export function useChat(
             if (event.run_id) runIdRef.current = event.run_id;
             if (event.agent_id) agentIdRef.current = event.agent_id;
           }
+
+          // Time the reasoning phase and stamp its duration onto the thinking
+          // part the moment the model stops thinking (first answer/tool/done).
+          if (event.type === "thinking") {
+            if (!thinkingActiveRef.current) {
+              thinkingActiveRef.current = true;
+              thinkingStartRef.current = Date.now();
+            }
+          } else if (
+            thinkingActiveRef.current &&
+            (event.type === "text" ||
+              event.type === "tool_call" ||
+              event.type === "done" ||
+              event.type === "error" ||
+              event.type === "awaiting_input")
+          ) {
+            thinkingActiveRef.current = false;
+            dispatch({ kind: "thinkingDuration", ms: Date.now() - thinkingStartRef.current });
+          }
+
           dispatch({ kind: "event", event });
 
           const liveTurn = turnStartRef.current > 0;
@@ -261,6 +286,7 @@ export function useChat(
     outputTokensRef.current = 0;
     outputAtTurnStartRef.current = 0;
     turnStartRef.current = 0;
+    thinkingActiveRef.current = false;
     setTps(0);
     setRunning(false);
 

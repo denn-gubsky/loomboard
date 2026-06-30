@@ -39,7 +39,14 @@ export default function Message({ message }: { message: ChatMessage }) {
             return <Markdown key={i}>{part.text}</Markdown>;
           }
           if (part.type === "thinking") {
-            return <ThinkingBlock key={i} text={part.text} streaming={streaming} />;
+            return (
+              <ThinkingBlock
+                key={i}
+                text={part.text}
+                active={streaming && part.durationMs === undefined}
+                durationMs={part.durationMs}
+              />
+            );
           }
           if (part.type === "notice") {
             return (

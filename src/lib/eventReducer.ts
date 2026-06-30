@@ -18,7 +18,9 @@ export interface ToolCall {
 // search" → [tool] → "found it").
 export type MessagePart =
   | { type: "text"; text: string }
-  | { type: "thinking"; text: string }
+  // durationMs is set once the reasoning phase ends (Open-WebUI-style
+  // "Thought for N s"); undefined while still thinking.
+  | { type: "thinking"; text: string; durationMs?: number }
   | { type: "tool"; call: ToolCall }
   // Inline runtime notice (e.g. a provider fallback) shown where it happened.
   | { type: "notice"; level: "warn" | "info"; text: string };
@@ -69,6 +71,7 @@ export const initialChatState: ChatState = {
 export type ChatAction =
   | { kind: "event"; event: ChatEvent }
   | { kind: "user"; text: string; attachments?: SentAttachment[] }
+  | { kind: "thinkingDuration"; ms: number }
   | { kind: "clearInterrupt" }
   | { kind: "reset"; seed?: Partial<ChatState> };
 
@@ -160,6 +163,25 @@ function pushUser(
   return [...closeOpen(messages), { role: "user", text, attachments }];
 }
 
+/** Stamp the reasoning duration onto the open assistant's most recent
+ *  still-active (durationMs-less) thinking part — marking that the model
+ *  finished thinking and started answering. */
+function stampThinkingDuration(messages: ChatMessage[], ms: number): ChatMessage[] {
+  const open = openAssistant(messages);
+  if (!open) return messages;
+  const parts = open.parts.slice();
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    if (p.type === "thinking" && p.durationMs === undefined) {
+      parts[i] = { ...p, durationMs: ms };
+      const next = messages.slice();
+      next[next.length - 1] = { ...open, parts };
+      return next;
+    }
+  }
+  return messages;
+}
+
 // ---- Reducer ----
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -173,6 +195,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         awaitingInput: false,
         messages: pushUser(state.messages, action.text, action.attachments),
+      };
+    case "thinkingDuration":
+      return {
+        ...state,
+        messages: stampThinkingDuration(state.messages, action.ms),
       };
     case "event":
       return applyEvent(state, action.event);

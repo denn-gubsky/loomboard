@@ -66,6 +66,29 @@ describe("chatReducer — thinking", () => {
   });
 });
 
+describe("chatReducer — thinking duration", () => {
+  it("stamps the duration onto the active thinking part", () => {
+    let s = run([ev("thinking", { text: "let me think" })]);
+    s = chatReducer(s, { kind: "thinkingDuration", ms: 3200 });
+    const tp = assistant(s, 0).parts.find((p) => p.type === "thinking");
+    expect(tp).toMatchObject({ type: "thinking", text: "let me think", durationMs: 3200 });
+  });
+
+  it("stamps each thinking phase's own duration (most-recent un-stamped)", () => {
+    let s = run([ev("thinking", { text: "first" })]);
+    s = chatReducer(s, { kind: "thinkingDuration", ms: 1000 });
+    s = run(
+      [ev("tool_call", { tool_use: { id: "a", name: "x", input: {} } }), ev("thinking", { text: "second" })],
+      s,
+    );
+    s = chatReducer(s, { kind: "thinkingDuration", ms: 2000 });
+    const thinks = assistant(s, 0).parts.filter((p) => p.type === "thinking");
+    expect(thinks).toHaveLength(2);
+    expect(thinks[0]).toMatchObject({ durationMs: 1000 });
+    expect(thinks[1]).toMatchObject({ durationMs: 2000 });
+  });
+});
+
 describe("chatReducer — tools", () => {
   it("pairs tool_result with the matching tool_call (FIFO) and interleaves with text", () => {
     const s = run([
