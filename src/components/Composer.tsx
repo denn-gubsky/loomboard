@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { useState, type DragEvent, type KeyboardEvent } from "react";
 import {
   Send,
   Square,
@@ -67,7 +67,6 @@ export default function Composer({
   const [text, setText] = useState("");
   const [atts, setAtts] = useState<StagedAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   function patch(id: string, p: Partial<StagedAttachment>) {
     setAtts((prev) => prev.map((a) => (a.id === id ? { ...a, ...p } : a)));
@@ -186,25 +185,26 @@ export default function Composer({
       )}
 
       <div className="composer">
-        <button
-          className="att-btn"
-          disabled={disabled}
+        {/* A <label> wrapping a visually-hidden input opens the native file
+            dialog on click in every browser — more robust than calling
+            inputRef.click() on a display:none input, which silently no-ops in
+            some browsers. */}
+        <label
+          className={disabled ? "att-btn disabled" : "att-btn"}
           title="Attach files or images"
-          onClick={() => fileRef.current?.click()}
-          type="button"
         >
           <Paperclip size={18} />
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            addFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
+          <input
+            className="att-input"
+            type="file"
+            multiple
+            disabled={disabled}
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </label>
         <textarea
           className="composer-input"
           value={text}
