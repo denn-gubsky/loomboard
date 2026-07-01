@@ -263,8 +263,13 @@ button {
   padding: 0.5em 0;
 }
 .sidebar.collapsed .convo-title,
-.sidebar.collapsed .convo-agent,
-.sidebar.collapsed .convo-del {
+.sidebar.collapsed .convo-agent {
+  display: none;
+}
+/* The delete affordance is hover-revealed (.convo:hover .convo-del); hide it
+   outright when collapsed with a higher-specificity selector so hovering the
+   narrow icon rail can't reveal — and mis-click — a deletion. */
+.sidebar.collapsed .convo .convo-del {
   display: none;
 }
 .sidebar.collapsed .convo-empty {

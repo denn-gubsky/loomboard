@@ -8,6 +8,9 @@ export default function ConversationList() {
   const client = useLoomcycle();
 
   function onDelete(c: Conversation) {
+    // Confirm first — deletion is destructive and the trash icon sits right on
+    // the row (easy to hit by accident).
+    if (!window.confirm(`Delete “${c.title}”?`)) return;
     // Clean up the conversation's private derived agent, if any (best-effort).
     if (c.forkDefName) void deleteConversationAgent(client, c.forkDefName);
     remove(c.id);
