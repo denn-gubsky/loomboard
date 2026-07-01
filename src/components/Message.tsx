@@ -3,6 +3,7 @@ import type { ChatMessage } from "../lib/eventReducer";
 import Markdown from "./Markdown";
 import ThinkingBlock from "./ThinkingBlock";
 import ToolCard from "./ToolCard";
+import CopyButton from "./CopyButton";
 
 export default function Message({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
@@ -30,6 +31,11 @@ export default function Message({ message }: { message: ChatMessage }) {
   }
 
   const streaming = message.status === "streaming";
+  // Copy the answer text (the markdown parts) — not thinking or tool output.
+  const copyText = message.parts
+    .flatMap((p) => (p.type === "text" ? [p.text] : []))
+    .join("\n\n")
+    .trim();
 
   return (
     <div className="msg assistant">
@@ -61,6 +67,12 @@ export default function Message({ message }: { message: ChatMessage }) {
         {streaming && <span className="cursor">▋</span>}
         {message.status === "error" && (
           <div className="msg-error">{message.error}</div>
+        )}
+
+        {!streaming && copyText && (
+          <div className="msg-actions">
+            <CopyButton text={copyText} title="Copy message" />
+          </div>
         )}
       </div>
     </div>
