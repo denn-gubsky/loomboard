@@ -1,4 +1,11 @@
-import { useState, type DragEvent, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
 import {
   Send,
   Square,
@@ -18,15 +25,28 @@ import {
   estimateImageTokens,
   estimateTextTokens,
 } from "../lib/attachmentBudget";
+import { navigateHistory, noHistoryNav } from "../lib/inputHistory";
 
 interface Props {
   disabled: boolean;
   running: boolean;
   /** maxContextTokens − contextTokens, or null when the window is unknown. */
   freeTokens: number | null;
+  /** Prior user inputs (oldest first) for terminal-style ↑/↓ recall. */
+  history: string[];
+  /** Conversation id — changes reset the history cursor on chat switch. */
+  historyKey?: string;
   onSend: (text: string, attachments: StagedAttachment[]) => void;
   onStop: () => void;
   placeholder?: string;
+}
+
+/** Pasted screenshots arrive as unnamed File blobs; give them a stable name so
+ *  the chip and downstream classify() have something to show/inspect. */
+function ensureNamed(f: File): File {
+  if (f.name) return f;
+  const sub = (f.type.split("/")[1] || "bin").replace("jpeg", "jpg");
+  return new File([f], `pasted-${Date.now()}.${sub}`, { type: f.type });
 }
 
 let seq = 0;
@@ -60,6 +80,8 @@ export default function Composer({
   disabled,
   running,
   freeTokens,
+  history,
+  historyKey,
   onSend,
   onStop,
   placeholder,
@@ -67,6 +89,13 @@ export default function Composer({
   const [text, setText] = useState("");
   const [atts, setAtts] = useState<StagedAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const histRef = useRef(noHistoryNav);
+
+  // Reset the recall cursor when switching conversations (history is per-chat).
+  useEffect(() => {
+    histRef.current = noHistoryNav;
+  }, [historyKey]);
 
   function patch(id: string, p: Partial<StagedAttachment>) {
     setAtts((prev) => prev.map((a) => (a.id === id ? { ...a, ...p } : a)));
@@ -133,6 +162,26 @@ export default function Composer({
     if (!disabled) addFiles(e.dataTransfer.files);
   }
 
+  // Insert images/files pasted from the clipboard (e.g. a screenshot). Only
+  // consume `file` items so pasting plain text stays untouched.
+  function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    if (disabled) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === "file") {
+        const f = it.getAsFile();
+        if (f) files.push(ensureNamed(f));
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      for (const f of files) void processFile(f);
+    }
+  }
+
   const ready = atts.filter((a) => a.status === "ready");
   const processing = atts.some((a) => a.status === "processing");
   const readyTokens = ready.reduce((s, a) => s + a.estTokens, 0);
@@ -144,12 +193,50 @@ export default function Composer({
     onSend(text, ready);
     setText("");
     setAtts([]);
+    histRef.current = noHistoryNav;
+  }
+
+  // Recall a history entry and drop the caret at the end so the next keystroke
+  // edits (rather than re-triggering) it.
+  function recall(dir: "up" | "down") {
+    const r = navigateHistory(history, histRef.current, dir, text);
+    histRef.current = r.state;
+    setText(r.value);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (ta) ta.selectionStart = ta.selectionEnd = ta.value.length;
+    });
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
+      return;
+    }
+    // ↑/↓ recall like a terminal. Enter history from the caret's top edge, then
+    // keep stepping while navigating — so plain single-line recall flows, but a
+    // fresh multi-line draft still moves the caret normally.
+    const ta = e.currentTarget;
+    const collapsed = ta.selectionStart === ta.selectionEnd;
+    const navigating = histRef.current.index > 0;
+    if (
+      e.key === "ArrowUp" &&
+      history.length &&
+      collapsed &&
+      (ta.selectionStart === 0 || navigating)
+    ) {
+      e.preventDefault();
+      recall("up");
+    } else if (e.key === "ArrowDown" && collapsed && navigating) {
+      e.preventDefault();
+      recall("down");
+    } else if (e.key === "Escape" && navigating) {
+      // Bail out of recall, restoring the draft that was being typed.
+      e.preventDefault();
+      const { draft } = histRef.current;
+      histRef.current = noHistoryNav;
+      setText(draft);
     }
   }
 
@@ -206,10 +293,15 @@ export default function Composer({
           />
         </label>
         <textarea
+          ref={taRef}
           className="composer-input"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            histRef.current = noHistoryNav; // typing exits recall
+          }}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           placeholder={placeholder ?? "Message…"}
           rows={1}
           disabled={disabled}

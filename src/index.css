@@ -15,12 +15,45 @@
   --danger: #f0726b;
   --ok: #5fd08a;
 
+  /* Derived tokens that need distinct light-mode values (see [data-theme] below)
+     because the raw color was previously hardcoded against a dark surface. */
+  --bubble: #3b5b8c; /* user message bubble background */
+  --on-accent: #0b1220; /* text on an accent/danger-filled button */
+  --overlay: rgba(255, 255, 255, 0.08); /* subtle fill on a surface */
+  --warn: #e6b873; /* warning text (notices, attachment budget) */
+  --shadow: rgba(0, 0, 0, 0.35); /* elevation shadow */
+
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo,
     Consolas, monospace;
 
   color-scheme: dark;
+}
+
+/* Light theme — activated by the <head> boot script / theme toggle setting
+   data-theme="light" on <html>. Only the palette changes; every component reads
+   these variables, so there are no per-component light rules beyond the derived
+   tokens above. */
+:root[data-theme="light"] {
+  --bg: #f6f7f9;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --border: #d7dbe2;
+  --text: #1a1d24;
+  --text-dim: #5b6572;
+  --accent: #2563eb;
+  --accent-dim: #9ec0f5;
+  --danger: #dc2626;
+  --ok: #16a34a;
+
+  --bubble: #dbe7fb;
+  --on-accent: #ffffff;
+  --overlay: rgba(15, 23, 42, 0.06);
+  --warn: #b45309;
+  --shadow: rgba(15, 23, 42, 0.14);
+
+  color-scheme: light;
 }
 
 * {
@@ -45,6 +78,14 @@ body {
 
 a {
   color: var(--accent);
+}
+
+/* A bright, high-contrast highlight so selected text stays legible on every
+   surface — including the blue (--accent-dim) user bubble, where the browser
+   default selection is nearly invisible. */
+::selection {
+  background: var(--accent);
+  color: var(--bg);
 }
 
 .app-shell {
@@ -85,7 +126,7 @@ button {
   justify-content: center;
   gap: 0.5em;
   background: var(--accent);
-  color: #0b1220;
+  color: var(--on-accent);
   border: none;
   border-radius: 8px;
   padding: 0.6em 1em;
@@ -501,7 +542,7 @@ button {
   font-size: 0.75rem;
   white-space: nowrap;
   color: var(--text);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 14px var(--shadow);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s;
@@ -723,7 +764,7 @@ button {
   overflow-wrap: anywhere;
 }
 .msg.user .bubble {
-  background: var(--accent-dim);
+  background: var(--bubble);
   color: var(--text);
   white-space: pre-wrap;
 }
@@ -732,6 +773,36 @@ button {
   border: 1px solid var(--border);
   width: 100%;
   max-width: 100%;
+}
+
+/* Per-message action row (copy, …). Revealed on hover/focus so it stays out of
+   the way while reading, but is keyboard-reachable. */
+.msg-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.msg.assistant:hover .msg-actions,
+.msg-actions:focus-within {
+  opacity: 1;
+}
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.copy-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 /* rendered markdown */
@@ -883,7 +954,7 @@ button {
   border: 1px solid var(--border);
 }
 .notice.warn {
-  color: #e6b873;
+  color: var(--warn);
   background: rgba(230, 184, 115, 0.1);
   border-color: rgba(230, 184, 115, 0.35);
 }
@@ -1046,7 +1117,7 @@ button {
   display: flex;
   align-items: center;
   gap: 0.5em;
-  color: #e6b873;
+  color: var(--warn);
   font-size: 0.8rem;
   padding-top: 0.5rem;
 }
@@ -1149,7 +1220,7 @@ button {
   align-items: center;
   gap: 0.3em;
   font-size: 0.8rem;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--overlay);
   border-radius: 6px;
   padding: 0.25em 0.5em;
 }
@@ -1179,7 +1250,7 @@ button {
   align-items: center;
   justify-content: center;
   background: var(--accent);
-  color: #0b1220;
+  color: var(--on-accent);
   border: none;
   border-radius: 10px;
   width: 2.7em;
@@ -1191,5 +1262,5 @@ button {
 }
 .composer-btn.stop {
   background: var(--danger);
-  color: #1a0c0b;
+  color: var(--on-accent);
 }

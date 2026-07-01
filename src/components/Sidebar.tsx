@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LogOut, Moon, PanelLeftClose, PanelLeftOpen, Sun } from "lucide-react";
 import { useConnection } from "../state/connection";
+import { useTheme } from "../hooks/useTheme";
 import NewChatButton from "./NewChatButton";
 import ConversationList from "./ConversationList";
 
@@ -16,6 +17,7 @@ function loadCollapsed(): boolean {
 
 export default function Sidebar() {
   const { principal, disconnect } = useConnection();
+  const { theme, toggle } = useTheme();
   // Read synchronously on first render so there's no expand→collapse flash.
   const [collapsed, setCollapsed] = useState(loadCollapsed);
 
@@ -58,6 +60,14 @@ export default function Sidebar() {
             </span>
           </div>
         )}
+        <button
+          className="btn-ghost sm"
+          onClick={toggle}
+          title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+          aria-label="Toggle color theme"
+        >
+          {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
         <button
           className="btn-ghost sm"
           onClick={disconnect}
