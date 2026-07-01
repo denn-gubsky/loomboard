@@ -1,5 +1,10 @@
+import { useEffect, useState } from "react";
 import type { LibraryAgentDefinition } from "@loomcycle/client";
-import type { ConversationConfig } from "../state/conversations";
+import {
+  configIsCustom,
+  sameConfig,
+  type ConversationConfig,
+} from "../state/conversations";
 
 interface Props {
   config: ConversationConfig;
@@ -27,14 +32,42 @@ const EFFORTS: { value: string; label: string }[] = [
 ];
 
 // Per-conversation model overrides. Anything set here diverges from the base
-// agent and triggers a private AgentDef fork at first send. Empty fields
-// inherit the base agent (its defaults shown as the placeholder hint).
+// agent and triggers a private AgentDef fork at first send. Empty fields inherit
+// the base agent (its defaults shown as the placeholder hint).
+//
+// Edits are staged in a local draft and take effect only on Apply — so a
+// half-changed provider/model pair is never sent. Restore clears the overrides
+// back to the agent's own settings.
 export default function AgentConfigPanel({ config, baseDef, onChange }: Props) {
+  const [draft, setDraft] = useState<ConversationConfig>(config);
+
+  // Re-sync when the applied config changes under us (conversation switch, or
+  // the fork write-back), so the draft always starts from what's in effect.
+  useEffect(() => {
+    setDraft(config);
+  }, [config]);
+
   function set<K extends keyof ConversationConfig>(
     key: K,
     val: ConversationConfig[K],
   ) {
-    onChange({ ...config, [key]: val });
+    setDraft((prev) => ({ ...prev, [key]: val }));
+  }
+
+  const dirty = !sameConfig(draft, config);
+  // Something to reset: an applied override to clear, or staged edits to drop.
+  const canRestore = configIsCustom(config) || dirty;
+
+  function apply() {
+    onChange(draft);
+  }
+
+  function restore() {
+    // "Restore current agent settings" = drop all overrides (inherit). Takes
+    // effect immediately, and also discards any unsaved edits.
+    const defaults: ConversationConfig = {};
+    setDraft(defaults);
+    onChange(defaults);
   }
 
   const inherit = (v?: string) => (v ? `inherit (${v})` : "inherit");
@@ -43,13 +76,13 @@ export default function AgentConfigPanel({ config, baseDef, onChange }: Props) {
     <div className="config-panel">
       <p className="config-hint">
         Overrides fork a private agent definition for this chat. Leave a field on
-        “inherit” to keep the agent’s default.
+        “inherit” to keep the agent’s default. Changes apply on <b>Apply</b>.
       </p>
 
       <label className="config-field">
         <span>Provider</span>
         <select
-          value={config.provider ?? ""}
+          value={draft.provider ?? ""}
           onChange={(e) => set("provider", e.target.value || undefined)}
         >
           <option value="">{inherit(baseDef?.provider)}</option>
@@ -65,7 +98,7 @@ export default function AgentConfigPanel({ config, baseDef, onChange }: Props) {
         <span>Model</span>
         <input
           type="text"
-          value={config.model ?? ""}
+          value={draft.model ?? ""}
           placeholder={baseDef?.model ? `inherit (${baseDef.model})` : "inherit"}
           onChange={(e) => set("model", e.target.value || undefined)}
           autoComplete="off"
@@ -76,7 +109,7 @@ export default function AgentConfigPanel({ config, baseDef, onChange }: Props) {
       <label className="config-field">
         <span>Tier</span>
         <select
-          value={config.tier ?? ""}
+          value={draft.tier ?? ""}
           onChange={(e) => set("tier", e.target.value || undefined)}
         >
           <option value="">{inherit(baseDef?.tier)}</option>
@@ -91,7 +124,7 @@ export default function AgentConfigPanel({ config, baseDef, onChange }: Props) {
       <label className="config-field">
         <span>Thinking (effort)</span>
         <select
-          value={config.effort ?? ""}
+          value={draft.effort ?? ""}
           onChange={(e) => set("effort", e.target.value || undefined)}
         >
           <option value="">{inherit(baseDef?.effort)}</option>
@@ -102,6 +135,27 @@ export default function AgentConfigPanel({ config, baseDef, onChange }: Props) {
           ))}
         </select>
       </label>
+
+      <div className="config-actions">
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={restore}
+          disabled={!canRestore}
+          title="Restore the agent's own settings (clear overrides)"
+        >
+          Restore
+        </button>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={apply}
+          disabled={!dirty}
+          title="Apply these overrides to this chat"
+        >
+          Apply
+        </button>
+      </div>
     </div>
   );
 }

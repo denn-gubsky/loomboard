@@ -138,3 +138,16 @@ export function configIsCustom(config: ConversationConfig): boolean {
     config.provider || config.model || config.tier || config.effort,
   );
 }
+
+const CONFIG_KEYS: (keyof ConversationConfig)[] = [
+  "provider",
+  "model",
+  "tier",
+  "effort",
+];
+
+/** True when two configs hold the same overrides. "" and undefined both mean
+ *  "inherit", so they compare equal. Used by the config panel's dirty check. */
+export function sameConfig(a: ConversationConfig, b: ConversationConfig): boolean {
+  return CONFIG_KEYS.every((k) => (a[k] ?? "") === (b[k] ?? ""));
+}
