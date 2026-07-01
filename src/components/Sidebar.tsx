@@ -1,10 +1,12 @@
-import { LogOut } from "lucide-react";
+import { LogOut, Moon, Sun } from "lucide-react";
 import { useConnection } from "../state/connection";
+import { useTheme } from "../hooks/useTheme";
 import NewChatButton from "./NewChatButton";
 import ConversationList from "./ConversationList";
 
 export default function Sidebar() {
   const { principal, disconnect } = useConnection();
+  const { theme, toggle } = useTheme();
 
   return (
     <aside className="sidebar">
@@ -23,6 +25,14 @@ export default function Sidebar() {
             {principal?.open_mode ? " · open" : ""}
           </span>
         </div>
+        <button
+          className="btn-ghost sm"
+          onClick={toggle}
+          title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+          aria-label="Toggle color theme"
+        >
+          {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
         <button
           className="btn-ghost sm"
           onClick={disconnect}
