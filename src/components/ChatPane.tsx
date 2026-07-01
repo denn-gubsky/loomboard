@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Settings2 } from "lucide-react";
 import { configIsCustom, useConversations } from "../state/conversations";
+import type { UserMessage } from "../lib/eventReducer";
 import { useAgents } from "../hooks/useAgents";
 import { useChat } from "../hooks/useChat";
 import AgentPicker from "./AgentPicker";
@@ -42,6 +43,10 @@ export default function ChatPane() {
   // model didn't report a window, so we can't enforce).
   const freeTokens =
     m.maxContextTokens > 0 ? Math.max(0, m.maxContextTokens - m.contextTokens) : null;
+  // This conversation's prior user messages (oldest first) for ↑/↓ recall.
+  const userInputs = chat.state.messages
+    .filter((msg): msg is UserMessage => msg.role === "user" && msg.text.trim().length > 0)
+    .map((msg) => msg.text);
 
   return (
     <section className="chat-pane">
@@ -101,6 +106,8 @@ export default function ChatPane() {
         disabled={noAgent || !!chat.state.pendingInterrupt}
         running={chat.running}
         freeTokens={freeTokens}
+        history={userInputs}
+        historyKey={active.id}
         onSend={chat.send}
         onStop={chat.cancel}
         placeholder={
