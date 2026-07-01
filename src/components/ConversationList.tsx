@@ -27,6 +27,7 @@ export default function ConversationList() {
           key={c.id}
           className={c.id === activeId ? "convo active" : "convo"}
           onClick={() => select(c.id)}
+          title={c.title}
         >
           <MessageSquare size={15} className="convo-icon" />
           <span className="convo-title">{c.title}</span>
