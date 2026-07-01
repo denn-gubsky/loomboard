@@ -47,6 +47,14 @@ a {
   color: var(--accent);
 }
 
+/* A bright, high-contrast highlight so selected text stays legible on every
+   surface — including the blue (--accent-dim) user bubble, where the browser
+   default selection is nearly invisible. */
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
 .app-shell {
   height: 100%;
   display: flex;
@@ -675,6 +683,36 @@ button {
   border: 1px solid var(--border);
   width: 100%;
   max-width: 100%;
+}
+
+/* Per-message action row (copy, …). Revealed on hover/focus so it stays out of
+   the way while reading, but is keyboard-reachable. */
+.msg-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.msg.assistant:hover .msg-actions,
+.msg-actions:focus-within {
+  opacity: 1;
+}
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.copy-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 /* rendered markdown */
