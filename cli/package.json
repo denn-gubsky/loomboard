@@ -1,0 +1,41 @@
+{
+  "name": "@loomboard/app",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Run the loomboard chat app locally — serves the SPA and reverse-proxies /v1 to your loomcycle (no CORS setup). Cross-platform via Node.",
+  "license": "MIT",
+  "bin": {
+    "loomboard": "bin/loomboard.mjs"
+  },
+  "files": [
+    "bin",
+    "public"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/denn-gubsky/loomboard.git",
+    "directory": "cli"
+  },
+  "keywords": [
+    "loomcycle",
+    "loomboard",
+    "chat",
+    "cli",
+    "ai"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "cd .. && npm run build:standalone",
+    "start": "node bin/loomboard.mjs",
+    "prepack": "cd .. && npm run build:standalone"
+  },
+  "dependencies": {
+    "http-proxy-middleware": "^3.0.7",
+    "sirv": "^2.0.4"
+  }
+}

@@ -1,28 +1,64 @@
 {
-  "name": "loomboard",
-  "private": true,
+  "name": "@loomboard/chat",
   "version": "0.1.0",
   "type": "module",
-  "description": "loomboard — user-facing app for the loomcycle agentic runtime. Rich chat surface first; kanban board later.",
+  "description": "Embeddable React chat component for the loomcycle agentic runtime — streaming messages, reasoning, tools, attachments, metrics, and interrupts for a single conversation.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/denn-gubsky/loomboard.git"
+  },
+  "keywords": [
+    "loomcycle",
+    "chat",
+    "react",
+    "agent",
+    "ai",
+    "component"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:lib": "vite build --config vite.config.lib.ts && tsc -p tsconfig.lib.json && cp src/chat/styles.css dist/styles.css",
+    "build:standalone": "tsc --noEmit && vite build --mode standalone --outDir cli/public --emptyOutDir",
+    "prepack": "npm run build:lib",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@loomcycle/client": "^1.7.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
     "highlight.js": "^11.11.1",
     "katex": "^0.16.47",
     "lucide-react": "^0.460.0",
     "mammoth": "^1.12.0",
     "pdfjs-dist": "^4.10.38",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "react-markdown": "^9.1.0",
-    "react-router-dom": "^7.0.0",
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",
     "remark-gemoji": "^8.0.0",
@@ -30,11 +66,14 @@
     "remark-math": "^6.0.0"
   },
   "devDependencies": {
+    "@loomcycle/client": "^1.7.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "http-proxy-middleware": "^3.0.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "typescript": "^5.6.0",
     "vite": "^7.0.0",
     "vitest": "^3.0.0"
