@@ -1,5 +1,6 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { Library } from "@loomcycle/library";
 import { ConnectionProvider, useConnection } from "./state/connection";
 import {
   ConversationsProvider,
@@ -69,6 +70,43 @@ function ChatArea() {
   );
 }
 
+// The loomcycle Library (skills / MCP management) mounted in the main pane,
+// where the list + lineage + modals have room. It reuses the app's connection
+// (dev-proxy fetch included) and principal; theme is inherited from <html>
+// data-theme. Agents management is a later add — extend `tabs` with "agents".
+function LibraryArea() {
+  const { settings, principal } = useConnection();
+  const connection = useMemo<Connection | null>(
+    () => (settings ? buildConnection(settings) : null),
+    [settings],
+  );
+  if (!connection) return null;
+  return (
+    <section className="library-pane">
+      <Library
+        connection={connection}
+        principal={principal ?? undefined}
+        tabs={["skills", "mcp"]}
+        onError={(e) => console.error("[library]", e)}
+      />
+    </section>
+  );
+}
+
+// Connected app: a left rail that switches the main pane between the chat
+// surface and the Library.
+function AppShell() {
+  const [view, setView] = useState<"chat" | "library">("chat");
+  return (
+    <ConversationsProvider>
+      <div className="app-shell">
+        <Sidebar view={view} onViewChange={setView} />
+        {view === "library" ? <LibraryArea /> : <ChatArea />}
+      </div>
+    </ConversationsProvider>
+  );
+}
+
 function Shell() {
   const { status } = useConnection();
 
@@ -85,14 +123,7 @@ function Shell() {
     return <ConnectionSettings />;
   }
 
-  return (
-    <ConversationsProvider>
-      <div className="app-shell">
-        <Sidebar />
-        <ChatArea />
-      </div>
-    </ConversationsProvider>
-  );
+  return <AppShell />;
 }
 
 export default function App() {
