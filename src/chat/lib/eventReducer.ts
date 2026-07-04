@@ -1,5 +1,10 @@
 import { accumulateUsage, emptyMetrics, type TokenMetrics } from "./metrics";
-import { describeFallback, type ChatEvent, type InterruptionInfo } from "./events";
+import {
+  describeFallback,
+  describeLimit,
+  type ChatEvent,
+  type InterruptionInfo,
+} from "./events";
 import type { SentAttachment } from "./attachments";
 
 // ---- View model ----
@@ -22,8 +27,9 @@ export type MessagePart =
   // "Thought for N s"); undefined while still thinking.
   | { type: "thinking"; text: string; durationMs?: number }
   | { type: "tool"; call: ToolCall }
-  // Inline runtime notice (e.g. a provider fallback) shown where it happened.
-  | { type: "notice"; level: "warn" | "info"; text: string };
+  // Inline runtime notice (provider fallback, token-budget crossing) shown
+  // where it happened. "error" = a hard stop (e.g. hard token budget reached).
+  | { type: "notice"; level: "warn" | "info" | "error"; text: string };
 
 export interface UserMessage {
   role: "user";
@@ -131,7 +137,7 @@ function addTool(m: AssistantMessage, call: ToolCall): AssistantMessage {
 
 function addNotice(
   m: AssistantMessage,
-  level: "warn" | "info",
+  level: "warn" | "info" | "error",
   text: string,
 ): AssistantMessage {
   return { ...m, parts: [...m.parts, { type: "notice", level, text }] };
@@ -280,6 +286,18 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
             ),
           }
         : state;
+
+    case "limit":
+      // Token-budget crossing (RFC AW). Surface inline where it happened: a
+      // soft crossing warns (run continues); a hard crossing is an error (the
+      // budget is reached, further runs are blocked at admission).
+      if (!ev.limit) return state;
+      return {
+        ...state,
+        messages: updateOpenAssistant(state.messages, (m) =>
+          addNotice(m, ev.limit!.severity === "hard" ? "error" : "warn", describeLimit(ev.limit!)),
+        ),
+      };
 
     case "interruption_pending":
       return { ...state, pendingInterrupt: ev.interruption ?? null };

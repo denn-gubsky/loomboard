@@ -621,6 +621,11 @@
 .loomchat .notice.info {
   color: var(--text-dim);
 }
+.loomchat .notice.error {
+  color: var(--danger);
+  background: rgba(240, 114, 107, 0.1);
+  border-color: rgba(240, 114, 107, 0.4);
+}
 
 /* ---- thinking block ---- */
 .loomchat .thinking {

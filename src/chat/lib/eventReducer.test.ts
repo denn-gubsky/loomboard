@@ -247,6 +247,45 @@ describe("chatReducer — serving model & provider fallback", () => {
   });
 });
 
+describe("chatReducer — token limits (RFC AW)", () => {
+  it("renders a soft limit crossing as a warn notice", () => {
+    const s = run([
+      ev("text", { text: "working" }),
+      ev("limit", {
+        limit: {
+          scope: "tenant",
+          scope_id: "acme",
+          severity: "soft",
+          used: 900000,
+          limit: 1000000,
+          message: "tenant acme soft token budget reached: 900000 of 1000000 tokens this month",
+        },
+      }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice).toBeTruthy();
+    if (notice && notice.type === "notice") {
+      expect(notice.level).toBe("warn");
+      expect(notice.text).toContain("900000 of 1000000");
+    }
+  });
+
+  it("renders a hard limit crossing as an error notice", () => {
+    const s = run([
+      ev("limit", {
+        limit: { scope: "tenant", severity: "hard", message: "tenant acme hard token budget reached" },
+      }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice?.type === "notice" && notice.level).toBe("error");
+  });
+
+  it("ignores a limit event with no payload", () => {
+    const s = run([ev("text", { text: "hi" }), ev("limit", {})]);
+    expect(assistant(s, 0).parts.some((p) => p.type === "notice")).toBe(false);
+  });
+});
+
 describe("chatReducer — reset", () => {
   it("resets to initial, optionally seeding ids", () => {
     const dirty = run([ev("text", { text: "stuff" }), ev("usage", { usage: { input_tokens: 5, output_tokens: 5 } })]);
