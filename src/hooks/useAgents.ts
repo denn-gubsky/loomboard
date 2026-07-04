@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import type { LibraryAgentDefinition, LibraryEntry } from "@loomcycle/client";
-import { useLoomcycle } from "../state/connection";
+import type {
+  LibraryAgentDefinition,
+  LibraryEntry,
+  LoomcycleClient,
+} from "@loomcycle/client";
 import { describeError } from "../lib/loomcycle";
 
 export type AgentEntry = LibraryEntry<LibraryAgentDefinition>;
@@ -11,9 +14,8 @@ interface AgentsResult {
   error: string | null;
 }
 
-/** Fetch the runtime's library agents once per connected client. */
-export function useAgents(): AgentsResult {
-  const client = useLoomcycle();
+/** Fetch the runtime's library agents once per client. */
+export function useAgents(client: LoomcycleClient): AgentsResult {
   const [agents, setAgents] = useState<AgentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

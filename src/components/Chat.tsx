@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Settings2 } from "lucide-react";
-import { configIsCustom, useConversations } from "../state/conversations";
+import { createLoomcycleClient, type Connection } from "../lib/createClient";
+import { configIsCustom, type Conversation } from "../state/conversations";
 import type { UserMessage } from "../lib/eventReducer";
 import { useAgents } from "../hooks/useAgents";
 import { useChat } from "../hooks/useChat";
@@ -12,31 +13,43 @@ import MetricsHud from "./MetricsHud";
 import CompactButton from "./CompactButton";
 import InterruptCard from "./InterruptCard";
 
-export default function ChatPane() {
-  const { active, update } = useConversations();
-  const { agents, loading, error } = useAgents();
+export interface ChatProps {
+  /** How to reach loomcycle. The component builds (and memoizes) its client. */
+  connection: Connection;
+  /** The conversation to drive — controlled by the host, which owns selection
+   *  and persistence. */
+  conversation: Conversation;
+  /** Write-back for state the chat produces: session/run/fork ids, title, and
+   *  the agent/config the user picks in the header. */
+  onConversationChange: (patch: Partial<Conversation>) => void;
+}
+
+// The embeddable chat surface for a single conversation: agent picker, model /
+// thinking config, streamed messages (text, reasoning, tools), token metrics,
+// context compaction, interrupts, and an attachment-aware composer. The host
+// supplies the connection and the conversation record and persists the patches
+// this emits; everything else (which chat is shown, the list) lives outside.
+export default function Chat({
+  connection,
+  conversation,
+  onConversationChange,
+}: ChatProps) {
+  const client = useMemo(
+    () => createLoomcycleClient(connection),
+    // A new client only when the connection identity changes; the host should
+    // pass a stable `fetch`.
+    [connection.baseUrl, connection.token, connection.fetch],
+  );
+  const { agents, loading, error } = useAgents(client);
   const [showConfig, setShowConfig] = useState(false);
 
-  const baseDef = active
-    ? agents.find((a) => a.name === active.baseAgent)?.static_definition
-    : undefined;
+  const baseDef = agents.find(
+    (a) => a.name === conversation.baseAgent,
+  )?.static_definition;
+  const chat = useChat(client, conversation, baseDef, onConversationChange);
 
-  // Hooks must run unconditionally — useChat handles a null conversation.
-  const chat = useChat(active, baseDef);
-
-  if (!active) {
-    return (
-      <section className="chat-pane empty">
-        <div className="chat-empty">
-          <h2>loomboard</h2>
-          <p>Start a new chat or pick one from the sidebar.</p>
-        </div>
-      </section>
-    );
-  }
-
-  const custom = configIsCustom(active.config);
-  const noAgent = !active.baseAgent;
+  const custom = configIsCustom(conversation.config);
+  const noAgent = !conversation.baseAgent;
   const m = chat.state.metrics;
   const hasUsage = m.inputTokens > 0 || m.outputTokens > 0;
   // Tokens left in the model's window, for the attachment budget (null = the
@@ -52,8 +65,8 @@ export default function ChatPane() {
     <section className="chat-pane">
       <header className="chat-header">
         <AgentPicker
-          value={active.baseAgent}
-          onChange={(name) => update(active.id, { baseAgent: name })}
+          value={conversation.baseAgent}
+          onChange={(name) => onConversationChange({ baseAgent: name })}
           agents={agents}
           loading={loading}
           error={error}
@@ -87,9 +100,9 @@ export default function ChatPane() {
 
       {showConfig && (
         <AgentConfigPanel
-          config={active.config}
+          config={conversation.config}
           baseDef={baseDef}
-          onChange={(next) => update(active.id, { config: next })}
+          onChange={(next) => onConversationChange({ config: next })}
         />
       )}
 
@@ -107,7 +120,7 @@ export default function ChatPane() {
         running={chat.running}
         freeTokens={freeTokens}
         history={userInputs}
-        historyKey={active.id}
+        historyKey={conversation.id}
         onSend={chat.send}
         onStop={chat.cancel}
         placeholder={
@@ -115,7 +128,7 @@ export default function ChatPane() {
             ? "Answer the agent's question above"
             : noAgent
               ? "Pick an agent to start"
-              : `Message ${active.baseAgent}…`
+              : `Message ${conversation.baseAgent}…`
         }
       />
     </section>

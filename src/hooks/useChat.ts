@@ -3,9 +3,9 @@ import type {
   AgentEvent,
   CompactRunResult,
   LibraryAgentDefinition,
+  LoomcycleClient,
 } from "@loomcycle/client";
-import { useLoomcycle } from "../state/connection";
-import { useConversations, type Conversation } from "../state/conversations";
+import { type Conversation } from "../state/conversations";
 import {
   chatReducer,
   initialChatState,
@@ -41,11 +41,11 @@ function titleFrom(text: string): string {
 // continueSession/runStreaming. A monotonic `gen` token marks the active stream
 // so a superseding turn never races the one it replaced.
 export function useChat(
+  client: LoomcycleClient,
   conversation: Conversation | null,
   baseDef: LibraryAgentDefinition | undefined,
+  onChange: (patch: Partial<Conversation>) => void,
 ): UseChat {
-  const client = useLoomcycle();
-  const { update } = useConversations();
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [running, setRunning] = useState(false);
   const [tokensPerSec, setTps] = useState(0);
@@ -179,7 +179,7 @@ export function useChat(
         attachments: sent.length ? sent : undefined,
       });
       if (convo.title === "New chat" && trimmed) {
-        update(convo.id, { title: titleFrom(trimmed) });
+        onChange({ title: titleFrom(trimmed) });
       }
       setRunning(true);
       beginTurnTiming();
@@ -211,7 +211,7 @@ export function useChat(
             signal: ac.signal,
           });
         } else {
-          const agentName = await resolveConversationAgent(client, convo, baseDef, update);
+          const agentName = await resolveConversationAgent(client, convo, baseDef, onChange);
           stream = client.runStreaming({
             agent: agentName,
             segments,
@@ -230,7 +230,7 @@ export function useChat(
         }
       }
     },
-    [conversation, baseDef, client, update, consume, beginTurnTiming],
+    [conversation, baseDef, client, onChange, consume, beginTurnTiming],
   );
 
   const cancel = useCallback(async () => {
@@ -270,8 +270,8 @@ export function useChat(
     if (state.runId && state.runId !== conversation.runId) {
       patch.runId = state.runId;
     }
-    if (Object.keys(patch).length) update(conversation.id, patch);
-  }, [state.runId, state.sessionId, conversation, update]);
+    if (Object.keys(patch).length) onChange(patch);
+  }, [state.runId, state.sessionId, conversation, onChange]);
 
   // Conversation switch: tear down the old stream, reset, reload history
   // (re-attach to a live run, else read-only transcript). Keyed on id only.
