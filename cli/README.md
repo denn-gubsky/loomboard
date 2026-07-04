@@ -24,13 +24,25 @@ Your **bearer token stays in the browser** (localStorage) and is only forwarded 
 ## Options
 
 ```
-loomboard [--port <n>] [--loomcycle <url>] [--no-open]
+loomboard [--port <n>] [--host <addr>] [--loomcycle <url>] [--insecure] [--no-open]
 
   --port <n>         Port to listen on (default 4173, or $PORT)
+  --host <addr>      Interface to bind (default 127.0.0.1)
   --loomcycle <url>  Default loomcycle target when the Base URL is left blank
                      (default $LOOMBOARD_PROXY_TARGET or http://127.0.0.1:8787)
+  --insecure         Don't verify the loomcycle's TLS cert (self-signed LAN only)
   --no-open          Don't open the browser automatically
 ```
+
+## Security
+
+The server binds to **loopback (`127.0.0.1`)** by default and validates the
+`Host` header, so the `/v1` proxy is reachable only from your machine — it is
+not an open proxy, and DNS-rebinding attacks are refused. TLS certificates are
+verified by default (`--insecure` opts out only for a self-signed LAN runtime).
+Binding a non-loopback `--host` deliberately exposes the proxy to your network;
+do that only on a network you trust.
+
 
 ## Embedding instead?
 
