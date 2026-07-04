@@ -1,8 +1,8 @@
 import type { LibraryAgentDefinition, LoomcycleClient } from "@loomcycle/client";
 import {
   configIsCustom,
-  type Conversation,
-} from "../state/conversations";
+  type ChatConversation as Conversation,
+} from "../types";
 
 // Resolve the agent name a conversation should run against.
 //

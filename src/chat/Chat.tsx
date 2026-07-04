@@ -1,27 +1,27 @@
 import { useMemo, useState } from "react";
 import { Settings2 } from "lucide-react";
-import { createLoomcycleClient, type Connection } from "../lib/createClient";
-import { configIsCustom, type Conversation } from "../state/conversations";
-import type { UserMessage } from "../lib/eventReducer";
-import { useAgents } from "../hooks/useAgents";
-import { useChat } from "../hooks/useChat";
-import AgentPicker from "./AgentPicker";
-import AgentConfigPanel from "./AgentConfigPanel";
-import MessageList from "./MessageList";
-import Composer from "./Composer";
-import MetricsHud from "./MetricsHud";
-import CompactButton from "./CompactButton";
-import InterruptCard from "./InterruptCard";
+import { createLoomcycleClient, type Connection } from "./lib/createClient";
+import { configIsCustom, type ChatConversation } from "./types";
+import type { UserMessage } from "./lib/eventReducer";
+import { useAgents } from "./hooks/useAgents";
+import { useChat } from "./hooks/useChat";
+import AgentPicker from "./components/AgentPicker";
+import AgentConfigPanel from "./components/AgentConfigPanel";
+import MessageList from "./components/MessageList";
+import Composer from "./components/Composer";
+import MetricsHud from "./components/MetricsHud";
+import CompactButton from "./components/CompactButton";
+import InterruptCard from "./components/InterruptCard";
 
 export interface ChatProps {
   /** How to reach loomcycle. The component builds (and memoizes) its client. */
   connection: Connection;
   /** The conversation to drive — controlled by the host, which owns selection
    *  and persistence. */
-  conversation: Conversation;
+  conversation: ChatConversation;
   /** Write-back for state the chat produces: session/run/fork ids, title, and
    *  the agent/config the user picks in the header. */
-  onConversationChange: (patch: Partial<Conversation>) => void;
+  onConversationChange: (patch: Partial<ChatConversation>) => void;
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /

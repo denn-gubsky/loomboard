@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { HelpCircle, Send, Loader2 } from "lucide-react";
 import { optionsToArray, type InterruptionInfo } from "../lib/events";
-import { describeError } from "../lib/loomcycle";
+import { describeError } from "../lib/errors";
 
 interface Props {
   interrupt: InterruptionInfo;

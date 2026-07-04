@@ -1,7 +1,7 @@
 import { MessageSquare, Trash2 } from "lucide-react";
 import { useConversations, type Conversation } from "../state/conversations";
 import { useLoomcycle } from "../state/connection";
-import { deleteConversationAgent } from "../lib/agentFork";
+import { deleteConversationAgent } from "../chat/lib/agentFork";
 
 export default function ConversationList() {
   const { conversations, activeId, select, remove } = useConversations();

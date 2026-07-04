@@ -4,7 +4,7 @@ import type {
   LibraryEntry,
   LoomcycleClient,
 } from "@loomcycle/client";
-import { describeError } from "../lib/loomcycle";
+import { describeError } from "../lib/errors";
 
 export type AgentEntry = LibraryEntry<LibraryAgentDefinition>;
 

@@ -5,7 +5,7 @@ import type {
   LibraryAgentDefinition,
   LoomcycleClient,
 } from "@loomcycle/client";
-import { type Conversation } from "../state/conversations";
+import { type ChatConversation as Conversation } from "../types";
 import {
   chatReducer,
   initialChatState,
@@ -16,7 +16,7 @@ import { tokensPerSecond } from "../lib/metrics";
 import { buildUserSegments } from "../lib/segments";
 import { resolveConversationAgent } from "../lib/agentFork";
 import type { SentAttachment, StagedAttachment } from "../lib/attachments";
-import { describeError, isAbortError } from "../lib/loomcycle";
+import { describeError, isAbortError } from "../lib/errors";
 
 export interface UseChat {
   state: ChatState;

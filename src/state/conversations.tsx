@@ -6,30 +6,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { ChatConversation, ConversationConfig } from "../chat/types";
 
-// Per-conversation model overrides. provider/model/tier/effort can only be set
-// on an AgentDef, so when any of these differ from the base agent we fork a
-// private def at first send (see useChat). `effort` is loomcycle's thinking-mode
-// knob (maps to Anthropic thinking budget / OpenAI reasoning_effort / DeepSeek
-// toggle); "" means inherit the base agent's setting.
-export interface ConversationConfig {
-  provider?: string;
-  model?: string;
-  tier?: string;
-  effort?: string;
-}
+// Config shape + helpers live with the chat component (its config panel and
+// fork logic own them); re-exported so existing app imports keep working.
+export type { ConversationConfig } from "../chat/types";
+export { configIsCustom, sameConfig } from "../chat/types";
 
-export interface Conversation {
-  id: string;
-  title: string;
-  /** Library agent this chat is based on. "" until the user picks one. */
-  baseAgent: string;
-  config: ConversationConfig;
-  /** Name of the per-conversation AgentDef fork, once created. */
-  forkDefName?: string;
-  /** loomcycle session + interactive run, set after the first turn. */
-  sessionId?: string;
-  runId?: string;
+// The app's conversation record extends the chat's controlled shape with local
+// index metadata (creation/activity timestamps) the component doesn't need.
+export interface Conversation extends ChatConversation {
   createdAt: number;
   updatedAt: number;
 }
@@ -129,25 +115,4 @@ export function useConversations(): ConversationsState {
     throw new Error("useConversations must be used within ConversationsProvider");
   }
   return v;
-}
-
-/** True when the conversation's config diverges from the base agent and a fork
- *  is needed. Pure helper shared by the config panel and useChat. */
-export function configIsCustom(config: ConversationConfig): boolean {
-  return Boolean(
-    config.provider || config.model || config.tier || config.effort,
-  );
-}
-
-const CONFIG_KEYS: (keyof ConversationConfig)[] = [
-  "provider",
-  "model",
-  "tier",
-  "effort",
-];
-
-/** True when two configs hold the same overrides. "" and undefined both mean
- *  "inherit", so they compare equal. Used by the config panel's dirty check. */
-export function sameConfig(a: ConversationConfig, b: ConversationConfig): boolean {
-  return CONFIG_KEYS.every((k) => (a[k] ?? "") === (b[k] ?? ""));
 }

@@ -4,7 +4,7 @@ import {
   configIsCustom,
   sameConfig,
   type ConversationConfig,
-} from "../state/conversations";
+} from "../types";
 
 interface Props {
   config: ConversationConfig;

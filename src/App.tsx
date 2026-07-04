@@ -6,11 +6,11 @@ import {
   useConversations,
   type Conversation,
 } from "./state/conversations";
-import type { Connection } from "./lib/createClient";
+import type { Connection } from "./chat/lib/createClient";
 import type { ConnectionSettings as ConnSettings } from "./state/settings";
 import ConnectionSettings from "./components/ConnectionSettings";
 import Sidebar from "./components/Sidebar";
-import Chat from "./components/Chat";
+import Chat from "./chat/Chat";
 
 // Turn the app's connection settings into the <Chat> connection. In dev we route
 // through the Vite proxy (same-origin + a per-request target header) so any
