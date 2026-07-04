@@ -22,6 +22,9 @@ export interface ChatProps {
   /** Write-back for state the chat produces: session/run/fork ids, title, and
    *  the agent/config the user picks in the header. */
   onConversationChange: (patch: Partial<ChatConversation>) => void;
+  /** Force the palette. Omit to inherit a light/dark ancestor (a host that sets
+   *  data-theme on a wrapper or <html>); the component defaults to dark. */
+  theme?: "light" | "dark";
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -33,6 +36,7 @@ export default function Chat({
   connection,
   conversation,
   onConversationChange,
+  theme,
 }: ChatProps) {
   const client = useMemo(
     () => createLoomcycleClient(connection),
@@ -62,7 +66,7 @@ export default function Chat({
     .map((msg) => msg.text);
 
   return (
-    <section className="chat-pane">
+    <section className="loomchat" data-theme={theme}>
       <header className="chat-header">
         <AgentPicker
           value={conversation.baseAgent}
