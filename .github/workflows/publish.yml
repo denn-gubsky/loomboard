@@ -3,19 +3,19 @@ name: Publish
 # Publishes @loomboard/chat (repo root) and @loomboard/app (cli/) to npm.
 #
 # Trigger: push a version tag (e.g. `git tag v0.1.0 && git push --tags`), or run
-# manually from the Actions tab (workflow_dispatch). Each package is published at
-# the version in its own package.json and SKIPPED if that version is already on
-# npm — so a shared tag can release both, re-runs are safe, and the two packages
-# may diverge in version. `prepack` rebuilds each package's artifacts at publish
-# time; the gate below fails fast so we never publish a red build.
+# manually from the Actions tab. Each package is published at the version in its
+# own package.json and SKIPPED if that version is already on npm — so a shared
+# tag can release both, re-runs are safe, and the two packages may diverge in
+# version. `prepack` rebuilds each package's artifacts at publish time; the gate
+# below fails fast so we never publish a red build.
 #
-# Auth: npm Trusted Publishing (OIDC) — no token. Each package has a Trusted
-# Publisher configured on npmjs.com (repo denn-gubsky/loomboard, workflow
-# publish.yml); the `id-token: write` permission below lets npm exchange the
-# GitHub OIDC token for a short-lived publish credential, and provenance
-# (Sigstore attestation) rides the same OIDC. Trusted publishing needs npm
-# >= 11.5.1 (newer than Node's bundled npm), so we upgrade npm below.
-# Prereq: the `@loomboard` org exists on npmjs.com.
+# One-time setup:
+#   1. The `@loomboard` org exists on npmjs.com and you're an owner.
+#   2. Repo secret NPM_TOKEN = an npm **Automation** access token (npmjs.com →
+#      Access Tokens → Classic Token → type **Automation**). Automation tokens
+#      are the kind that bypass 2FA in CI; a Publish/Granular token still demands
+#      a one-time password and fails with EOTP.
+# Provenance (Sigstore attestation) still rides OIDC via `id-token: write`.
 
 on:
   push:
@@ -31,18 +31,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # NOTE: no `registry-url` — it makes setup-node write an .npmrc with
-      # `_authToken=${NODE_AUTH_TOKEN}`, and with no token that empty auth line
-      # makes npm attempt an UNAUTHENTICATED publish (→ 404) instead of the OIDC
-      # trusted-publishing exchange. npm defaults to registry.npmjs.org anyway.
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
+          registry-url: "https://registry.npmjs.org"
           cache: npm
 
-      # Trusted publishing (OIDC) needs npm >= 11.5.1 — newer than the npm that
-      # ships with Node — so upgrade before publishing.
-      - run: npm install -g npm@latest
+      - run: npm ci
 
       # A version tag is only a trigger — the published version comes from each
       # package.json (npm rejects a version already on the registry). Fail loudly
@@ -65,8 +60,6 @@ jobs:
           fi
           echo "· tag $REF matches chat=$chat app=$app"
 
-      - run: npm ci
-
       # Gate: don't publish anything if the build or tests are red. Build BOTH
       # packages up front so we never publish one and then fail on the other.
       - run: npm run typecheck
@@ -84,6 +77,9 @@ jobs:
             echo "· publishing $name@$ver"
             npm publish --provenance --access public
           fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish @loomboard/app
         working-directory: cli
         run: |
@@ -95,3 +91,5 @@ jobs:
             echo "· publishing $name@$ver"
             npm publish --provenance --access public
           fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
