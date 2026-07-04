@@ -27,12 +27,29 @@ export interface FallbackInfo {
   reason?: string;
 }
 
+/** Payload on a `limit` event (loomcycle RFC AW per-scope token budgets). A
+ *  `soft` crossing warns and the run continues; a `hard` crossing means the
+ *  budget is reached and the next run is blocked at admission. `message` is a
+ *  ready-to-show banner; the rest lets a UI render "used of limit". Typed here
+ *  (not in the pinned SDK's AgentEvent) since the SSE parser passes it through. */
+export interface LimitInfo {
+  scope?: string;
+  scope_id?: string;
+  severity?: string;
+  window?: string;
+  used?: number;
+  limit?: number;
+  message?: string;
+}
+
 export type ChatEvent = Omit<AgentEvent, "type"> & {
   type: string;
   /** Payload on `interruption_pending`. */
   interruption?: InterruptionInfo;
   /** Payload on `provider_fallback`. */
   fallback?: FallbackInfo;
+  /** Payload on `limit` (token-budget crossing). */
+  limit?: LimitInfo;
   /** Accumulated reasoning trace, present on `done` for some providers. */
   reasoning?: string;
 };
@@ -44,6 +61,19 @@ export function describeFallback(f: FallbackInfo): string {
   const to = [f.new_provider, f.new_model].filter(Boolean).join("/");
   const head = to ? `Switched model: ${from || "?"} → ${to}` : `Model ${from || "?"} unavailable`;
   return f.reason ? `${head} (${f.reason})` : head;
+}
+
+/** Banner for a token-budget crossing. Prefer the server's ready-made message;
+ *  otherwise build one from the parts (so an older runtime that omits `message`
+ *  still reads sensibly). */
+export function describeLimit(info: LimitInfo): string {
+  if (info.message) return info.message;
+  const sev = info.severity === "hard" ? "hard" : "soft";
+  const scope = [info.scope, info.scope_id].filter(Boolean).join(" ") || "token";
+  if (typeof info.used === "number" && typeof info.limit === "number") {
+    return `${scope} ${sev} token budget reached: ${info.used} of ${info.limit} tokens this month`;
+  }
+  return `${scope} ${sev} token budget reached`;
 }
 
 // Extract only the role:"user" text from a persisted user_input row. loomcycle
