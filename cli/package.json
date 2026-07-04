@@ -1,6 +1,6 @@
 {
   "name": "@loomboard/app",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Run the loomboard chat app locally — serves the SPA and reverse-proxies /v1 to your loomcycle (no CORS setup). Cross-platform via Node.",
   "license": "Apache-2.0",

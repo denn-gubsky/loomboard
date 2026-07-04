@@ -29,12 +29,33 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
           cache: npm
+
+      # A version tag is only a trigger — the published version comes from each
+      # package.json (npm rejects a version already on the registry). Fail loudly
+      # if the tag matches neither package's version — the "tagged but forgot to
+      # bump package.json" mistake — instead of silently skipping both.
+      - name: Check tag matches a package version
+        if: github.event_name == 'push'
+        env:
+          REF: ${{ github.ref_name }}
+        run: |
+          case "$REF" in
+            v[0-9]*.[0-9]*.[0-9]*) tag="${REF#v}" ;;
+            *) echo "· $REF is not a vX.Y.Z tag — skipping check"; exit 0 ;;
+          esac
+          chat=$(node -p "require('./package.json').version")
+          app=$(node -p "require('./cli/package.json').version")
+          if [ "$tag" != "$chat" ] && [ "$tag" != "$app" ]; then
+            echo "::error::Tag $REF ($tag) matches neither @loomboard/chat ($chat) nor @loomboard/app ($app). Bump package.json (npm version) before tagging."
+            exit 1
+          fi
+          echo "· tag $REF matches chat=$chat app=$app"
 
       - run: npm ci
 
