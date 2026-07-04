@@ -1,8 +1,8 @@
 import type { LibraryAgentDefinition, LoomcycleClient } from "@loomcycle/client";
 import {
   configIsCustom,
-  type Conversation,
-} from "../state/conversations";
+  type ChatConversation as Conversation,
+} from "../types";
 
 // Resolve the agent name a conversation should run against.
 //
@@ -21,7 +21,7 @@ export async function resolveConversationAgent(
   client: LoomcycleClient,
   convo: Conversation,
   baseDef: LibraryAgentDefinition | undefined,
-  update: (id: string, patch: Partial<Conversation>) => void,
+  onChange: (patch: Partial<Conversation>) => void,
 ): Promise<string> {
   if (!configIsCustom(convo.config)) return convo.baseAgent;
   if (convo.forkDefName) return convo.forkDefName;
@@ -46,7 +46,7 @@ export async function resolveConversationAgent(
     overlay,
     description: `loomboard per-conversation override of ${convo.baseAgent}`,
   });
-  update(convo.id, { forkDefName: name });
+  onChange({ forkDefName: name });
   return name;
 }
 

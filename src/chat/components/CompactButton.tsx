@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Minimize2, Loader2 } from "lucide-react";
 import type { CompactRunResult } from "@loomcycle/client";
 import { formatCount } from "../lib/metrics";
-import { describeError } from "../lib/loomcycle";
+import { describeError } from "../lib/errors";
 
 interface Props {
   /** Only enabled while the run is parked — compactRun 409s mid-turn. */

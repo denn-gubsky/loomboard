@@ -10,7 +10,7 @@ interface Props {
 }
 
 // Presentational agent selector. The agent list is fetched by the parent
-// (ChatPane) so the picker and the config panel share one request.
+// (Chat) so the picker and the config panel share one request.
 export default function AgentPicker({
   value,
   onChange,

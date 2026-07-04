@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import type { LoomcycleClient, WhoamiResponse } from "@loomcycle/client";
-import { describeError, getClient, resetClient } from "../lib/loomcycle";
+import { getClient, resetClient } from "../lib/loomcycle";
+import { describeError } from "../chat/lib/errors";
 import {
   clearSettings,
   loadSettings,

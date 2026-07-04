@@ -1,0 +1,923 @@
+/* @loomboard/chat styles. Everything is scoped under the component's `.loomchat`
+   root so it can't leak into — or be clobbered by — the host app. The palette
+   lives on the root as CSS variables; light mode activates when the root (via
+   the `theme` prop) OR any ancestor carries data-theme="light", so an app that
+   themes <html> gets themed chat for free. Override any --var on `.loomchat`
+   to restyle. */
+
+.loomchat {
+  /* dark palette (default) */
+  --bg: #0f1115;
+  --bg-elevated: #171a21;
+  --bg-input: #1d2129;
+  --border: #2a2f3a;
+  --text: #e6e8ec;
+  --text-dim: #9aa3b2;
+  --accent: #6ea8fe;
+  --accent-dim: #3b5b8c;
+  --danger: #f0726b;
+  --ok: #5fd08a;
+  --bubble: #3b5b8c;
+  --on-accent: #0b1220;
+  --overlay: rgba(255, 255, 255, 0.08);
+  --warn: #e6b873;
+  --shadow: rgba(0, 0, 0, 0.35);
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo,
+    Consolas, monospace;
+
+  /* the pane fills its slot; host controls the surrounding layout */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+
+/* Light mode: the component root opts in via the `theme` prop, or inherits a
+   light ancestor (e.g. an app that sets data-theme on <html>). */
+.loomchat[data-theme="light"],
+[data-theme="light"] .loomchat {
+  --bg: #f6f7f9;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --border: #d7dbe2;
+  --text: #1a1d24;
+  --text-dim: #5b6572;
+  --accent: #2563eb;
+  --accent-dim: #9ec0f5;
+  --danger: #dc2626;
+  --ok: #16a34a;
+  --bubble: #dbe7fb;
+  --on-accent: #ffffff;
+  --overlay: rgba(15, 23, 42, 0.06);
+  --warn: #b45309;
+  --shadow: rgba(15, 23, 42, 0.14);
+  color-scheme: light;
+}
+
+/* ---- scoped base / utilities ---- */
+.loomchat,
+.loomchat *,
+.loomchat *::before,
+.loomchat *::after {
+  box-sizing: border-box;
+}
+.loomchat button {
+  font: inherit;
+  cursor: pointer;
+}
+.loomchat a {
+  color: var(--accent);
+}
+.loomchat ::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+.loomchat code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-input);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+@keyframes lc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.loomchat .spin {
+  animation: lc-spin 0.9s linear infinite;
+}
+
+.loomchat .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: 8px;
+  padding: 0.6em 1em;
+  font-weight: 600;
+}
+.loomchat .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.loomchat .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45em 0.8em;
+}
+.loomchat .btn-ghost:hover {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+/* ---- empty state (MessageList) ---- */
+.loomchat .chat-empty {
+  color: var(--text-dim);
+  text-align: center;
+  margin: auto;
+  padding: 2rem;
+}
+
+/* ---- chat header ---- */
+.loomchat .chat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.loomchat .agent-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  color: var(--text-dim);
+}
+.loomchat .agent-picker.error {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+.loomchat .agent-picker select {
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4em 0.6em;
+  font: inherit;
+}
+.loomchat .agent-picker select:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+.loomchat .config-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 0.4em 0.7em;
+  font-size: 0.85rem;
+}
+.loomchat .config-toggle:hover {
+  color: var(--text);
+}
+.loomchat .config-toggle.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+.loomchat .header-spacer {
+  flex: 1;
+}
+
+/* ---- metrics HUD ---- */
+.loomchat .hud {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.loomchat .hud-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+}
+.loomchat .hud-gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  position: relative;
+  cursor: default;
+}
+.loomchat .gauge-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3em 0.55em;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  color: var(--text);
+  box-shadow: 0 4px 14px var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+  z-index: 5;
+}
+.loomchat .hud-gauge:hover .gauge-popup {
+  opacity: 1;
+}
+.loomchat .gauge-track {
+  width: 70px;
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.loomchat .gauge-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+.loomchat .gauge-fill[data-warn] {
+  background: var(--danger);
+}
+.loomchat .gauge-pct {
+  min-width: 2.4em;
+}
+.loomchat .compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.loomchat .compact-note {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.loomchat .hud-item.live {
+  color: var(--accent);
+}
+.loomchat .hud-item.model {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .loomchat .hud {
+    display: none;
+  }
+}
+
+/* ---- interrupt / question card ---- */
+.loomchat .interrupt {
+  max-width: 820px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0.8rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent-dim);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+}
+.loomchat .interrupt.prio-high {
+  border-left-color: var(--danger);
+}
+.loomchat .interrupt-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.loomchat .interrupt.prio-high .interrupt-head {
+  color: var(--danger);
+}
+.loomchat .prio-badge {
+  margin-left: auto;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.05em 0.4em;
+}
+.loomchat .interrupt-q {
+  margin: 0.5em 0 0.2em;
+  font-weight: 500;
+}
+.loomchat .interrupt-ctx {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-bottom: 0.3em;
+}
+.loomchat .interrupt-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  margin-top: 0.6em;
+}
+.loomchat .opt {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.45em 0.9em;
+}
+.loomchat .opt:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.loomchat .opt:disabled {
+  opacity: 0.6;
+}
+.loomchat .interrupt-form {
+  display: flex;
+  gap: 0.5em;
+  margin-top: 0.6em;
+}
+.loomchat .interrupt-form input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.5em 0.7em;
+  font: inherit;
+}
+.loomchat .interrupt-form input:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+.loomchat .interrupt-error {
+  margin-top: 0.5em;
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+/* ---- config panel ---- */
+.loomchat .config-panel {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 0.9rem 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.7rem 1rem;
+}
+.loomchat .config-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.loomchat .config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+.loomchat .config-field > span {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+.loomchat .config-field select,
+.loomchat .config-field input {
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.45em 0.6em;
+  font: inherit;
+}
+.loomchat .config-field select:focus,
+.loomchat .config-field input:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+.loomchat .config-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5em;
+}
+.loomchat .config-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---- messages ---- */
+.loomchat .messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.loomchat .messages.empty {
+  align-items: center;
+  justify-content: center;
+}
+.loomchat .msg {
+  display: flex;
+  max-width: 820px;
+  width: 100%;
+  margin: 0 auto;
+}
+.loomchat .msg.user {
+  justify-content: flex-end;
+}
+.loomchat .msg .bubble {
+  border-radius: 12px;
+  padding: 0.7rem 0.95rem;
+  max-width: 88%;
+  overflow-wrap: anywhere;
+}
+.loomchat .msg.user .bubble {
+  background: var(--bubble);
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.loomchat .msg.assistant .bubble {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  width: 100%;
+  max-width: 100%;
+}
+.loomchat .msg-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.loomchat .msg.assistant:hover .msg-actions,
+.loomchat .msg-actions:focus-within {
+  opacity: 1;
+}
+.loomchat .copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.loomchat .copy-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* rendered markdown */
+.loomchat .markdown > :first-child {
+  margin-top: 0;
+}
+.loomchat .markdown > :last-child {
+  margin-bottom: 0;
+}
+.loomchat .markdown p {
+  margin: 0.5em 0;
+}
+.loomchat .markdown ul,
+.loomchat .markdown ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.loomchat .markdown li {
+  margin: 0.2em 0;
+}
+.loomchat .markdown h1,
+.loomchat .markdown h2,
+.loomchat .markdown h3,
+.loomchat .markdown h4 {
+  margin: 0.8em 0 0.4em;
+  line-height: 1.25;
+}
+.loomchat .markdown blockquote {
+  margin: 0.6em 0;
+  padding-left: 0.9em;
+  border-left: 3px solid var(--border);
+  color: var(--text-dim);
+}
+.loomchat .markdown a {
+  color: var(--accent);
+}
+.loomchat .markdown :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 0.08em 0.35em;
+  border-radius: 5px;
+}
+.loomchat .markdown pre {
+  margin: 0.6em 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7em 0.85em;
+  overflow-x: auto;
+}
+.loomchat .markdown pre code {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.loomchat .markdown table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  display: block;
+  overflow-x: auto;
+}
+.loomchat .markdown th,
+.loomchat .markdown td {
+  border: 1px solid var(--border);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+.loomchat .markdown img {
+  max-width: 100%;
+}
+.loomchat .markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.2em 0;
+}
+
+/* typing / waiting indicator */
+.loomchat .bubble.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.8rem 0.95rem;
+}
+.loomchat .bubble.typing .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  animation: lc-typing 1.2s infinite ease-in-out;
+}
+.loomchat .bubble.typing .dot:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.loomchat .bubble.typing .dot:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes lc-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.loomchat .cursor {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--accent);
+  animation: lc-blink 1s steps(2, start) infinite;
+}
+@keyframes lc-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.loomchat .msg-error {
+  margin-top: 0.5em;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+.loomchat .notice {
+  margin: 0.4em 0;
+  padding: 0.4em 0.7em;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+}
+.loomchat .notice.warn {
+  color: var(--warn);
+  background: rgba(230, 184, 115, 0.1);
+  border-color: rgba(230, 184, 115, 0.35);
+}
+.loomchat .notice.info {
+  color: var(--text-dim);
+}
+
+/* ---- thinking block ---- */
+.loomchat .thinking {
+  margin: 0.5em 0;
+}
+.loomchat .thinking-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 0.2em 0;
+}
+.loomchat .thinking-head:hover {
+  color: var(--text);
+}
+.loomchat .thinking .caret {
+  transition: transform 0.15s;
+}
+.loomchat .thinking.open .caret {
+  transform: rotate(90deg);
+}
+.loomchat .thinking-body {
+  margin: 0.3em 0 0.3em 0.5em;
+  padding-left: 0.8em;
+  border-left: 2px solid var(--accent-dim);
+  color: var(--text-dim);
+  font-size: 0.92em;
+}
+.loomchat .pulse {
+  animation: lc-pulse 1.4s ease-in-out infinite;
+}
+@keyframes lc-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ---- tool card ---- */
+.loomchat .tool {
+  margin: 0.5em 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.loomchat .tool.err {
+  border-color: rgba(240, 114, 107, 0.5);
+}
+.loomchat .tool-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  width: 100%;
+  background: var(--bg-input);
+  border: none;
+  color: var(--text);
+  padding: 0.45em 0.6em;
+  text-align: left;
+}
+.loomchat .tool .caret {
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.loomchat .tool-body {
+  padding: 0.5em 0.6em;
+}
+.loomchat .tool-name {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent);
+  flex: 1;
+}
+.loomchat .tool .status {
+  flex-shrink: 0;
+}
+.loomchat .tool .status.ok {
+  color: var(--ok);
+}
+.loomchat .tool .status.x {
+  color: var(--danger);
+}
+.loomchat .tool-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin: 0.3em 0 0.2em;
+}
+.loomchat .tool-pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 320px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5em 0.6em;
+}
+.loomchat .tool-pre.error {
+  color: var(--danger);
+}
+
+/* ---- composer ---- */
+.loomchat .composer-wrap {
+  border-top: 1px solid var(--border);
+  position: relative;
+}
+.loomchat .composer-wrap.dragging::after {
+  content: "Drop files to attach";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(110, 168, 254, 0.12);
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  color: var(--accent);
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 2;
+}
+.loomchat .composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem 1rem;
+  max-width: 820px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ---- attachment strip + chips ---- */
+.loomchat .att-strip,
+.loomchat .att-warn {
+  max-width: 820px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+.loomchat .att-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.7rem;
+}
+.loomchat .att-warn {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--warn);
+  font-size: 0.8rem;
+  padding-top: 0.5rem;
+}
+.loomchat .att-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3em 0.5em;
+  font-size: 0.8rem;
+  max-width: 240px;
+}
+.loomchat .att-chip.error {
+  border-color: rgba(240, 114, 107, 0.5);
+  color: var(--danger);
+}
+.loomchat .att-thumb {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.loomchat .att-icon {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.loomchat .att-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.loomchat .att-err {
+  color: var(--danger);
+  flex-shrink: 0;
+}
+.loomchat .att-x {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 0;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.loomchat .att-x:hover {
+  color: var(--text);
+}
+.loomchat .att-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 10px;
+  width: 2.7em;
+  height: 2.7em;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.loomchat .att-btn:hover:not(.disabled) {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+.loomchat .att-btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: default;
+}
+.loomchat .att-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- attachments shown on a sent user message ---- */
+.loomchat .msg-atts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+.loomchat .msg-att-img {
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 8px;
+  display: block;
+}
+.loomchat .msg-att-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.8rem;
+  background: var(--overlay);
+  border-radius: 6px;
+  padding: 0.25em 0.5em;
+}
+.loomchat .composer-input {
+  flex: 1;
+  resize: none;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65em 0.8em;
+  font: inherit;
+  line-height: 1.4;
+  min-height: 2.6em;
+  max-height: 200px;
+  field-sizing: content;
+}
+.loomchat .composer-input:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+.loomchat .composer-input:disabled {
+  opacity: 0.6;
+}
+.loomchat .composer-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: 10px;
+  width: 2.7em;
+  height: 2.7em;
+  flex-shrink: 0;
+}
+.loomchat .composer-btn:disabled {
+  opacity: 0.5;
+}
+.loomchat .composer-btn.stop {
+  background: var(--danger);
+  color: var(--on-accent);
+}
