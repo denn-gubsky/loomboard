@@ -1,0 +1,3 @@
+node_modules/
+# Built SPA — produced by `npm run build` (build:standalone) / prepack.
+public/

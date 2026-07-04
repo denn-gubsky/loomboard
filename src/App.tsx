@@ -8,17 +8,18 @@ import {
 } from "./state/conversations";
 import type { Connection } from "./chat/lib/createClient";
 import type { ConnectionSettings as ConnSettings } from "./state/settings";
+import { proxyMode } from "./lib/proxyMode";
 import ConnectionSettings from "./components/ConnectionSettings";
 import Sidebar from "./components/Sidebar";
 import Chat from "./chat/Chat";
 
-// Turn the app's connection settings into the <Chat> connection. In dev we route
-// through the Vite proxy (same-origin + a per-request target header) so any
-// reachable runtime works with no CORS; a production build hits the base URL
-// directly. This proxy detail is the APP's concern — the component just takes a
-// Connection.
+// Turn the app's connection settings into the <Chat> connection. In proxy mode
+// (dev server or the standalone CLI) we route through a same-origin proxy
+// (same-origin + a per-request target header) so any reachable runtime works
+// with no CORS; a plain production build hits the base URL directly. This proxy
+// detail is the APP's concern — the component just takes a Connection.
 function buildConnection(s: ConnSettings): Connection {
-  if (import.meta.env.DEV) {
+  if (proxyMode) {
     const target = s.baseUrl;
     return {
       baseUrl: "",
