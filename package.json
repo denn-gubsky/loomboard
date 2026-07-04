@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Embeddable React chat component for the loomcycle agentic runtime — streaming messages, reasoning, tools, attachments, metrics, and interrupts for a single conversation.",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "author": "Dennis Gubsky",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/denn-gubsky/loomboard.git"

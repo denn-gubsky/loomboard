@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Run the loomboard chat app locally — serves the SPA and reverse-proxies /v1 to your loomcycle (no CORS setup). Cross-platform via Node.",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "author": "Dennis Gubsky",
   "bin": {
     "loomboard": "bin/loomboard.mjs"
   },
