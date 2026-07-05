@@ -432,6 +432,58 @@ button {
   padding: 0.4em;
 }
 
+/* ---- left-rail view switch (Chats / Library) ---- */
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.side-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.5em 0.6em;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font: inherit;
+  text-align: left;
+}
+.side-nav-btn:hover {
+  background: var(--bg-input);
+  color: var(--text);
+}
+.side-nav-btn.active {
+  background: var(--bg-input);
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+/* pushes the footer down when the conversation list isn't shown (library view) */
+.side-fill {
+  flex: 1;
+}
+.sidebar.collapsed .side-nav-btn {
+  justify-content: center;
+  padding: 0.5em 0;
+}
+.sidebar.collapsed .side-nav-btn .label {
+  display: none;
+}
+
+/* ---- library pane (hosts the @loomcycle/library component in the main area) ---- */
+.library-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.library-pane > .loomcycle-library {
+  flex: 1;
+  min-height: 0;
+}
+
 /* ---- chat area empty placeholder (app chrome; the chat surface itself is the
    @loomboard/chat component, which ships its own scoped styles) ---- */
 

@@ -1,9 +1,24 @@
 import { useState } from "react";
-import { LogOut, Moon, PanelLeftClose, PanelLeftOpen, Sun } from "lucide-react";
+import {
+  Library as LibraryIcon,
+  LogOut,
+  MessageSquare,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sun,
+} from "lucide-react";
 import { useConnection } from "../state/connection";
 import { useTheme } from "../hooks/useTheme";
 import NewChatButton from "./NewChatButton";
 import ConversationList from "./ConversationList";
+
+export type SidebarView = "chat" | "library";
+
+interface Props {
+  view: SidebarView;
+  onViewChange: (view: SidebarView) => void;
+}
 
 const COLLAPSE_KEY = "loomboard.sidebarCollapsed";
 
@@ -15,7 +30,7 @@ function loadCollapsed(): boolean {
   }
 }
 
-export default function Sidebar() {
+export default function Sidebar({ view, onViewChange }: Props) {
   const { principal, disconnect } = useConnection();
   const { theme, toggle } = useTheme();
   // Read synchronously on first render so there's no expand→collapse flash.
@@ -47,8 +62,31 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <NewChatButton />
-      <ConversationList />
+      <nav className="side-nav">
+        <button
+          className={view === "chat" ? "side-nav-btn active" : "side-nav-btn"}
+          onClick={() => onViewChange("chat")}
+          title="Chats"
+        >
+          <MessageSquare size={16} /> <span className="label">Chats</span>
+        </button>
+        <button
+          className={view === "library" ? "side-nav-btn active" : "side-nav-btn"}
+          onClick={() => onViewChange("library")}
+          title="Library"
+        >
+          <LibraryIcon size={16} /> <span className="label">Library</span>
+        </button>
+      </nav>
+
+      {view === "chat" ? (
+        <>
+          <NewChatButton />
+          <ConversationList />
+        </>
+      ) : (
+        <div className="side-fill" />
+      )}
 
       <div className="sidebar-foot">
         {!collapsed && (
