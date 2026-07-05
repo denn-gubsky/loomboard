@@ -9,7 +9,8 @@ import {
 } from "./state/conversations";
 import type { Connection } from "./chat/lib/createClient";
 import type { ConnectionSettings as ConnSettings } from "./state/settings";
-import { proxyMode } from "./lib/proxyMode";
+import { isTauri, proxyMode } from "./lib/proxyMode";
+import { getNativeFetch } from "./lib/nativeTransport";
 import ConnectionSettings from "./components/ConnectionSettings";
 import Sidebar from "./components/Sidebar";
 import Chat from "./chat/Chat";
@@ -20,6 +21,17 @@ import Chat from "./chat/Chat";
 // with no CORS; a plain production build hits the base URL directly. This proxy
 // detail is the APP's concern — the component just takes a Connection.
 function buildConnection(s: ConnSettings): Connection {
+  if (isTauri) {
+    // Desktop: hit the absolute loomcycle URL directly via native HTTP (Rust),
+    // which bypasses webview CORS. getNativeFetch() is a stable singleton so
+    // <Chat>'s client memo (keyed on connection.fetch) doesn't churn. Blank URL
+    // → the same local default the CLI uses.
+    return {
+      baseUrl: s.baseUrl || "http://127.0.0.1:8787",
+      token: s.token,
+      fetch: getNativeFetch(),
+    };
+  }
   if (proxyMode) {
     const target = s.baseUrl;
     return {

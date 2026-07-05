@@ -1,0 +1,26 @@
+[package]
+name = "loomboard"
+version = "0.1.1"
+description = "loomboard desktop — native-window client for the loomcycle agentic runtime"
+authors = ["Dennis Gubsky"]
+license = "Apache-2.0"
+repository = "https://github.com/denn-gubsky/loomboard"
+edition = "2021"
+rust-version = "1.77.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "loomboard_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2.11.3", features = [] }
+# Native HTTP from the webview, routed through Rust — bypasses the webview's CORS
+# enforcement so the SPA can reach a loomcycle that sends no CORS headers.
+tauri-plugin-http = "2"

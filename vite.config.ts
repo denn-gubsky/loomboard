@@ -33,10 +33,19 @@ function dynamicLoomcycleProxy(): PluginOption {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // Keep default base "/": Tauri serves the built assets from its protocol root,
+  // so the absolute /assets/* paths resolve. (Fallback if a packaged build 404s
+  // on assets: set base "./" for mode === "tauri" — safe, there's no router.)
   plugins: [react(), dynamicLoomcycleProxy()],
+  // `tauri dev` loads the app from this dev server, so the port must match
+  // devUrl in tauri.conf.json. Only pin it for the Tauri build to avoid forcing
+  // strictPort on the ordinary `npm run dev` workflow.
+  ...(mode === "tauri"
+    ? { clearScreen: false, server: { port: 5173, strictPort: true } }
+    : {}),
   test: {
     // Pure reducer/metrics tests run in node.
     environment: "node",
   },
-});
+}));
