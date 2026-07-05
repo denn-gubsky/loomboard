@@ -47,5 +47,14 @@ export function describeError(e: unknown): string {
     return "Could not reach loomcycle. Check the URL and that the runtime is running and reachable from here.";
   }
   if (e instanceof Error) return e.message;
+  // Some transports reject with a non-Error: Tauri's plugin-http (native fetch)
+  // surfaces failures as a plain string (scope/TLS/connection message), and
+  // other layers throw bare objects. Surface those instead of a useless
+  // fallback — the message describes the request, never the bearer token.
+  if (typeof e === "string" && e.trim()) return e;
+  if (e && typeof e === "object") {
+    const msg = (e as { message?: unknown }).message;
+    if (typeof msg === "string" && msg.trim()) return msg;
+  }
   return "Unknown error";
 }

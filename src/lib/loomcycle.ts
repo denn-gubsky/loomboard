@@ -1,6 +1,7 @@
 import { LoomcycleClient } from "@loomcycle/client";
 import type { ConnectionSettings } from "../state/settings";
-import { proxyMode } from "./proxyMode";
+import { isTauri, proxyMode } from "./proxyMode";
+import { getNativeFetch } from "./nativeTransport";
 
 // The APP's client singleton, used to validate a connection (whoami) and by the
 // sidebar (fork cleanup on delete). The embeddable <Chat> builds its own client
@@ -19,15 +20,22 @@ export function getClient(s: ConnectionSettings): LoomcycleClient {
     // plain production build has no proxy, so we hit the Base URL directly
     // (needs CORS or a same-origin reverse proxy).
     const target = s.baseUrl;
+    // Desktop (Tauri): call the absolute loomcycle URL directly over native HTTP
+    // (Rust), which bypasses webview CORS — proxyMode is false in that build, so
+    // no target header is injected. Blank URL → the same local default the CLI
+    // uses. The native fetch is a stable singleton (see nativeTransport).
+    const nativeFetch = isTauri ? getNativeFetch() : null;
 
     client = new LoomcycleClient({
-      baseUrl: proxyMode ? "" : s.baseUrl,
+      baseUrl: proxyMode ? "" : s.baseUrl || (isTauri ? "http://127.0.0.1:8787" : ""),
       authToken: s.token || undefined,
       // Wrap fetch for two reasons: (1) the SDK calls its stored fetch as a
       // method (`ctx.fetchImpl(url)`), and the browser's native fetch rejects a
       // non-global receiver with "Illegal invocation"; (2) inject the
-      // dynamic-proxy target header in proxy mode.
+      // dynamic-proxy target header in proxy mode. In Tauri, delegate to the
+      // native fetch instead.
       fetch: (input, init) => {
+        if (nativeFetch) return nativeFetch(input, init);
         if (proxyMode && target) {
           const headers = new Headers(init?.headers);
           headers.set("x-loomcycle-target", target);

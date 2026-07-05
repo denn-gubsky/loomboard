@@ -50,4 +50,26 @@ describe("describeError", () => {
     const e = new LoomcycleError("unauthorized (401)", { status: 401, bodyText: "" });
     expect(describeError(e)).toBe("unauthorized (401)");
   });
+
+  it("surfaces a bare string rejection (Tauri plugin-http scope/TLS errors)", () => {
+    // The native fetch rejects with a plain string, not an Error — it must not
+    // be swallowed as "Unknown error".
+    expect(
+      describeError(
+        "url not allowed on the configured scope: https://box:8788/v1/_me",
+      ),
+    ).toContain("not allowed on the configured scope");
+  });
+
+  it("extracts .message from a non-Error object rejection", () => {
+    expect(describeError({ message: "connection refused" })).toBe(
+      "connection refused",
+    );
+  });
+
+  it("returns Unknown error only for truly opaque values", () => {
+    expect(describeError(null)).toBe("Unknown error");
+    expect(describeError(42)).toBe("Unknown error");
+    expect(describeError("")).toBe("Unknown error");
+  });
 });
