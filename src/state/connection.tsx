@@ -53,6 +53,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       setPrincipal(me);
       setStatus("connected");
     } catch (e) {
+      // Log the raw error for devtools; the UI shows a token-safe summary.
+      console.error("[connect] whoami failed", e);
       setPrincipal(null);
       setError(describeError(e));
       setStatus("error");
