@@ -1,4 +1,8 @@
-import type { LibraryAgentDefinition, LoomcycleClient } from "@loomcycle/client";
+import type {
+  AgentDefOverlay,
+  LibraryAgentDefinition,
+  LoomcycleClient,
+} from "@loomcycle/client";
 import {
   configIsCustom,
   type ChatConversation as Conversation,
@@ -15,7 +19,7 @@ import {
 // mints a new version under the SAME name and auto-promotes it, which would
 // change the shared agent for everyone. A new name keeps the override isolated
 // to this conversation. We copy what the library reports for the base
-// (system_prompt / allowed_tools / skills); agents whose prompt lives only in a
+// (system_prompt / tools / skills); agents whose prompt lives only in a
 // file may need the operator to set a prompt — surfaced as a normal run error.
 export async function resolveConversationAgent(
   client: LoomcycleClient,
@@ -27,13 +31,14 @@ export async function resolveConversationAgent(
   if (convo.forkDefName) return convo.forkDefName;
 
   const name = `${convo.baseAgent}__lb-${crypto.randomUUID().slice(0, 8)}`;
-  const overlay: Record<string, unknown> = {
+  const overlay: AgentDefOverlay = {
     // Enabling the Interruption tool here is what makes the questions feature
     // available on a custom-config chat.
     interruption: { enabled: true },
   };
   if (baseDef?.system_prompt) overlay.system_prompt = baseDef.system_prompt;
-  if (baseDef?.allowed_tools) overlay.allowed_tools = baseDef.allowed_tools;
+  // `tools` (was `allowed_tools`, renamed in @loomcycle/client 1.13.0).
+  if (baseDef?.tools) overlay.tools = baseDef.tools;
   if (baseDef?.skills) overlay.skills = baseDef.skills;
   if (convo.config.provider) overlay.provider = convo.config.provider;
   if (convo.config.model) overlay.model = convo.config.model;

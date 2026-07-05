@@ -256,6 +256,7 @@ describe("chatReducer — token limits (RFC AW)", () => {
           scope: "tenant",
           scope_id: "acme",
           severity: "soft",
+          window: "month",
           used: 900000,
           limit: 1000000,
           message: "tenant acme soft token budget reached: 900000 of 1000000 tokens this month",
@@ -273,7 +274,14 @@ describe("chatReducer — token limits (RFC AW)", () => {
   it("renders a hard limit crossing as an error notice", () => {
     const s = run([
       ev("limit", {
-        limit: { scope: "tenant", severity: "hard", message: "tenant acme hard token budget reached" },
+        limit: {
+          scope: "tenant",
+          severity: "hard",
+          window: "month",
+          used: 1200000,
+          limit: 1000000,
+          message: "tenant acme hard token budget reached",
+        },
       }),
     ]);
     const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
