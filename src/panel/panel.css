@@ -18,6 +18,14 @@
   display: none;
 }
 
+/* Hide the model/thinking config too: a custom config forks chrome-assistant,
+   and a fork loses the browser-bridge channel ACL (the Library agent report
+   doesn't expose channels), silently breaking actuation. The assistant runs
+   un-forked on the runtime's configured model. */
+.ext-panel .config-toggle {
+  display: none;
+}
+
 /* Panel toolbar: action-mode toggle + Stop, above the chat. */
 .ext-toolbar {
   display: flex;
