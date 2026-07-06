@@ -70,15 +70,25 @@ export default function PanelApp({
         baseUrl: s.baseUrl,
         token: s.token,
       });
+      // whoami is the only hard gate. Registering the agent and listing channels
+      // use surfaces a plain user token may lack scope for (agent def creation;
+      // the operator-only GET /v1/_channels) — those must NOT block connect. The
+      // bridge itself uses user-scoped channel ops the token CAN perform.
       const me = await client.whoami();
-      // Ensure the assistant agent exists, then check the bridge channels.
-      await ensureChromeAssistant(client);
-      const pf = await preflightChannels(client);
+      try {
+        await ensureChromeAssistant(client);
+      } catch (e) {
+        console.warn("[loomboard] could not ensure chrome-assistant agent:", e);
+      }
       await saveExtSettings(s);
       setSettings(s);
       setUserId(me.subject);
-      setMissingChannels(pf.ok ? null : pf.missing);
       setStatus("connected");
+      // Best-effort channel preflight; a user token usually can't list operator
+      // channels, so a failure here is expected and silently ignored.
+      void preflightChannels(client)
+        .then((pf) => setMissingChannels(pf.ok ? null : pf.missing))
+        .catch(() => undefined);
     } catch (e) {
       setError(describeError(e));
       setStatus("error");
