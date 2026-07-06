@@ -15,6 +15,7 @@ import { ensureChromeAssistant } from "../bridge/ensureAgent";
 import { preflightChannels } from "../bridge/ensureChannels";
 import { startChannelLoop } from "../bridge/channelLoop";
 import Connect from "./Connect";
+import ActionBar from "./ActionBar";
 
 type Status = "idle" | "connecting" | "connected" | "error";
 
@@ -113,6 +114,11 @@ export default function PanelApp({
     [connection],
   );
 
+  // Action mode. A ref (not state) so the loop reads the latest value without
+  // restarting; the toggle (M5) updates it. Default: confirm every mutation.
+  const modeRef = useRef<"confirm" | "autonomous">("confirm");
+  const shouldConfirm = useCallback(() => modeRef.current === "confirm", []);
+
   // Run the browser bridge while connected and the bridge channels exist.
   useEffect(() => {
     if (
@@ -123,9 +129,9 @@ export default function PanelApp({
     ) {
       return;
     }
-    const handle = startChannelLoop(loopClient, userId);
+    const handle = startChannelLoop(loopClient, userId, shouldConfirm);
     return () => handle.stop();
-  }, [status, loopClient, userId, missingChannels]);
+  }, [status, loopClient, userId, missingChannels, shouldConfirm]);
 
   if (status === "connecting") {
     return (
@@ -161,6 +167,7 @@ export default function PanelApp({
         conversation={conversation}
         onConversationChange={onConversationChange}
       />
+      <ActionBar />
     </div>
   );
 }

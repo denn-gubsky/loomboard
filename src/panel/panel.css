@@ -33,3 +33,69 @@
 .ext-warning svg {
   flex-shrink: 0;
 }
+
+/* Approval bar — a proposed browser action awaiting the user's confirm. Sits at
+   the bottom of the panel, below the chat. */
+.action-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  padding: 0.6em 0.7em;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--accent-dim);
+}
+.action-desc {
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+  color: var(--text);
+}
+.action-desc > svg {
+  color: var(--warn);
+  flex-shrink: 0;
+  margin-top: 0.15em;
+}
+.action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  min-width: 0;
+}
+.action-text strong {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.action-reason {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+.action-btns {
+  display: flex;
+  gap: 0.5em;
+}
+.action-approve,
+.action-reject {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  border-radius: 8px;
+  padding: 0.4em 0.8em;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+}
+.action-approve {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+.action-reject {
+  background: transparent;
+  color: var(--text-dim);
+}
+.action-reject:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}

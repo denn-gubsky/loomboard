@@ -4,6 +4,7 @@ import {
   type BrowserResult,
 } from "../../src/bridge/protocol";
 import { buildSnapshot } from "./snapshot";
+import { resolveRef } from "./refmap";
 
 // Content script: executes browser commands in the page and replies with a
 // result. The panel sends { tag: MSG_TAG, command } via chrome.tabs.sendMessage.
@@ -52,6 +53,10 @@ async function handle(cmd: BrowserCommand): Promise<BrowserResult> {
         op: cmd.op,
         text: (window.getSelection?.()?.toString() ?? "").slice(0, 8000),
       };
+    case "fill":
+      return fill(cmd);
+    case "click":
+      return click(cmd);
     default:
       return {
         id: cmd.id,
@@ -60,4 +65,62 @@ async function handle(cmd: BrowserCommand): Promise<BrowserResult> {
         error: `unsupported op: ${cmd.op}`,
       };
   }
+}
+
+// A ref that no longer resolves (page mutated / navigated). Return a fresh
+// snapshot so the agent can retry against current refs.
+function staleResult(cmd: BrowserCommand): BrowserResult {
+  return {
+    id: cmd.id,
+    ok: false,
+    op: cmd.op,
+    error: "stale_ref",
+    snapshot: buildSnapshot(),
+  };
+}
+
+// Set an input/textarea value via the native setter so React-controlled inputs
+// observe the change (React overrides the value setter to track state).
+function setNativeValue(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+): void {
+  const proto =
+    el instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+  if (setter) setter.call(el, value);
+  else el.value = value;
+}
+
+function fill(cmd: BrowserCommand): BrowserResult {
+  const el = resolveRef(cmd.ref ?? "");
+  if (!el) return staleResult(cmd);
+  const value = cmd.value ?? "";
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    el.focus();
+    setNativeValue(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  } else if (el instanceof HTMLSelectElement) {
+    el.value = value;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  } else if (el instanceof HTMLElement && el.isContentEditable) {
+    el.focus();
+    el.textContent = value;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  } else {
+    return { id: cmd.id, ok: false, op: cmd.op, error: "element is not fillable" };
+  }
+  return { id: cmd.id, ok: true, op: cmd.op, snapshot: buildSnapshot() };
+}
+
+function click(cmd: BrowserCommand): BrowserResult {
+  const el = resolveRef(cmd.ref ?? "");
+  if (!el) return staleResult(cmd);
+  if (el instanceof HTMLElement) el.click();
+  else (el as HTMLElement).dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  // A click may navigate; the snapshot is best-effort (may be pre-navigation).
+  return { id: cmd.id, ok: true, op: cmd.op, snapshot: buildSnapshot() };
 }

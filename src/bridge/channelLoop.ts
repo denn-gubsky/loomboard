@@ -2,10 +2,12 @@ import type { LoomcycleClient } from "@loomcycle/client";
 import {
   CMD_CHANNEL,
   RESULT_CHANNEL,
+  isMutating,
   type BrowserCommand,
   type BrowserResult,
 } from "./protocol";
 import { dispatchToTab } from "./dispatch";
+import { approval } from "./approval";
 
 const WAIT_MS = 25_000; // < the server's 30s long-poll cap; empty batch = keep-alive
 const MAX_MESSAGES = 5;
@@ -24,6 +26,9 @@ export interface LoopHandle {
 export function startChannelLoop(
   client: LoomcycleClient,
   userId: string,
+  // Whether a mutating op (fill/click/navigate) needs the user's approval.
+  // Reads the current mode each call (so a mid-run toggle takes effect).
+  shouldConfirm: () => boolean,
 ): LoopHandle {
   const ac = new AbortController();
   // Ignore commands published before this session started (stale runs from a
@@ -58,6 +63,27 @@ export function startChannelLoop(
         if (seen.size > SEEN_CAP) seen.clear();
         seen.add(cmd.id);
 
+        // Gate mutating actions on the user's approval in confirm mode.
+        if (isMutating(cmd.op) && shouldConfirm()) {
+          const approved = await approval.request(cmd);
+          if (ac.signal.aborted) return;
+          if (!approved) {
+            await publishResult(
+              client,
+              userId,
+              {
+                id: cmd.id,
+                ok: false,
+                op: cmd.op,
+                status: "declined",
+                error: "declined by user",
+              },
+              ac.signal,
+            );
+            continue;
+          }
+        }
+
         const result = await dispatchToTab(cmd);
         await publishResult(client, userId, result, ac.signal);
       }
@@ -65,7 +91,12 @@ export function startChannelLoop(
   }
 
   void run();
-  return { stop: () => ac.abort() };
+  return {
+    stop: () => {
+      approval.cancelPending(); // unblock a waiting approval so run() exits
+      ac.abort();
+    },
+  };
 }
 
 async function publishResult(
