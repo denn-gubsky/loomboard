@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, AlertCircle, Square, LogOut } from "lucide-react";
+import {
+  Loader2,
+  AlertCircle,
+  Square,
+  LogOut,
+  MessageSquarePlus,
+} from "lucide-react";
 import {
   Chat,
   createLoomcycleClient,
@@ -8,7 +14,7 @@ import {
 } from "../chat";
 import type { ConnectionSettings } from "../state/settings";
 import { saveExtSettings, clearExtSettings } from "../state/extSettings";
-import { persistConversation } from "../state/extConversation";
+import { persistConversation, newConversation } from "../state/extConversation";
 import { saveMode, type ActionMode } from "../state/extMode";
 import { describeError } from "../chat/lib/errors";
 import { ASSISTANT_AGENT } from "../bridge/protocol";
@@ -160,6 +166,14 @@ export default function PanelApp({
     setStatus("idle");
   }, []);
 
+  // Start a fresh conversation (new loomcycle session) — clears the transcript,
+  // including stale error turns from a previous run.
+  const newChat = useCallback(() => {
+    const c = newConversation();
+    setConversation(c);
+    void persistConversation(c);
+  }, []);
+
   // Run the browser bridge while connected and the bridge channels exist.
   useEffect(() => {
     if (
@@ -197,6 +211,14 @@ export default function PanelApp({
       <div className="ext-toolbar">
         <ModeToggle mode={mode} onChange={onModeChange} />
         <div className="ext-toolbar-right">
+          <button
+            className="ext-icon-btn"
+            onClick={newChat}
+            title="New chat"
+            aria-label="New chat"
+          >
+            <MessageSquarePlus size={14} />
+          </button>
           <button className="ext-stop" onClick={stop} title="Stop browser actions">
             <Square size={12} /> Stop
           </button>
@@ -221,6 +243,9 @@ export default function PanelApp({
         </div>
       )}
       <Chat
+        // Remount cleanly on a new conversation so no stale session/transcript
+        // carries over.
+        key={conversation.id}
         connection={connection}
         conversation={conversation}
         onConversationChange={onConversationChange}
