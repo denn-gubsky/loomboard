@@ -176,17 +176,17 @@ export default function PanelApp({
 
   // Run the browser bridge while connected and the bridge channels exist.
   useEffect(() => {
-    if (
-      status !== "connected" ||
-      !loopClient ||
-      !userId ||
-      (missingChannels && missingChannels.length > 0)
-    ) {
+    if (status !== "connected" || !loopClient || !userId) return;
+    if (missingChannels && missingChannels.length > 0) {
+      console.warn(
+        "[loomboard] browser bridge disabled — channels not declared:",
+        missingChannels.join(", "),
+      );
       return;
     }
     const handle = startChannelLoop(loopClient, userId, shouldConfirm);
     return () => handle.stop();
-    // loopEpoch in deps so Stop restarts the loop with a fresh startedAt.
+    // loopEpoch in deps so Stop restarts the loop.
   }, [status, loopClient, userId, missingChannels, shouldConfirm, loopEpoch]);
 
   if (status === "connecting") {
