@@ -12,6 +12,43 @@
   min-height: 0;
 }
 
+/* Browser-bridge status line — shows whether the channel loop is live and the
+   userId it subscribes under (or why it's off). */
+.bridge-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.25em 0.6em;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.bridge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-dim);
+}
+.bridge-status.listening .bridge-dot {
+  background: var(--ok);
+}
+.bridge-status.error .bridge-dot {
+  background: var(--danger);
+}
+.bridge-status.error {
+  color: var(--danger);
+}
+.bridge-label {
+  flex-shrink: 0;
+}
+.bridge-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The panel is pinned to the browser-assistant agent; hide the in-chat agent
    picker so it can't be switched away (which would break actuation). */
 .ext-panel .agent-picker {
