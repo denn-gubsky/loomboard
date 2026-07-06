@@ -69,6 +69,24 @@
   color: var(--danger);
   border-color: var(--danger);
 }
+.ext-toolbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.ext-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35em;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ext-icon-btn:hover {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
 
 /* Operator-setup notice when the bridge channels aren't declared. */
 .ext-warning {

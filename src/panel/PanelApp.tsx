@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, AlertCircle, Square } from "lucide-react";
+import { Loader2, AlertCircle, Square, LogOut } from "lucide-react";
 import {
   Chat,
   createLoomcycleClient,
@@ -7,7 +7,7 @@ import {
   type Connection,
 } from "../chat";
 import type { ConnectionSettings } from "../state/settings";
-import { saveExtSettings } from "../state/extSettings";
+import { saveExtSettings, clearExtSettings } from "../state/extSettings";
 import { persistConversation } from "../state/extConversation";
 import { saveMode, type ActionMode } from "../state/extMode";
 import { describeError } from "../chat/lib/errors";
@@ -141,6 +141,15 @@ export default function PanelApp({
     setLoopEpoch((e) => e + 1);
   }, []);
 
+  const disconnect = useCallback(async () => {
+    await clearExtSettings();
+    setSettings(null);
+    setUserId(null);
+    setMissingChannels(null);
+    setError(null);
+    setStatus("idle");
+  }, []);
+
   // Run the browser bridge while connected and the bridge channels exist.
   useEffect(() => {
     if (
@@ -177,9 +186,19 @@ export default function PanelApp({
     <div className="ext-panel">
       <div className="ext-toolbar">
         <ModeToggle mode={mode} onChange={onModeChange} />
-        <button className="ext-stop" onClick={stop} title="Stop browser actions">
-          <Square size={12} /> Stop
-        </button>
+        <div className="ext-toolbar-right">
+          <button className="ext-stop" onClick={stop} title="Stop browser actions">
+            <Square size={12} /> Stop
+          </button>
+          <button
+            className="ext-icon-btn"
+            onClick={() => void disconnect()}
+            title="Disconnect"
+            aria-label="Disconnect"
+          >
+            <LogOut size={14} />
+          </button>
+        </div>
       </div>
       {missingChannels && missingChannels.length > 0 && (
         <div className="ext-warning" role="alert">
