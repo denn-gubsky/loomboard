@@ -42,7 +42,13 @@ export function startChannelLoop(
   async function run(): Promise<void> {
     console.info(`[loomboard] browser bridge started (user=${userId})`);
     bridgeStatus.set("listening", `user ${userId}`);
-    await drainBacklog();
+    // We process from the COMMITTED cursor (which persists server-side and
+    // auto-advances as we consume) — no backlog drain. An earlier drain that
+    // consumed-and-DISCARDED buffered messages was silently eating live commands
+    // (they were consumed, committed, and thrown away, so the agent never got a
+    // result). Any genuinely-stale prior-session command that was never consumed
+    // gets executed once here — harmless for read_page, and mutating ops are
+    // confirm-gated.
     while (!ac.signal.aborted) {
       let batch;
       try {
@@ -80,35 +86,6 @@ export function startChannelLoop(
         );
         await publishResult(client, userId, result, ac.signal);
       }
-    }
-  }
-
-  // Skip messages buffered before this session (stale prior-run commands) by
-  // draining them via the committed cursor. This replaces a client-clock filter
-  // (msg.published_at < Date.now()) that was UNSOUND across client/server clock
-  // skew — if the browser's clock ran ahead of loomcycle's, it silently dropped
-  // fresh commands as "stale", so the bridge never executed anything.
-  async function drainBacklog(): Promise<void> {
-    let dropped = 0;
-    try {
-      for (;;) {
-        const d = await client.subscribeChannel(CMD_CHANNEL, {
-          scope: "user",
-          userId,
-          waitMs: 0,
-          maxMessages: 100,
-          signal: ac.signal,
-        });
-        if (ac.signal.aborted || d.messages.length === 0) break;
-        dropped += d.messages.length;
-      }
-    } catch (e) {
-      if (!ac.signal.aborted) {
-        console.warn("[loomboard] browser.cmd drain failed:", e);
-      }
-    }
-    if (dropped > 0) {
-      console.info(`[loomboard] drained ${dropped} stale browser.cmd message(s)`);
     }
   }
 
