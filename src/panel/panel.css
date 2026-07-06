@@ -11,3 +11,25 @@
   flex: 1;
   min-height: 0;
 }
+
+/* The panel is pinned to the browser-assistant agent; hide the in-chat agent
+   picker so it can't be switched away (which would break actuation). */
+.ext-panel .agent-picker {
+  display: none;
+}
+
+/* Operator-setup notice when the bridge channels aren't declared. */
+.ext-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.5em 0.7em;
+  background: rgba(230, 184, 115, 0.12);
+  border-bottom: 1px solid var(--border);
+  color: var(--warn);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+.ext-warning svg {
+  flex-shrink: 0;
+}

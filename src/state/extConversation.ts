@@ -3,13 +3,10 @@
 // opens. baseAgent is pinned to the browser-assistant agent by the panel.
 
 import type { ChatConversation } from "../chat";
+import { ASSISTANT_AGENT } from "../bridge/protocol";
 import { storageGet, storageSet } from "./chromeStorage";
 
 const KEY = "loomboard.conversation";
-
-/** The agent the side-panel assistant runs against. Empty in M1 (the picker
- *  guides the user); pinned to "chrome-assistant" once ensureAgent lands. */
-export const ASSISTANT_AGENT = "";
 
 export function newConversation(): ChatConversation {
   return {
