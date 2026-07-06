@@ -79,6 +79,31 @@ function staleResult(cmd: BrowserCommand): BrowserResult {
   };
 }
 
+// True for password / payment fields (and clicks on a form containing them).
+// A sensitive target always requires the user's confirmation, even in autonomous
+// mode — the loop re-issues the command with `confirmed:true` after approval.
+function isSensitiveInput(el: Element | null): boolean {
+  if (!(el instanceof HTMLInputElement)) return false;
+  if (el.type === "password") return true;
+  const ac = (el.autocomplete || "").toLowerCase();
+  if (ac.startsWith("cc-") || ac === "current-password" || ac === "new-password") {
+    return true;
+  }
+  const hint = `${el.name} ${el.id}`.toLowerCase();
+  return /pass|card|cvv|cvc|ccnum|credit/.test(hint);
+}
+
+function isSensitiveTarget(el: Element): boolean {
+  if (isSensitiveInput(el)) return true;
+  const form = (el as HTMLElement).closest?.("form");
+  if (form) {
+    for (const inp of form.querySelectorAll("input")) {
+      if (isSensitiveInput(inp)) return true;
+    }
+  }
+  return false;
+}
+
 // Set an input/textarea value via the native setter so React-controlled inputs
 // observe the change (React overrides the value setter to track state).
 function setNativeValue(
@@ -94,9 +119,21 @@ function setNativeValue(
   else el.value = value;
 }
 
+// Sensitive targets need explicit confirmation even in autonomous mode.
+function needsConfirmResult(cmd: BrowserCommand): BrowserResult {
+  return {
+    id: cmd.id,
+    ok: false,
+    op: cmd.op,
+    status: "needs_confirm",
+    error: "sensitive field — confirmation required",
+  };
+}
+
 function fill(cmd: BrowserCommand): BrowserResult {
   const el = resolveRef(cmd.ref ?? "");
   if (!el) return staleResult(cmd);
+  if (!cmd.confirmed && isSensitiveTarget(el)) return needsConfirmResult(cmd);
   const value = cmd.value ?? "";
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
     el.focus();
@@ -119,6 +156,7 @@ function fill(cmd: BrowserCommand): BrowserResult {
 function click(cmd: BrowserCommand): BrowserResult {
   const el = resolveRef(cmd.ref ?? "");
   if (!el) return staleResult(cmd);
+  if (!cmd.confirmed && isSensitiveTarget(el)) return needsConfirmResult(cmd);
   if (el instanceof HTMLElement) el.click();
   else (el as HTMLElement).dispatchEvent(new MouseEvent("click", { bubbles: true }));
   // A click may navigate; the snapshot is best-effort (may be pre-navigation).

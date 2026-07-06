@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Square } from "lucide-react";
 import {
   Chat,
   createLoomcycleClient,
@@ -9,19 +9,23 @@ import {
 import type { ConnectionSettings } from "../state/settings";
 import { saveExtSettings } from "../state/extSettings";
 import { persistConversation } from "../state/extConversation";
+import { saveMode, type ActionMode } from "../state/extMode";
 import { describeError } from "../chat/lib/errors";
 import { ASSISTANT_AGENT } from "../bridge/protocol";
 import { ensureChromeAssistant } from "../bridge/ensureAgent";
 import { preflightChannels } from "../bridge/ensureChannels";
 import { startChannelLoop } from "../bridge/channelLoop";
+import { approval } from "../bridge/approval";
 import Connect from "./Connect";
 import ActionBar from "./ActionBar";
+import ModeToggle from "./ModeToggle";
 
 type Status = "idle" | "connecting" | "connected" | "error";
 
 interface Props {
   initialSettings: ConnectionSettings | null;
   initialConversation: ChatConversation;
+  initialMode: ActionMode;
 }
 
 // The side-panel root: a single chat against the browser-assistant agent. No
@@ -31,6 +35,7 @@ interface Props {
 export default function PanelApp({
   initialSettings,
   initialConversation,
+  initialMode,
 }: Props) {
   const [settings, setSettings] = useState<ConnectionSettings | null>(
     initialSettings,
@@ -114,10 +119,27 @@ export default function PanelApp({
     [connection],
   );
 
-  // Action mode. A ref (not state) so the loop reads the latest value without
-  // restarting; the toggle (M5) updates it. Default: confirm every mutation.
-  const modeRef = useRef<"confirm" | "autonomous">("confirm");
+  // Action mode. The loop reads it through a ref (updated by the toggle) so a
+  // mid-run switch takes effect without restarting the loop; `mode` state drives
+  // the toggle's display.
+  const [mode, setMode] = useState<ActionMode>(initialMode);
+  const modeRef = useRef<ActionMode>(initialMode);
   const shouldConfirm = useCallback(() => modeRef.current === "confirm", []);
+  const onModeChange = useCallback((m: ActionMode) => {
+    modeRef.current = m;
+    setMode(m);
+    void saveMode(m);
+  }, []);
+
+  // Stop: bump the epoch to tear down and restart the loop (aborts the in-flight
+  // poll + pending approval; a fresh startedAt makes queued commands stale, so
+  // the assistant stops acting on the current run). The chat run itself is
+  // cancelled by the composer's own stop button.
+  const [loopEpoch, setLoopEpoch] = useState(0);
+  const stop = useCallback(() => {
+    approval.cancelPending();
+    setLoopEpoch((e) => e + 1);
+  }, []);
 
   // Run the browser bridge while connected and the bridge channels exist.
   useEffect(() => {
@@ -131,7 +153,8 @@ export default function PanelApp({
     }
     const handle = startChannelLoop(loopClient, userId, shouldConfirm);
     return () => handle.stop();
-  }, [status, loopClient, userId, missingChannels, shouldConfirm]);
+    // loopEpoch in deps so Stop restarts the loop with a fresh startedAt.
+  }, [status, loopClient, userId, missingChannels, shouldConfirm, loopEpoch]);
 
   if (status === "connecting") {
     return (
@@ -152,6 +175,12 @@ export default function PanelApp({
   }
   return (
     <div className="ext-panel">
+      <div className="ext-toolbar">
+        <ModeToggle mode={mode} onChange={onModeChange} />
+        <button className="ext-stop" onClick={stop} title="Stop browser actions">
+          <Square size={12} /> Stop
+        </button>
+      </div>
       {missingChannels && missingChannels.length > 0 && (
         <div className="ext-warning" role="alert">
           <AlertCircle size={14} />

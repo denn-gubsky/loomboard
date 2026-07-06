@@ -41,6 +41,9 @@ export interface BrowserCommand {
   url?: string;
   /** One-line rationale shown to the user in the confirm bar. */
   reason?: string;
+  /** Set by the loop after the user approved this action — lets the executor
+   *  proceed past the sensitive-field guard (password / payment fields). */
+  confirmed?: boolean;
 }
 
 export interface SnapshotRef {
@@ -70,5 +73,5 @@ export interface BrowserResult {
   url?: string;
   title?: string;
   error?: string;
-  status?: "declined" | "timeout" | "pending" | "done";
+  status?: "declined" | "timeout" | "pending" | "done" | "needs_confirm";
 }

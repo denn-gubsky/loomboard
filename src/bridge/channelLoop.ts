@@ -63,28 +63,8 @@ export function startChannelLoop(
         if (seen.size > SEEN_CAP) seen.clear();
         seen.add(cmd.id);
 
-        // Gate mutating actions on the user's approval in confirm mode.
-        if (isMutating(cmd.op) && shouldConfirm()) {
-          const approved = await approval.request(cmd);
-          if (ac.signal.aborted) return;
-          if (!approved) {
-            await publishResult(
-              client,
-              userId,
-              {
-                id: cmd.id,
-                ok: false,
-                op: cmd.op,
-                status: "declined",
-                error: "declined by user",
-              },
-              ac.signal,
-            );
-            continue;
-          }
-        }
-
-        const result = await dispatchToTab(cmd);
+        const result = await processCommand(cmd, shouldConfirm, ac.signal);
+        if (ac.signal.aborted) return;
         await publishResult(client, userId, result, ac.signal);
       }
     }
@@ -96,6 +76,38 @@ export function startChannelLoop(
       approval.cancelPending(); // unblock a waiting approval so run() exits
       ac.abort();
     },
+  };
+}
+
+// Execute one command, applying the confirm gate. Confirm mode: approve up
+// front, then dispatch as confirmed. Autonomous (and read-only): dispatch
+// directly — but if the executor flags a sensitive target (needs_confirm), fall
+// back to an approval round and re-dispatch as confirmed. Never executes a
+// mutating action the user hasn't approved when a gate applies.
+async function processCommand(
+  cmd: BrowserCommand,
+  shouldConfirm: () => boolean,
+  signal: AbortSignal,
+): Promise<BrowserResult> {
+  if (isMutating(cmd.op) && shouldConfirm()) {
+    const ok = await approval.request(cmd);
+    if (signal.aborted || !ok) return declinedResult(cmd, signal.aborted);
+    return dispatchToTab({ ...cmd, confirmed: true });
+  }
+  const res = await dispatchToTab(cmd);
+  if (res.status !== "needs_confirm") return res;
+  const ok = await approval.request(cmd);
+  if (signal.aborted || !ok) return declinedResult(cmd, signal.aborted);
+  return dispatchToTab({ ...cmd, confirmed: true });
+}
+
+function declinedResult(cmd: BrowserCommand, aborted: boolean): BrowserResult {
+  return {
+    id: cmd.id,
+    ok: false,
+    op: cmd.op,
+    status: "declined",
+    error: aborted ? "stopped by user" : "declined by user",
   };
 }
 
