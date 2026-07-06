@@ -44,6 +44,8 @@
     "build:lib": "vite build --config vite.config.lib.ts && tsc -p tsconfig.lib.json && cp src/chat/styles.css dist/styles.css",
     "build:standalone": "tsc --noEmit && vite build --mode standalone --outDir cli/public --emptyOutDir",
     "build:tauri": "tsc --noEmit && vite build --mode tauri",
+    "dev:extension": "vite --config vite.config.extension.ts --mode extension",
+    "build:extension": "tsc --noEmit && vite build --config vite.config.extension.ts --mode extension",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
@@ -72,11 +74,13 @@
     "remark-math": "^6.0.0"
   },
   "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.33",
     "@loomcycle/client": "^1.13.0",
     "@loomcycle/library": "0.1.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/cli": "^2.11.4",
     "@tauri-apps/plugin-http": "^2.5.9",
+    "@types/chrome": "^0.2.2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

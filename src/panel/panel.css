@@ -1,0 +1,13 @@
+/* Side-panel layout. The panel is a narrow, full-height column: the chat surface
+   (or the connect/splash screens) fills it. Palette + component styles come from
+   index.css and the chat's own styles.css. */
+.ext-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ext-panel > .loomchat {
+  flex: 1;
+  min-height: 0;
+}
