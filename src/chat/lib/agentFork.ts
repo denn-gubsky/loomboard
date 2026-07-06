@@ -40,6 +40,11 @@ export async function resolveConversationAgent(
   // `tools` (was `allowed_tools`, renamed in @loomcycle/client 1.13.0).
   if (baseDef?.tools) overlay.tools = baseDef.tools;
   if (baseDef?.skills) overlay.skills = baseDef.skills;
+  // NOTE: the Library agent report (LibraryAgentDefinition) exposes only
+  // prompt/tools/skills — NOT the channel ACL or sql_scopes — so a fork cannot
+  // inherit those. An agent whose capability depends on a channel ACL (e.g.
+  // chrome-assistant's browser bridge) must be run un-forked (default config);
+  // a custom-model fork loses the ACL.
   if (convo.config.provider) overlay.provider = convo.config.provider;
   if (convo.config.model) overlay.model = convo.config.model;
   if (convo.config.tier) overlay.tier = convo.config.tier;

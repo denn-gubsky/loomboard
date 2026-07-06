@@ -70,7 +70,12 @@ export default function Chat({
       <header className="chat-header">
         <AgentPicker
           value={conversation.baseAgent}
-          onChange={(name) => onConversationChange({ baseAgent: name })}
+          // Switching the base agent must drop any existing per-conversation
+          // fork, or resolveConversationAgent keeps running the stale fork (of
+          // the OLD agent) whenever the config is custom.
+          onChange={(name) =>
+            onConversationChange({ baseAgent: name, forkDefName: undefined })
+          }
           agents={agents}
           loading={loading}
           error={error}
