@@ -31,12 +31,11 @@ export function startChannelLoop(
   shouldConfirm: () => boolean,
 ): LoopHandle {
   const ac = new AbortController();
-  // Ignore commands published before this session started (stale runs from a
-  // prior panel); the auto-committing cursor advances as we consume.
-  const startedAt = Date.now();
   const seen = new Set<string>();
 
   async function run(): Promise<void> {
+    console.info(`[loomboard] browser bridge started (user=${userId})`);
+    await drainBacklog();
     while (!ac.signal.aborted) {
       let batch;
       try {
@@ -47,8 +46,9 @@ export function startChannelLoop(
           maxMessages: MAX_MESSAGES,
           signal: ac.signal,
         });
-      } catch {
+      } catch (e) {
         if (ac.signal.aborted) return;
+        console.warn("[loomboard] browser.cmd subscribe failed (retrying):", e);
         await sleep(RETRY_MS, ac.signal); // transient — back off, retry
         continue;
       }
@@ -58,15 +58,48 @@ export function startChannelLoop(
         if (!cmd || typeof cmd.id !== "string" || typeof cmd.op !== "string") {
           continue;
         }
-        if (new Date(msg.published_at).getTime() < startedAt) continue; // stale
         if (seen.has(cmd.id)) continue; // idempotent (belt-and-suspenders)
         if (seen.size > SEEN_CAP) seen.clear();
         seen.add(cmd.id);
 
+        console.info(`[loomboard] browser cmd: ${cmd.op} (${cmd.id})`);
         const result = await processCommand(cmd, shouldConfirm, ac.signal);
         if (ac.signal.aborted) return;
+        console.info(
+          `[loomboard] browser result: ${cmd.op} ok=${result.ok}` +
+            (result.error ? ` (${result.error})` : ""),
+        );
         await publishResult(client, userId, result, ac.signal);
       }
+    }
+  }
+
+  // Skip messages buffered before this session (stale prior-run commands) by
+  // draining them via the committed cursor. This replaces a client-clock filter
+  // (msg.published_at < Date.now()) that was UNSOUND across client/server clock
+  // skew — if the browser's clock ran ahead of loomcycle's, it silently dropped
+  // fresh commands as "stale", so the bridge never executed anything.
+  async function drainBacklog(): Promise<void> {
+    let dropped = 0;
+    try {
+      for (;;) {
+        const d = await client.subscribeChannel(CMD_CHANNEL, {
+          scope: "user",
+          userId,
+          waitMs: 0,
+          maxMessages: 100,
+          signal: ac.signal,
+        });
+        if (ac.signal.aborted || d.messages.length === 0) break;
+        dropped += d.messages.length;
+      }
+    } catch (e) {
+      if (!ac.signal.aborted) {
+        console.warn("[loomboard] browser.cmd drain failed:", e);
+      }
+    }
+    if (dropped > 0) {
+      console.info(`[loomboard] drained ${dropped} stale browser.cmd message(s)`);
     }
   }
 
@@ -124,8 +157,11 @@ async function publishResult(
       payload,
       signal,
     });
-  } catch {
+  } catch (e) {
     // Aborted or transient; the agent's await times out and it can retry.
+    if (!signal.aborted) {
+      console.warn("[loomboard] browser.result publish failed:", e);
+    }
   }
 }
 
