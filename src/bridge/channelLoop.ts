@@ -42,19 +42,19 @@ export function startChannelLoop(
   async function run(): Promise<void> {
     console.info(`[loomboard] browser bridge started (user=${userId})`);
     bridgeStatus.set("listening", `user ${userId}`);
-    // We process from the COMMITTED cursor (which persists server-side and
-    // auto-advances as we consume) — no backlog drain. An earlier drain that
-    // consumed-and-DISCARDED buffered messages was silently eating live commands
-    // (they were consumed, committed, and thrown away, so the agent never got a
-    // result). Any genuinely-stale prior-session command that was never consumed
-    // gets executed once here — harmless for read_page, and mutating ops are
-    // confirm-gated.
+    // Thread OUR OWN cursor rather than relying on the shared committed cursor.
+    // browser.cmd is a queue with a single committed cursor per (channel, user);
+    // any other subscriber (e.g. a diagnostic tool) advancing it would otherwise
+    // steal messages from this loop. We seed from the committed cursor on the
+    // first read, then follow next_cursor — immune to external cursor moves.
+    let cursor: string | undefined = undefined;
     while (!ac.signal.aborted) {
       let batch;
       try {
         batch = await client.subscribeChannel(CMD_CHANNEL, {
           scope: "user",
           userId,
+          fromCursor: cursor,
           waitMs: WAIT_MS,
           maxMessages: MAX_MESSAGES,
           signal: ac.signal,
@@ -67,6 +67,8 @@ export function startChannelLoop(
         await sleep(RETRY_MS, ac.signal); // transient — back off, retry
         continue;
       }
+      // Advance our cursor (empty next_cursor on an empty batch keeps it put).
+      cursor = batch.next_cursor || cursor;
       for (const msg of batch.messages) {
         if (ac.signal.aborted) return;
         const cmd = msg.value as BrowserCommand | null;
