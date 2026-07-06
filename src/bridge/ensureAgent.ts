@@ -1,5 +1,5 @@
 import type { AgentDefOverlay, LoomcycleClient } from "@loomcycle/client";
-import { ASSISTANT_AGENT, CMD_CHANNEL, RESULT_CHANNEL } from "./protocol";
+import { ASSISTANT_AGENT } from "./protocol";
 import { CHROME_ASSISTANT_PROMPT } from "./systemPrompt";
 
 // Ensure the browser-assistant AgentDef exists — CREATE-IF-ABSENT, never modify.
@@ -7,9 +7,12 @@ import { CHROME_ASSISTANT_PROMPT } from "./systemPrompt";
 // ambiguously), we leave it untouched, so a user/operator who configured
 // chrome-assistant's model (or forked it) doesn't get clobbered back to a
 // model-less default on every connect. We only create when the def is
-// definitively absent (404). The default def grants the browser-bridge tools —
-// Channel + WebFetch + WebSearch + Memory + Skill — the channel ACL, and
-// sql_scopes (rides the [extra] tail; needs LOOMCYCLE_SQLMEM_ENABLED=1).
+// definitively absent (404). The default def grants the browser client-tools
+// (`client:browser.*`, served by this extension's client-tool host) plus
+// WebFetch + WebSearch + Memory + Skill, and sql_scopes (rides the [extra] tail;
+// needs LOOMCYCLE_SQLMEM_ENABLED=1). NOTE: a chrome-assistant created by an
+// older (channel-bridge) extension grants `Channel` instead — an operator must
+// re-grant it `client:browser.*` (and may drop `Channel`) for actuation to work.
 export async function ensureChromeAssistant(
   client: LoomcycleClient,
 ): Promise<void> {
@@ -32,8 +35,7 @@ export async function ensureChromeAssistant(
   // Definitively absent → create the default def.
   const overlay: AgentDefOverlay = {
     system_prompt: CHROME_ASSISTANT_PROMPT,
-    tools: ["Channel", "WebFetch", "WebSearch", "Memory", "Skill"],
-    channels: { publish: [CMD_CHANNEL], subscribe: [RESULT_CHANNEL] },
+    tools: ["client:browser.*", "WebFetch", "WebSearch", "Memory", "Skill"],
     sql_scopes: ["user"],
     interruption: { enabled: true },
   };

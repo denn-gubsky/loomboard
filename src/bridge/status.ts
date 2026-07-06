@@ -1,9 +1,9 @@
 // Tiny observable for the browser-bridge state, so the panel can show whether
-// the channel loop is actually running (and which userId it subscribes under)
-// without opening devtools. The non-React channel loop + PanelApp write to it;
+// the client-tool WebSocket is connected (and what it last ran) without opening
+// devtools. The non-React client-tool host + PanelApp write to it;
 // BridgeStatusBar subscribes.
 
-export type BridgeState = "off" | "listening" | "error";
+export type BridgeState = "off" | "connecting" | "connected" | "error";
 
 export interface BridgeStatus {
   state: BridgeState;

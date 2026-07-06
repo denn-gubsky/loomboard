@@ -1,16 +1,16 @@
-// Shared protocol for the browser bridge. The agent publishes a COMMAND to
-// CMD_CHANNEL and awaits the matching RESULT on RESULT_CHANNEL (both declared
-// scope:user on loomcycle). The extension's channel loop is the mirror image.
-// Keep these shapes in sync with the system prompt (systemPrompt.ts), which
-// describes the same protocol to the agent in prose.
+// Internal command/result shapes for the browser bridge. The agent invokes a
+// client-tool (`client:browser.<op>`); loomcycle routes it to this extension's
+// client-tool host (clientToolHost.ts), which maps the invocation to one of
+// these commands, runs it in the active tab, and returns the result as the
+// tool's JSON output. These shapes are internal (panel ↔ content script) — the
+// agent-facing tool names + input schemas live in clientToolHost.ts.
 
 /** The browser-assistant agent (pinned; the panel hides the agent picker). */
 export const ASSISTANT_AGENT = "chrome-assistant";
 
-/** Agent → extension: actuation commands. */
-export const CMD_CHANNEL = "browser.cmd";
-/** Extension → agent: command results (incl. post-action page snapshot). */
-export const RESULT_CHANNEL = "browser.result";
+/** Prefix on the client-tool names this extension registers: `browser.<op>`.
+ *  Agents call them as `client:browser.<op>` (the runtime adds `client:`). */
+export const BROWSER_TOOL_PREFIX = "browser.";
 
 /** Tag on chrome.runtime messages between the panel and the content script, so
  *  the executor ignores unrelated extension messages. */
@@ -73,5 +73,5 @@ export interface BrowserResult {
   url?: string;
   title?: string;
   error?: string;
-  status?: "declined" | "timeout" | "pending" | "done" | "needs_confirm";
+  status?: "declined" | "done" | "needs_confirm";
 }

@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Loader2,
-  AlertCircle,
-  Square,
-  LogOut,
-  MessageSquarePlus,
-} from "lucide-react";
+import { Loader2, Square, LogOut, MessageSquarePlus } from "lucide-react";
 import {
   Chat,
   createLoomcycleClient,
@@ -19,8 +13,7 @@ import { saveMode, type ActionMode } from "../state/extMode";
 import { describeError } from "../chat/lib/errors";
 import { ASSISTANT_AGENT } from "../bridge/protocol";
 import { ensureChromeAssistant } from "../bridge/ensureAgent";
-import { preflightChannels } from "../bridge/ensureChannels";
-import { startChannelLoop } from "../bridge/channelLoop";
+import { startClientToolHost } from "../bridge/clientToolHost";
 import { approval } from "../bridge/approval";
 import { bridgeStatus } from "../bridge/status";
 import Connect from "./Connect";
@@ -52,10 +45,8 @@ export default function PanelApp({
     initialSettings ? "connecting" : "idle",
   );
   const [error, setError] = useState<string | null>(null);
-  // Non-null when the browser-bridge channels aren't declared on loomcycle:
-  // chat still works, but actuation is disabled until an operator adds them.
-  const [missingChannels, setMissingChannels] = useState<string[] | null>(null);
-  // The channel scope id (whoami.subject) the browser bridge routes on.
+  // The principal (whoami.subject) the client-tool host runs under — display
+  // only; the WebSocket derives the routing key from the bearer, not this value.
   const [userId, setUserId] = useState<string | null>(null);
   const [conversation, setConversation] =
     useState<ChatConversation>(initialConversation);
@@ -72,16 +63,14 @@ export default function PanelApp({
   const connect = useCallback(async (s: ConnectionSettings) => {
     setStatus("connecting");
     setError(null);
-    setMissingChannels(null);
     try {
       const client = createLoomcycleClient({
         baseUrl: s.baseUrl,
         token: s.token,
       });
-      // whoami is the only hard gate. Registering the agent and listing channels
-      // use surfaces a plain user token may lack scope for (agent def creation;
-      // the operator-only GET /v1/_channels) — those must NOT block connect. The
-      // bridge itself uses user-scoped channel ops the token CAN perform.
+      // whoami is the only hard gate. Registering the agent uses a surface a
+      // plain user token may lack scope for (agent def creation) — it must NOT
+      // block connect. The client-tool host itself only needs the bearer.
       const me = await client.whoami();
       try {
         await ensureChromeAssistant(client);
@@ -92,11 +81,6 @@ export default function PanelApp({
       setSettings(s);
       setUserId(me.subject);
       setStatus("connected");
-      // Best-effort channel preflight; a user token usually can't list operator
-      // channels, so a failure here is expected and silently ignored.
-      void preflightChannels(client)
-        .then((pf) => setMissingChannels(pf.ok ? null : pf.missing))
-        .catch(() => undefined);
     } catch (e) {
       setError(describeError(e));
       setStatus("error");
@@ -130,15 +114,15 @@ export default function PanelApp({
     }
   }, [status, conversation.baseAgent, onConversationChange]);
 
-  // The browser-bridge client — a separate long-poll context from <Chat>'s own
-  // streaming client, sharing the same connection.
+  // The client-tool host's client — a separate WebSocket context from <Chat>'s
+  // own streaming client, sharing the same connection.
   const loopClient = useMemo(
     () => (connection ? createLoomcycleClient(connection) : null),
     [connection],
   );
 
-  // Action mode. The loop reads it through a ref (updated by the toggle) so a
-  // mid-run switch takes effect without restarting the loop; `mode` state drives
+  // Action mode. The host reads it through a ref (updated by the toggle) so a
+  // mid-run switch takes effect without restarting the host; `mode` state drives
   // the toggle's display.
   const [mode, setMode] = useState<ActionMode>(initialMode);
   const modeRef = useRef<ActionMode>(initialMode);
@@ -149,21 +133,18 @@ export default function PanelApp({
     void saveMode(m);
   }, []);
 
-  // Stop: bump the epoch to tear down and restart the loop (aborts the in-flight
-  // poll + pending approval; a fresh startedAt makes queued commands stale, so
-  // the assistant stops acting on the current run). The chat run itself is
-  // cancelled by the composer's own stop button.
-  const [loopEpoch, setLoopEpoch] = useState(0);
+  // Stop browser actions: reject any pending approval so a waiting mutating call
+  // returns "declined" (which unblocks the agent's tool call). The chat run
+  // itself is cancelled by the composer's own stop button; cancelling the run
+  // also unblocks any client-tool call still executing, server-side.
   const stop = useCallback(() => {
     approval.cancelPending();
-    setLoopEpoch((e) => e + 1);
   }, []);
 
   const disconnect = useCallback(async () => {
     await clearExtSettings();
     setSettings(null);
     setUserId(null);
-    setMissingChannels(null);
     setError(null);
     setStatus("idle");
   }, []);
@@ -176,29 +157,17 @@ export default function PanelApp({
     void persistConversation(c);
   }, []);
 
-  // Run the browser bridge while connected and the bridge channels exist. The
-  // early returns set a visible bridge status so a gated loop is diagnosable
-  // without devtools (esp. an empty whoami subject → no channel user id).
+  // Run the client-tool host while connected. The WebSocket derives its routing
+  // key from the bearer, so no channel/userId gating is needed — loomcycle
+  // offers the browser tools to this user's agents only while this host is live.
   useEffect(() => {
-    if (status !== "connected" || !loopClient || userId === null) return;
-    if (userId === "") {
-      bridgeStatus.set(
-        "off",
-        "whoami returned an empty subject — the channel scope has no user id",
-      );
-      return;
-    }
-    if (missingChannels && missingChannels.length > 0) {
-      bridgeStatus.set("off", `channels not declared: ${missingChannels.join(", ")}`);
-      return;
-    }
-    const handle = startChannelLoop(loopClient, userId, shouldConfirm);
+    if (status !== "connected" || !loopClient) return;
+    const handle = startClientToolHost(loopClient, shouldConfirm, userId ?? undefined);
     return () => {
       handle.stop();
       bridgeStatus.set("off", "");
     };
-    // loopEpoch in deps so Stop restarts the loop.
-  }, [status, loopClient, userId, missingChannels, shouldConfirm, loopEpoch]);
+  }, [status, loopClient, userId, shouldConfirm]);
 
   if (status === "connecting") {
     return (
@@ -244,16 +213,6 @@ export default function PanelApp({
           </button>
         </div>
       </div>
-      {missingChannels && missingChannels.length > 0 && (
-        <div className="ext-warning" role="alert">
-          <AlertCircle size={14} />
-          <span>
-            Browser actions are disabled: loomcycle is missing{" "}
-            {missingChannels.join(" and ")}. Ask an operator to declare them
-            (scope: user). Chat still works.
-          </span>
-        </div>
-      )}
       <Chat
         // Remount cleanly on a new conversation so no stale session/transcript
         // carries over.

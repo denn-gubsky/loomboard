@@ -56,7 +56,7 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "@loomcycle/client": "^1.13.0",
+    "@loomcycle/client": "^1.16.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
@@ -75,7 +75,7 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.33",
-    "@loomcycle/client": "^1.13.0",
+    "@loomcycle/client": "^1.16.0",
     "@loomcycle/library": "0.1.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/cli": "^2.11.4",
