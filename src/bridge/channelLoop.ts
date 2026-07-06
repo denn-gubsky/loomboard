@@ -78,13 +78,22 @@ export function startChannelLoop(
         seen.add(cmd.id);
 
         console.info(`[loomboard] browser cmd: ${cmd.op} (${cmd.id})`);
+        bridgeStatus.set("listening", `running ${cmd.op}…`);
         const result = await processCommand(cmd, shouldConfirm, ac.signal);
         if (ac.signal.aborted) return;
         console.info(
           `[loomboard] browser result: ${cmd.op} ok=${result.ok}` +
             (result.error ? ` (${result.error})` : ""),
         );
-        await publishResult(client, userId, result, ac.signal);
+        const published = await publishResult(client, userId, result, ac.signal);
+        if (ac.signal.aborted) return;
+        // Surface the round-trip outcome on-screen (no devtools needed).
+        bridgeStatus.set(
+          published ? "listening" : "error",
+          published
+            ? `last: ${cmd.op} → ${result.ok ? "ok" : result.error ?? "error"}`
+            : `publish browser.result failed for ${cmd.op}`,
+        );
       }
     }
   }
@@ -135,7 +144,7 @@ async function publishResult(
   userId: string,
   payload: BrowserResult,
   signal: AbortSignal,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await client.publishChannel(RESULT_CHANNEL, {
       scope: "user",
@@ -143,11 +152,13 @@ async function publishResult(
       payload,
       signal,
     });
+    return true;
   } catch (e) {
     // Aborted or transient; the agent's await times out and it can retry.
     if (!signal.aborted) {
       console.warn("[loomboard] browser.result publish failed:", e);
     }
+    return false;
   }
 }
 
