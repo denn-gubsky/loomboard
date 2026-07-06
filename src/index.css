@@ -407,6 +407,24 @@ button {
   color: var(--danger);
 }
 
+/* Two-step delete confirm: once armed, the confirm/cancel buttons stay visible
+   regardless of hover so the choice is clear (replaces window.confirm, which is
+   a no-op in Tauri webviews). */
+.convo-confirm {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.convo-confirm .convo-del {
+  display: inline-flex;
+}
+.convo-del.confirm {
+  color: var(--danger);
+}
+.convo-del.cancel:hover {
+  color: var(--text);
+}
+
 .sidebar-foot {
   display: flex;
   align-items: center;
