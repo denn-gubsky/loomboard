@@ -8,6 +8,12 @@ import {
 } from "./protocol";
 import { dispatchToTab } from "./dispatch";
 import { approval } from "./approval";
+import { bridgeStatus } from "./status";
+
+function errText(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e);
+  return m.length > 120 ? m.slice(0, 120) + "…" : m;
+}
 
 const WAIT_MS = 25_000; // < the server's 30s long-poll cap; empty batch = keep-alive
 const MAX_MESSAGES = 5;
@@ -35,6 +41,7 @@ export function startChannelLoop(
 
   async function run(): Promise<void> {
     console.info(`[loomboard] browser bridge started (user=${userId})`);
+    bridgeStatus.set("listening", `user ${userId}`);
     await drainBacklog();
     while (!ac.signal.aborted) {
       let batch;
@@ -46,9 +53,11 @@ export function startChannelLoop(
           maxMessages: MAX_MESSAGES,
           signal: ac.signal,
         });
+        bridgeStatus.set("listening", `user ${userId}`); // recover from any prior error
       } catch (e) {
         if (ac.signal.aborted) return;
         console.warn("[loomboard] browser.cmd subscribe failed (retrying):", e);
+        bridgeStatus.set("error", errText(e));
         await sleep(RETRY_MS, ac.signal); // transient — back off, retry
         continue;
       }

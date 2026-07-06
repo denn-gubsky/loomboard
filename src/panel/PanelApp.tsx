@@ -22,9 +22,11 @@ import { ensureChromeAssistant } from "../bridge/ensureAgent";
 import { preflightChannels } from "../bridge/ensureChannels";
 import { startChannelLoop } from "../bridge/channelLoop";
 import { approval } from "../bridge/approval";
+import { bridgeStatus } from "../bridge/status";
 import Connect from "./Connect";
 import ActionBar from "./ActionBar";
 import ModeToggle from "./ModeToggle";
+import BridgeStatusBar from "./BridgeStatusBar";
 
 type Status = "idle" | "connecting" | "connected" | "error";
 
@@ -174,18 +176,27 @@ export default function PanelApp({
     void persistConversation(c);
   }, []);
 
-  // Run the browser bridge while connected and the bridge channels exist.
+  // Run the browser bridge while connected and the bridge channels exist. The
+  // early returns set a visible bridge status so a gated loop is diagnosable
+  // without devtools (esp. an empty whoami subject → no channel user id).
   useEffect(() => {
-    if (status !== "connected" || !loopClient || !userId) return;
-    if (missingChannels && missingChannels.length > 0) {
-      console.warn(
-        "[loomboard] browser bridge disabled — channels not declared:",
-        missingChannels.join(", "),
+    if (status !== "connected" || !loopClient || userId === null) return;
+    if (userId === "") {
+      bridgeStatus.set(
+        "off",
+        "whoami returned an empty subject — the channel scope has no user id",
       );
       return;
     }
+    if (missingChannels && missingChannels.length > 0) {
+      bridgeStatus.set("off", `channels not declared: ${missingChannels.join(", ")}`);
+      return;
+    }
     const handle = startChannelLoop(loopClient, userId, shouldConfirm);
-    return () => handle.stop();
+    return () => {
+      handle.stop();
+      bridgeStatus.set("off", "");
+    };
     // loopEpoch in deps so Stop restarts the loop.
   }, [status, loopClient, userId, missingChannels, shouldConfirm, loopEpoch]);
 
@@ -208,6 +219,7 @@ export default function PanelApp({
   }
   return (
     <div className="ext-panel">
+      <BridgeStatusBar />
       <div className="ext-toolbar">
         <ModeToggle mode={mode} onChange={onModeChange} />
         <div className="ext-toolbar-right">
