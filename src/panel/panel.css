@@ -1,0 +1,171 @@
+/* Side-panel layout. The panel is a narrow, full-height column: the chat surface
+   (or the connect/splash screens) fills it. Palette + component styles come from
+   index.css and the chat's own styles.css. */
+.ext-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ext-panel > .loomchat {
+  flex: 1;
+  min-height: 0;
+}
+
+/* The panel is pinned to the browser-assistant agent; hide the in-chat agent
+   picker so it can't be switched away (which would break actuation). */
+.ext-panel .agent-picker {
+  display: none;
+}
+
+/* Panel toolbar: action-mode toggle + Stop, above the chat. */
+.ext-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+  padding: 0.4em 0.6em;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.mode-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.3em 0.6em;
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  font: inherit;
+  font-size: 0.78rem;
+}
+.mode-opt.active {
+  background: var(--bg-input);
+  color: var(--text);
+}
+.mode-opt + .mode-opt {
+  border-left: 1px solid var(--border);
+}
+.ext-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.3em 0.7em;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.ext-stop:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.ext-toolbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.ext-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35em;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ext-icon-btn:hover {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+/* Operator-setup notice when the bridge channels aren't declared. */
+.ext-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.5em 0.7em;
+  background: rgba(230, 184, 115, 0.12);
+  border-bottom: 1px solid var(--border);
+  color: var(--warn);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+.ext-warning svg {
+  flex-shrink: 0;
+}
+
+/* Approval bar — a proposed browser action awaiting the user's confirm. Sits at
+   the bottom of the panel, below the chat. */
+.action-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  padding: 0.6em 0.7em;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--accent-dim);
+}
+.action-desc {
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+  color: var(--text);
+}
+.action-desc > svg {
+  color: var(--warn);
+  flex-shrink: 0;
+  margin-top: 0.15em;
+}
+.action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  min-width: 0;
+}
+.action-text strong {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.action-reason {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+.action-btns {
+  display: flex;
+  gap: 0.5em;
+}
+.action-approve,
+.action-reject {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  border-radius: 8px;
+  padding: 0.4em 0.8em;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+}
+.action-approve {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+.action-reject {
+  background: transparent;
+  color: var(--text-dim);
+}
+.action-reject:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
