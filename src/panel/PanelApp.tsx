@@ -13,6 +13,7 @@ import { describeError } from "../chat/lib/errors";
 import { ASSISTANT_AGENT } from "../bridge/protocol";
 import { ensureChromeAssistant } from "../bridge/ensureAgent";
 import { preflightChannels } from "../bridge/ensureChannels";
+import { startChannelLoop } from "../bridge/channelLoop";
 import Connect from "./Connect";
 
 type Status = "idle" | "connecting" | "connected" | "error";
@@ -40,6 +41,8 @@ export default function PanelApp({
   // Non-null when the browser-bridge channels aren't declared on loomcycle:
   // chat still works, but actuation is disabled until an operator adds them.
   const [missingChannels, setMissingChannels] = useState<string[] | null>(null);
+  // The channel scope id (whoami.subject) the browser bridge routes on.
+  const [userId, setUserId] = useState<string | null>(null);
   const [conversation, setConversation] =
     useState<ChatConversation>(initialConversation);
 
@@ -61,12 +64,13 @@ export default function PanelApp({
         baseUrl: s.baseUrl,
         token: s.token,
       });
-      await client.whoami();
+      const me = await client.whoami();
       // Ensure the assistant agent exists, then check the bridge channels.
       await ensureChromeAssistant(client);
       const pf = await preflightChannels(client);
       await saveExtSettings(s);
       setSettings(s);
+      setUserId(me.subject);
       setMissingChannels(pf.ok ? null : pf.missing);
       setStatus("connected");
     } catch (e) {
@@ -101,6 +105,27 @@ export default function PanelApp({
       onConversationChange({ baseAgent: ASSISTANT_AGENT });
     }
   }, [status, conversation.baseAgent, onConversationChange]);
+
+  // The browser-bridge client — a separate long-poll context from <Chat>'s own
+  // streaming client, sharing the same connection.
+  const loopClient = useMemo(
+    () => (connection ? createLoomcycleClient(connection) : null),
+    [connection],
+  );
+
+  // Run the browser bridge while connected and the bridge channels exist.
+  useEffect(() => {
+    if (
+      status !== "connected" ||
+      !loopClient ||
+      !userId ||
+      (missingChannels && missingChannels.length > 0)
+    ) {
+      return;
+    }
+    const handle = startChannelLoop(loopClient, userId);
+    return () => handle.stop();
+  }, [status, loopClient, userId, missingChannels]);
 
   if (status === "connecting") {
     return (

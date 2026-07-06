@@ -12,6 +12,10 @@ export const CMD_CHANNEL = "browser.cmd";
 /** Extension → agent: command results (incl. post-action page snapshot). */
 export const RESULT_CHANNEL = "browser.result";
 
+/** Tag on chrome.runtime messages between the panel and the content script, so
+ *  the executor ignores unrelated extension messages. */
+export const MSG_TAG = "loomboard/browser-cmd";
+
 export type BrowserOp =
   | "read_page"
   | "get_selection"
