@@ -3,10 +3,13 @@ import { defineManifest } from "@crxjs/vite-plugin";
 // MV3 manifest for the loomboard side-panel assistant. Kept minimal: the toolbar
 // action opens the side panel; the panel document holds the chat + channel loop.
 //
-// host_permissions is EMPTY at install time — we request the user-entered
-// loomcycle origin (and page origins for actuation) at runtime via
-// chrome.permissions.request against optional_host_permissions. That keeps the
-// install prompt narrow and makes the broad-access tradeoff explicit to the user.
+// host_permissions is EMPTY at install time: cross-origin fetch access to the
+// user-entered loomcycle origin (and page origins for actuation) is granted at
+// runtime via chrome.permissions.request against optional_host_permissions.
+// This does NOT narrow the install prompt, though — the content_scripts entry
+// below is statically declared on <all_urls>, so Chrome still shows the broad
+// "read and change all your data on all websites" prompt at install time (see
+// the content_scripts note and README "Security & trust model").
 export default defineManifest({
   manifest_version: 3,
   name: "loomboard",
