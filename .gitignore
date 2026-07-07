@@ -30,6 +30,13 @@ pnpm-debug.log*
 # local env files (secrets live here — never commit, never read .env*.local)
 .env
 .env*.local
+# Ignore every other .env.<mode> file by default so a stray secret can't slip
+# in through a filename the two patterns above miss. The three non-secret
+# build-flag files (VITE_LOOMBOARD_*=true) are the deliberate tracked exceptions.
+.env.*
+!.env.extension
+!.env.standalone
+!.env.tauri
 
 # browser test artifacts (playwright MCP)
 .playwright-mcp/
