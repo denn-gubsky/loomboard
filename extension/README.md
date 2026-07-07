@@ -8,8 +8,8 @@ SQL save-data tool, and the Skill tool (e.g. `marketing/*`).
 The agent runs server-side in loomcycle; the extension is its eyes and hands. Actuation
 uses loomcycle's **client-executed tools** (RFC BC, v1.16.0): the side panel opens a
 persistent WebSocket to loomcycle and registers the browser tools it can run
-(`browser.read_page`, `fill`, `click`, `navigate`, …). When the agent calls one — e.g.
-`client:browser.read_page` — loomcycle routes the call to this connection, the panel
+(`browser_read_page`, `fill`, `click`, `navigate`, …). When the agent calls one — e.g.
+`client__browser_read_page` — loomcycle routes the call to this connection, the panel
 runs it in the active tab, and returns the result as the tool's output. The connection
 is keyed by your bearer's principal, so routing to *your* browser is automatic, and the
 agent sees ordinary tool calls (no channel protocol).
@@ -33,14 +33,14 @@ Dev with HMR: `npm run dev:extension` (load the generated `extension/dist`).
 2. **`LOOMCYCLE_SQLMEM_ENABLED=1`** — for the assistant's SQL save-data (`sql_scopes`).
 3. **WebSearch Brave backend** configured — for the WebSearch tool.
 4. Your **bearer token** must be allowed to create AgentDefs and to use the granted
-   tools (`client:browser.*` / WebFetch / WebSearch / Memory / Skill).
+   tools (`client__browser_*` / WebFetch / WebSearch / Memory / Skill).
 5. To use skills (e.g. `marketing/*`), **register them in the loomcycle Library**
    (SkillDef); they're granted via the agent's `skills` allowlist.
 
 On first connect the extension idempotently registers the `chrome-assistant` AgentDef
-with `tools: [client:browser.*, WebFetch, WebSearch, Memory, Skill]` + the system prompt.
+with `tools: [client__browser_*, WebFetch, WebSearch, Memory, Skill]` + the system prompt.
 It is **create-if-absent** — if you already have a `chrome-assistant` from an older
-(channel-bridge) build, grant it `client:browser.*` (you may drop `Channel`) so the
+(channel-bridge) build, grant it `client__browser_*` (you may drop `Channel`) so the
 browser tools are offered; the extension won't rewrite an existing def.
 
 ## Usage

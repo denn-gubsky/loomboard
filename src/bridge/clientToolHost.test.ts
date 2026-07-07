@@ -8,8 +8,8 @@ function inv(tool: string, input: unknown): ClientToolInvocation {
 }
 
 describe("toCommand", () => {
-  it("maps a client:browser tool to its op and carries the call id as the internal id", () => {
-    const cmd = toCommand(inv("browser.read_page", {}));
+  it("maps a client__browser tool to its op and carries the call id as the internal id", () => {
+    const cmd = toCommand(inv("browser_read_page", {}));
     expect(cmd).toEqual({
       id: "call-1",
       op: "read_page",
@@ -21,22 +21,22 @@ describe("toCommand", () => {
   });
 
   it("threads string inputs (ref/value/reason) onto the command", () => {
-    const cmd = toCommand(inv("browser.fill", { ref: "e3", value: "hi", reason: "why" }));
+    const cmd = toCommand(inv("browser_fill", { ref: "e3", value: "hi", reason: "why" }));
     expect(cmd).toMatchObject({ op: "fill", ref: "e3", value: "hi", reason: "why" });
   });
 
   it("returns null for a tool we never registered", () => {
-    expect(toCommand(inv("browser.eval", { code: "x" }))).toBeNull();
-    expect(toCommand(inv("fs.read", {}))).toBeNull();
+    expect(toCommand(inv("browser_eval", { code: "x" }))).toBeNull();
+    expect(toCommand(inv("fs_read", {}))).toBeNull();
   });
 
   it("coerces non-string input fields to undefined (never trusts the shape)", () => {
-    const cmd = toCommand(inv("browser.fill", { ref: 42, value: null, reason: {} }));
+    const cmd = toCommand(inv("browser_fill", { ref: 42, value: null, reason: {} }));
     expect(cmd).toMatchObject({ op: "fill", ref: undefined, value: undefined, reason: undefined });
   });
 
   it("tolerates a missing/non-object input", () => {
-    expect(toCommand(inv("browser.get_selection", undefined))).toMatchObject({
+    expect(toCommand(inv("browser_get_selection", undefined))).toMatchObject({
       op: "get_selection",
     });
   });

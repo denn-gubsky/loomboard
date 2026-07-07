@@ -1,5 +1,5 @@
 // Internal command/result shapes for the browser bridge. The agent invokes a
-// client-tool (`client:browser.<op>`); loomcycle routes it to this extension's
+// client-tool (`client__browser_<op>`); loomcycle routes it to this extension's
 // client-tool host (clientToolHost.ts), which maps the invocation to one of
 // these commands, runs it in the active tab, and returns the result as the
 // tool's JSON output. These shapes are internal (panel ↔ content script) — the
@@ -8,9 +8,11 @@
 /** The browser-assistant agent (pinned; the panel hides the agent picker). */
 export const ASSISTANT_AGENT = "chrome-assistant";
 
-/** Prefix on the client-tool names this extension registers: `browser.<op>`.
- *  Agents call them as `client:browser.<op>` (the runtime adds `client:`). */
-export const BROWSER_TOOL_PREFIX = "browser.";
+/** Prefix on the client-tool names this extension registers: `browser_<op>`.
+ *  Agents call them as `client__browser_<op>` (the runtime adds `client__`).
+ *  Underscores only — loomcycle requires wire-safe (`[a-zA-Z0-9_-]`) bare names
+ *  so `client__` + name stays a valid LLM function-name identifier. */
+export const BROWSER_TOOL_PREFIX = "browser_";
 
 /** Tag on chrome.runtime messages between the panel and the content script, so
  *  the executor ignores unrelated extension messages. */

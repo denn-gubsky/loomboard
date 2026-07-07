@@ -20,24 +20,26 @@ function errText(e: unknown): string {
 }
 
 // The browser tools this extension registers with loomcycle. loomcycle offers
-// them to any agent of this user whose `tools:` allowlist grants `client:browser.*`
-// (see ensureAgent.ts) — the agent calls e.g. `client:browser.read_page` and the
-// invoke is routed here. Descriptions carry the ref discipline the agent needs;
-// the system prompt (systemPrompt.ts) covers the read→act loop + safety rules.
+// them to any agent of this user whose `tools:` allowlist grants `client__browser_*`
+// (see ensureAgent.ts) — the agent calls e.g. `client__browser_read_page` and the
+// invoke is routed here. Bare names are underscore-only: loomcycle prepends the
+// `client__` prefix and requires the full name to be a wire-safe LLM function-name
+// identifier (`[a-zA-Z0-9_-]`), so a dot would break the call. Descriptions carry
+// the ref discipline; the system prompt (systemPrompt.ts) covers the loop + safety.
 const BROWSER_TOOLS: ClientToolSchema[] = [
   {
-    name: "browser.read_page",
+    name: "browser_read_page",
     description:
       "Read the user's currently open web page. Returns a snapshot {url, title, refs:[{ref, role, name, tag, value, placeholder}], text}. Call this FIRST for any page task; only target refs from the LATEST snapshot.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
-    name: "browser.get_selection",
+    name: "browser_get_selection",
     description: "Return the text the user has currently selected on the page. Returns {text}.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
-    name: "browser.fill",
+    name: "browser_fill",
     description:
       "Type text into a form field addressed by its ref from the latest snapshot. Returns a fresh snapshot on success, or {ok:false,error:'stale_ref',snapshot} if the ref no longer resolves. May require the user's confirmation.",
     input_schema: {
@@ -52,7 +54,7 @@ const BROWSER_TOOLS: ClientToolSchema[] = [
     },
   },
   {
-    name: "browser.click",
+    name: "browser_click",
     description:
       "Click an element addressed by its ref from the latest snapshot. Returns a fresh snapshot, or {ok:false,error:'stale_ref',snapshot}. May require the user's confirmation.",
     input_schema: {
@@ -66,7 +68,7 @@ const BROWSER_TOOLS: ClientToolSchema[] = [
     },
   },
   {
-    name: "browser.navigate",
+    name: "browser_navigate",
     description:
       "Navigate the active tab to a URL. Returns {ok, url}. Follow with read_page to snapshot the loaded page. May require the user's confirmation.",
     input_schema: {
@@ -94,7 +96,7 @@ export interface HostHandle {
 }
 
 // Start the browser bridge: open a persistent WebSocket to loomcycle, register
-// the browser tools, and answer each `client:browser.*` invoke by running it in
+// the browser tools, and answer each `client__browser_*` invoke by running it in
 // the active tab. Runs in the side-panel document (persistent while open). The
 // bearer rides inside the client (createLoomcycleClient's authToken); the server
 // derives the (tenant, subject) routing key from it, so no userId is threaded —

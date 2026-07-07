@@ -10,7 +10,7 @@ import { defineManifest } from "@crxjs/vite-plugin";
 export default defineManifest({
   manifest_version: 3,
   name: "loomboard",
-  version: "0.1.8",
+  version: "0.1.9",
   description:
     "loomboard — agentic browser assistant: a loomcycle chat in the Chrome side panel.",
   action: { default_title: "loomboard" },
