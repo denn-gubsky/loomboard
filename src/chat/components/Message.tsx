@@ -42,7 +42,11 @@ export default function Message({ message }: { message: ChatMessage }) {
       <div className="bubble">
         {message.parts.map((part, i) => {
           if (part.type === "text") {
-            return <Markdown key={i}>{part.text}</Markdown>;
+            return (
+              <Markdown key={i} streaming={streaming}>
+                {part.text}
+              </Markdown>
+            );
           }
           if (part.type === "thinking") {
             return (
