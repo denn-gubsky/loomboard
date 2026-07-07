@@ -3,6 +3,7 @@ import type {
   ClientToolSchema,
   LoomcycleClient,
 } from "@loomcycle/client";
+import { clientToolsURL } from "@loomcycle/client";
 import {
   BROWSER_TOOL_PREFIX,
   isMutating,
@@ -13,11 +14,6 @@ import {
 import { dispatchToTab } from "./dispatch";
 import { approval } from "./approval";
 import { bridgeStatus } from "./status";
-
-function errText(e: unknown): string {
-  const m = e instanceof Error ? e.message : String(e);
-  return m.length > 120 ? m.slice(0, 120) + "…" : m;
-}
 
 // The browser tools this extension registers with loomcycle. loomcycle offers
 // them to any agent of this user whose `tools:` allowlist grants `client__browser_*`
@@ -107,32 +103,54 @@ export function startClientToolHost(
   // Whether a mutating op (fill/click/navigate) needs the user's approval.
   // Read per-call so a mid-run mode toggle takes effect.
   shouldConfirm: () => boolean,
+  // Display-only: the whoami subject (shown when connected) and the loomcycle
+  // base URL (used to show the exact WebSocket target when it can't connect).
   userLabel?: string,
+  baseUrl?: string,
 ): HostHandle {
   let stopped = false;
-  let lastError = "";
-  console.info(`[loomboard] client-tool host starting (user=${userLabel ?? "?"})`);
-  bridgeStatus.set("connecting", "connecting to loomcycle…");
+  // Distinguish "never opened" (handshake failing — the socket never reached the
+  // server) from "dropped after being open" (transient), so the status bar can
+  // name the likely cause without devtools. everOpened flips true on the first
+  // successful open; failedAttempts counts closes that never reached open.
+  let everOpened = false;
+  let failedAttempts = 0;
+  const wsTarget = baseUrl ? clientToolsURL(baseUrl) : "the client-tool WebSocket";
+  console.info(`[loomboard] client-tool host starting (user=${userLabel ?? "?"}, ws=${wsTarget})`);
+  bridgeStatus.set("connecting", `connecting to ${wsTarget}…`);
 
   const host = client.connectClientTools({
     tools: BROWSER_TOOLS,
     onStatus: (s) => {
       if (stopped) return;
       if (s === "connecting") {
-        bridgeStatus.set("connecting", "connecting to loomcycle…");
+        bridgeStatus.set(
+          "connecting",
+          everOpened ? "reconnecting…" : `connecting to ${wsTarget}…`,
+        );
       } else if (s === "open") {
-        lastError = "";
+        everOpened = true;
+        failedAttempts = 0;
         bridgeStatus.set("connected", userLabel ? `user ${userLabel}` : "ready");
+      } else if (everOpened) {
+        // Was connected, then dropped — the host auto-reconnects.
+        bridgeStatus.set("error", "connection dropped — reconnecting…");
       } else {
-        // "closed" — the host auto-reconnects; show why it dropped so a broken
-        // connection is diagnosable without devtools.
-        bridgeStatus.set("error", lastError || "disconnected — reconnecting…");
+        // Never opened: the WebSocket handshake is failing. After a couple of
+        // tries, name the usual cause — a runtime/proxy that doesn't allow the
+        // WebSocket upgrade on /v1/client-tools (chat over https can succeed while
+        // this fails). Panel devtools → Network → WS shows the exact status code.
+        failedAttempts++;
+        bridgeStatus.set(
+          "error",
+          failedAttempts >= 2
+            ? `can't open ${wsTarget} — the runtime, or a proxy in front of it, may be blocking the WebSocket upgrade`
+            : `can't reach ${wsTarget} — retrying…`,
+        );
       }
     },
     onError: (e) => {
-      if (stopped) return;
-      lastError = errText(e);
-      console.warn("[loomboard] client-tool host error:", e);
+      if (!stopped) console.warn("[loomboard] client-tool host error:", e);
     },
     onInvoke: async (inv) => {
       const cmd = toCommand(inv);

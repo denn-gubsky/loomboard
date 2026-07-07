@@ -162,12 +162,17 @@ export default function PanelApp({
   // offers the browser tools to this user's agents only while this host is live.
   useEffect(() => {
     if (status !== "connected" || !loopClient) return;
-    const handle = startClientToolHost(loopClient, shouldConfirm, userId ?? undefined);
+    const handle = startClientToolHost(
+      loopClient,
+      shouldConfirm,
+      userId ?? undefined,
+      connection?.baseUrl,
+    );
     return () => {
       handle.stop();
       bridgeStatus.set("off", "");
     };
-  }, [status, loopClient, userId, shouldConfirm]);
+  }, [status, loopClient, userId, shouldConfirm, connection]);
 
   if (status === "connecting") {
     return (
