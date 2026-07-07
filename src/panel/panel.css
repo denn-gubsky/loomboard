@@ -12,8 +12,8 @@
   min-height: 0;
 }
 
-/* Browser-bridge status line — shows whether the channel loop is live and the
-   userId it subscribes under (or why it's off). */
+/* Browser-bridge status line — shows whether the client-tool WebSocket is
+   connected (and what it last ran, or why it's off). */
 .bridge-status {
   display: flex;
   align-items: center;
@@ -32,8 +32,11 @@
   flex-shrink: 0;
   background: var(--text-dim);
 }
-.bridge-status.listening .bridge-dot {
+.bridge-status.connected .bridge-dot {
   background: var(--ok);
+}
+.bridge-status.connecting .bridge-dot {
+  background: var(--warn);
 }
 .bridge-status.error .bridge-dot {
   background: var(--danger);
@@ -131,22 +134,6 @@
 .ext-icon-btn:hover {
   color: var(--text);
   border-color: var(--accent-dim);
-}
-
-/* Operator-setup notice when the bridge channels aren't declared. */
-.ext-warning {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  padding: 0.5em 0.7em;
-  background: rgba(230, 184, 115, 0.12);
-  border-bottom: 1px solid var(--border);
-  color: var(--warn);
-  font-size: 0.8rem;
-  line-height: 1.35;
-}
-.ext-warning svg {
-  flex-shrink: 0;
 }
 
 /* Approval bar — a proposed browser action awaiting the user's confirm. Sits at
