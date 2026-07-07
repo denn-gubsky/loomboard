@@ -535,6 +535,32 @@
   border: none;
   padding: 0;
 }
+/* Rendered ```mermaid diagrams (see components/DiagramBlock.tsx). */
+.loomchat .markdown .diagram-wrap {
+  margin: 0.6em 0;
+}
+.loomchat .markdown .diagram {
+  max-width: 100%;
+  overflow-x: auto; /* wide diagrams scroll in their box, not the page */
+}
+/* securityLevel:"sandbox" renders the diagram inside a data: <iframe> that
+   Mermaid self-sizes (explicit inline width/height). */
+.loomchat .markdown .diagram iframe {
+  max-width: 100%;
+  border: 0;
+}
+.loomchat .markdown .diagram-loading {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 0.7em 0.85em;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+.loomchat .markdown .diagram-error-note {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin-bottom: 0.3em;
+}
 .loomchat .markdown table {
   border-collapse: collapse;
   margin: 0.6em 0;
