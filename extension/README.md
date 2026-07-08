@@ -29,7 +29,8 @@ Dev with HMR: `npm run dev:extension` (load the generated `extension/dist`).
 
 1. **loomcycle ≥ v1.16.0** — the release that ships client-executed tools
    (`GET /v1/client-tools`). No channels to declare; actuation is automatic once a
-   connection is live.
+   connection is live. Browser clients additionally need the client-tool **Origin fix**
+   (recent 1.16.x) — see [Networking](#networking-behind-a-reverse-proxy--tailscale-serve).
 2. **`LOOMCYCLE_SQLMEM_ENABLED=1`** — for the assistant's SQL save-data (`sql_scopes`).
 3. **WebSearch Brave backend** configured — for the WebSearch tool.
 4. Your **bearer token** must be allowed to create AgentDefs and to use the granted
@@ -42,6 +43,46 @@ with `tools: [client__browser_*, WebFetch, WebSearch, Memory, Skill]` + the syst
 It is **create-if-absent** — if you already have a `chrome-assistant` from an older
 (channel-bridge) build, grant it `client__browser_*` (you may drop `Channel`) so the
 browser tools are offered; the extension won't rewrite an existing def.
+
+## Networking: behind a reverse proxy / tailscale serve
+
+The client-tool connection is a **WebSocket** (`wss://<your-loomcycle>/v1/client-tools`),
+separate from the chat's HTTP/SSE — so **chat working does not mean the socket works**.
+Confirmed working behind both **`tailscale serve`** and a reverse proxy (**Nginx Proxy
+Manager**) — any WS-capable TLS front should do. Three things must hold:
+
+1. **loomcycle accepts the browser's `Origin`.** Browsers send `Origin: chrome-extension://<id>`;
+   the client-tool endpoint must not reject cross-origin (auth is the bearer in the subprotocol,
+   not cookies, so the same-origin check guards nothing here). **This is the one that bites** —
+   `curl` connects without it because it sends no `Origin`, but every browser is 403'd until it's
+   in place. Needs a loomcycle build with the client-tool Origin fix (1.16.x+).
+2. **The front forwards the WebSocket upgrade.** Nginx Proxy Manager: enable **"Websockets
+   Support"** on the proxy host. Raw nginx: `proxy_http_version 1.1;` +
+   `proxy_set_header Upgrade $http_upgrade;` + `proxy_set_header Connection "upgrade";`.
+   `tailscale serve`, Caddy, and Traefik do this automatically.
+3. **`wss://`, not `ws://`.** The side panel is a secure context, so Chrome blocks insecure
+   `ws://`. Point the extension **Base URL** at the front's **HTTPS** endpoint (the socket then
+   becomes `wss://…`) with a **browser-trusted** cert (public CA / Let's Encrypt / the
+   `tailscale cert` output) — a self-signed cert for a local name is rejected.
+
+> If a socket still won't open after those three, it's worth checking HTTP/1.1 vs HTTP/2 on the
+> front — browsers handshake WebSockets over HTTP/1.1, and a front that mis-advertises
+> WebSocket-over-HTTP/2 can break the handshake (Nginx Proxy Manager exposes an "HTTP/2 Support"
+> toggle). In practice both `tailscale serve` and NPM carried it fine once #1 was in place, so
+> start with the `Origin` fix before chasing transport.
+
+**Quick check** (run where it can reach the front; expect `HTTP/1.1 101 Switching Protocols`):
+```bash
+curl -i --http1.1 \
+  -H "Connection: Upgrade" -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  -H "Sec-WebSocket-Protocol: loomcycle.client-tools.v1, bearer.$LOOMCYCLE_AUTH_TOKEN" \
+  https://<your-loomcycle>/v1/client-tools
+```
+`curl` sends no `Origin`, so a `101` here still doesn't prove a browser will connect (see #1) —
+test the extension too. **Diagnose from the panel:** right-click the side panel → **Inspect** →
+**Network → WS → `client-tools`** (its status + `Protocol` column), or read the bridge status
+line under the toolbar.
 
 ## Usage
 
