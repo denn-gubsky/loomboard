@@ -1,0 +1,199 @@
+name: Release
+
+# Builds loomboard's downloadable artifacts and attaches them to the GitHub
+# release for the pushed tag:
+#   · Tauri v2 desktop bundles for macOS (universal DMG), Windows (NSIS + MSI),
+#     Linux (AppImage + .deb).
+#   · The Chrome extension packaged as a `loomboard-extension-<ver>.zip` under
+#     the extension's OWN version (from extension/manifest.config.ts), so the
+#     desktop bundle and the extension release cadences don't have to line up.
+#
+# Runs alongside publish.yml on the same `v*` tag push: publish.yml pushes the
+# two npm packages, this workflow cuts the GitHub release and uploads binaries.
+# The two jobs don't collide (different artifact sinks); either can be run
+# independently via workflow_dispatch.
+#
+# Signing posture for v0.1.x: artifacts are UNSIGNED. macOS Gatekeeper shows
+# "cannot be opened because the developer cannot be verified" — right-click →
+# Open works. Windows SmartScreen shows "Windows protected your PC" — click
+# "More info" → "Run anyway". Documented on the download page. Signed builds
+# arrive with v0.2 (Apple Developer ID + Windows code-signing cert).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (used only for workflow_dispatch; must match ^v[0-9]+\\.[0-9]+\\.[0-9]+.*$)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write # create + upload to the GitHub release
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Desktop bundles — build in parallel on native runners so each toolchain
+  # produces its own native installer without cross-compilation.
+  # ---------------------------------------------------------------------------
+  desktop:
+    name: desktop (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            runner: macos-latest
+            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+            tauri_args: "--target universal-apple-darwin"
+          - os: windows
+            runner: windows-latest
+            rust_targets: ""
+            tauri_args: ""
+          - os: linux
+            runner: ubuntu-22.04
+            rust_targets: ""
+            tauri_args: ""
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install Linux Tauri v2 build deps
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libgtk-3-dev \
+            patchelf \
+            build-essential \
+            curl \
+            wget \
+            file
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run tauri -- build ${{ matrix.tauri_args }}
+
+      - name: Collect built artifacts (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          mkdir -p artifacts
+          # Universal target lands here; fall back to the plain bundle dir just in case.
+          find src-tauri/target/universal-apple-darwin/release/bundle \
+               src-tauri/target/release/bundle \
+            -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \) \
+            -exec cp -v {} artifacts/ \; 2>/dev/null || true
+          ls -la artifacts/
+
+      - name: Collect built artifacts (Windows)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          find src-tauri/target/release/bundle \
+            -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.msi.zip" -o -name "*.nsis.zip" -o -name "*.sig" \) \
+            -exec cp -v {} artifacts/ \; 2>/dev/null || true
+          ls -la artifacts/
+
+      - name: Collect built artifacts (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          mkdir -p artifacts
+          find src-tauri/target/release/bundle \
+            -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage.tar.gz" -o -name "*.sig" \) \
+            -exec cp -v {} artifacts/ \; 2>/dev/null || true
+          ls -la artifacts/
+
+      - name: Upload artifacts to release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != ''
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.tag || github.ref_name }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+          files: artifacts/*
+
+  # ---------------------------------------------------------------------------
+  # Chrome extension — packaged as a plain zip for "Load unpacked" and for the
+  # eventual Chrome Web Store submission. Versioned INDEPENDENTLY of the
+  # desktop bundle (extension/manifest.config.ts owns its own version).
+  # ---------------------------------------------------------------------------
+  extension:
+    name: chrome extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build extension
+        run: npm run build:extension
+
+      - name: Read extension version
+        id: ext_ver
+        run: |
+          ver=$(node -p "require('./extension/dist/manifest.json').version")
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "· extension manifest version: $ver"
+
+      - name: Zip extension
+        # The version flows through env so the release name (which comes from a
+        # file in the repo) can't inject into the run: shell — even though the
+        # workflow only fires on tag pushes and dispatch (both write-access
+        # gated). Belt + suspenders per GitHub Actions injection guidance.
+        env:
+          EXT_VERSION: ${{ steps.ext_ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Refuse anything that isn't a plausible semver-shaped token.
+          case "$EXT_VERSION" in
+            [0-9]*.[0-9]*.[0-9]*) : ;;
+            *) echo "::error::Extension version does not match X.Y.Z form: $EXT_VERSION"; exit 1 ;;
+          esac
+          out="loomboard-extension-${EXT_VERSION}.zip"
+          cd extension/dist
+          zip -r "../../${out}" .
+          cd ../..
+          ls -la loomboard-extension-*.zip
+
+      - name: Upload extension zip to release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != ''
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.tag || github.ref_name }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+          files: loomboard-extension-*.zip
