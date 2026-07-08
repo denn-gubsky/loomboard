@@ -40,3 +40,6 @@ pnpm-debug.log*
 
 # browser test artifacts (playwright MCP)
 .playwright-mcp/
+
+# Chrome Web Store upload package (built artifact)
+/loomboard-extension-*.zip

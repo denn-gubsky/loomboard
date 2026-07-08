@@ -13,10 +13,27 @@ import { defineManifest } from "@crxjs/vite-plugin";
 export default defineManifest({
   manifest_version: 3,
   name: "loomboard",
-  version: "0.1.11",
+  version: "0.1.12",
   description:
     "loomboard — agentic browser assistant: a loomcycle chat in the Chrome side panel.",
-  action: { default_title: "loomboard" },
+  // Icons live in extension/icons/ (derived from the loomboard logo); crxjs
+  // bundles the manifest-referenced files into dist. 128 is the Web Store /
+  // install icon; 16/32/48 are the toolbar + extensions-page sizes.
+  icons: {
+    16: "extension/icons/icon-16.png",
+    32: "extension/icons/icon-32.png",
+    48: "extension/icons/icon-48.png",
+    128: "extension/icons/icon-128.png",
+  },
+  action: {
+    default_title: "loomboard",
+    default_icon: {
+      16: "extension/icons/icon-16.png",
+      32: "extension/icons/icon-32.png",
+      48: "extension/icons/icon-48.png",
+      128: "extension/icons/icon-128.png",
+    },
+  },
   side_panel: { default_path: "src/panel/index.html" },
   background: { service_worker: "extension/sw.ts", type: "module" },
   // The executor content script reads/actuates the active page. Declared on
