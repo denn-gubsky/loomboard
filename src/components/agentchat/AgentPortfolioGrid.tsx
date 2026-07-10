@@ -57,6 +57,7 @@ export default function AgentPortfolioGrid({
 
       {openTile && (
         <AgentChatOverlay
+          key={openTile.runId}
           connection={connection}
           client={client}
           tile={openTile}
