@@ -525,3 +525,270 @@ button {
   color: var(--text);
   font-weight: 600;
 }
+
+/* ── Agent-chat tiles: compact live-run board + enlarge overlay ──────────────
+   Fed by one aggregate run-state stream; each tile is a tiny read-only preview
+   that enlarges into a full <Chat>. Colors ride the app tokens; per-agent accent
+   comes in as --tile-accent (tile) / --accent (overlay). */
+.agentboard {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.agentboard-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.6em 1em;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.agentboard-conn {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+.agentboard-conn.on { background: var(--ok); }
+.agentboard-conn.off { background: var(--warn); }
+.agentboard-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1em;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75em;
+  align-content: start;
+}
+.agentboard-empty {
+  grid-column: 1 / -1;
+  color: var(--text-dim);
+  padding: 2em;
+  text-align: center;
+}
+
+.agentchat-tile-wrap { min-width: 0; }
+.agentchat-tile {
+  --tile-accent: var(--accent);
+  width: 100%;
+  height: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  padding: 0.6em;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--tile-accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tile-accent) 7%, var(--bg-elevated));
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  font: inherit;
+  transition: border-color 0.12s, transform 0.06s;
+}
+.agentchat-tile:hover {
+  border-color: var(--tile-accent);
+}
+.agentchat-tile:active { transform: translateY(1px); }
+.act-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  min-width: 0;
+}
+.act-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  color: #fff;
+  background: var(--tile-accent);
+}
+.act-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.act-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-dim);
+}
+.act-dot.dot-running {
+  background: var(--ok);
+  animation: acPulse 1.4s ease-in-out infinite;
+}
+.act-dot.dot-needs_input { background: var(--warn); }
+.act-dot.dot-done { background: var(--text-dim); }
+.act-dot.dot-failed { background: var(--danger); }
+.act-dot.dot-cancelled { background: var(--text-dim); }
+@keyframes acPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Tiny transcript preview */
+.acp {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+.acp-empty { font-style: italic; opacity: 0.7; }
+.acp-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.acp-line .acp-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.acp-user .acp-text { color: var(--text); opacity: 0.85; }
+.acp-tool, .acp-thinking { font-style: italic; opacity: 0.8; }
+.acp-notice { color: var(--warn); }
+.acp-glyph { flex-shrink: 0; opacity: 0.7; }
+
+/* Alert / question badges */
+.act-badges {
+  display: flex;
+  gap: 0.35em;
+  flex-wrap: wrap;
+}
+.act-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  padding: 0.12em 0.45em;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+.badge-alert {
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+  color: var(--danger);
+}
+.badge-question {
+  background: color-mix(in srgb, var(--warn) 22%, transparent);
+  color: var(--warn);
+}
+.badge-question.prio-high,
+.badge-question.prio-critical {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  color: var(--danger);
+}
+
+/* Enlarge overlay */
+.aco-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3vh 3vw;
+}
+.aco-panel {
+  width: min(900px, 96vw);
+  height: min(80vh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.aco-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.6em 0.8em;
+  border-bottom: 1px solid var(--border);
+}
+.aco-avatar { display: inline-flex; }
+.aco-title { font-weight: 600; }
+.aco-status {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}
+.aco-close {
+  margin-left: auto;
+  display: inline-flex;
+  padding: 0.3em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.aco-close:hover { color: var(--text); border-color: var(--accent-dim); }
+.aco-question {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  padding: 0.7em 0.9em;
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg-elevated));
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.aco-question.resolved { color: var(--text-dim); font-style: italic; }
+.aco-question-text {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  color: var(--text);
+}
+.aco-question-opts { display: flex; gap: 0.5em; flex-wrap: wrap; }
+.aco-question-opts button,
+.aco-question-form button {
+  padding: 0.35em 0.8em;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.aco-question-opts button:disabled,
+.aco-question-form button:disabled { opacity: 0.5; cursor: default; }
+.aco-question-form { display: flex; gap: 0.5em; }
+.aco-question-form input {
+  flex: 1;
+  padding: 0.35em 0.6em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+.aco-chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.aco-chat > .loomchat { flex: 1; min-height: 0; }
