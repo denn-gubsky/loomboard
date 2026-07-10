@@ -80,7 +80,10 @@ export type TileDisplayState =
   | "needs_input"
   | "done"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  // No live run yet / unknown — e.g. a conversation that hasn't sent a turn.
+  // tileDisplayState never returns this (it always has a run); callers supply it.
+  | "idle";
 
 // The aggregate stream can't distinguish "actively generating" from "parked
 // awaiting input" — both read as `running`. A pending question (from the

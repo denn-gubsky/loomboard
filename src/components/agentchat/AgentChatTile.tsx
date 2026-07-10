@@ -30,6 +30,7 @@ const STATE_LABEL: Record<TileDisplayState, string> = {
   done: "done",
   failed: "failed",
   cancelled: "cancelled",
+  idle: "idle",
 };
 
 export default function AgentChatTile({

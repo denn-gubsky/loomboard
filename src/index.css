@@ -792,3 +792,97 @@ button {
   display: flex;
 }
 .aco-chat > .loomchat { flex: 1; min-height: 0; }
+
+/* ── Sidebar: chats as minimized live tiles ─────────────────────────────────
+   Reuses the agent-chat tile; the left panel becomes a stack of minimized
+   views, one per started chat. Click selects (main pane expands). */
+.conv-tiles {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-right: 2px;
+}
+/* Tighter than the board tile: auto height for the 2-line sidebar preview. */
+.conv-tiles .agentchat-tile {
+  height: auto;
+  min-height: 88px;
+}
+.dot-idle { background: var(--text-dim); }
+
+.convtile {
+  position: relative;
+  min-width: 0;
+}
+.convtile.active .agentchat-tile {
+  border-color: var(--tile-accent);
+  box-shadow: inset 0 0 0 2px var(--tile-accent);
+}
+/* Delete: hover-revealed, top-right, above the card. */
+.convtile-del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.convtile:hover .convtile-del { opacity: 1; }
+.convtile-del:hover { color: var(--danger); border-color: var(--danger); }
+.convtile-confirm {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  gap: 0.25em;
+}
+.convtile-confirm .convtile-del { position: static; opacity: 1; }
+.convtile-del.confirm:hover { color: var(--ok); border-color: var(--ok); }
+
+/* Collapsed sidebar: avatar-only mini tiles. */
+.conv-tiles.collapsed {
+  align-items: center;
+  gap: 0.4rem;
+}
+.convtile-mini {
+  --tile-accent: var(--accent);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3em;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  cursor: pointer;
+}
+.convtile-mini.active {
+  border-color: var(--tile-accent);
+  box-shadow: inset 0 0 0 2px var(--tile-accent);
+}
+.convtile-mini .act-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  border: 2px solid var(--bg-elevated);
+}
+.convtile-mini-flag {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  border: 2px solid var(--bg-elevated);
+}
