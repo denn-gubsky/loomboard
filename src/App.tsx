@@ -77,6 +77,12 @@ function ChatArea() {
   }
   return (
     <Chat
+      // Remount per conversation: a fresh useChat per chat tears the previous
+      // run down cleanly. Without this the one reused instance leaks the prior
+      // chat's session/run onto the newly-selected conversation (the persist
+      // effect fires with the old state but the new conversation). Mirrors the
+      // extension's PanelApp, which keys <Chat> for the same reason.
+      key={active.id}
       connection={connection}
       conversation={active}
       onConversationChange={onConversationChange}
