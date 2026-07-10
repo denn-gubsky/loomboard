@@ -1,20 +1,34 @@
-import { useState } from "react";
-import { Check, MessageSquare, Trash2, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useConversations, type Conversation } from "../state/conversations";
-import { useLoomcycle } from "../state/connection";
+import { useConnection, useLoomcycle } from "../state/connection";
 import { deleteConversationAgent } from "../chat/lib/agentFork";
+import { useUserRunStates } from "../hooks/useUserRunStates";
+import { useUserInterrupts } from "../hooks/useUserInterrupts";
+import ConversationTile from "./agentchat/ConversationTile";
 
-export default function ConversationList() {
+// The left panel: each chat the user has started rendered as a MINIMIZED live
+// tile (agent identity + status pulse + a tiny transcript preview + alert /
+// question badges), so you can watch many chats at once. Live state comes from a
+// SINGLE aggregate run-state stream + one interrupts poll, joined to each
+// conversation by runId — not one stream per tile. Click a tile to select it
+// (the main pane expands it).
+export default function ConversationList({ collapsed }: { collapsed: boolean }) {
   const { conversations, activeId, select, remove } = useConversations();
   const client = useLoomcycle();
-  // Deletion is destructive and the trash icon sits right on the row (easy to
-  // mis-hit), so it's a two-step inline confirm. We do NOT use window.confirm:
-  // Tauri webviews don't implement the synchronous JS dialogs, so it silently
-  // returns false there and deletion never fires. This works everywhere.
+  const { principal } = useConnection();
+  const userId = principal?.subject ?? null;
+
+  const { tiles } = useUserRunStates(client, userId);
+  const interrupts = useUserInterrupts(client, userId);
+  const runByRunId = useMemo(
+    () => new Map(tiles.map((t) => [t.runId, t])),
+    [tiles],
+  );
+
+  // Two-step inline delete (not window.confirm — Tauri webviews no-op it).
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   function doDelete(c: Conversation) {
-    // Clean up the conversation's private derived agent, if any (best-effort).
     if (c.forkDefName) void deleteConversationAgent(client, c.forkDefName);
     remove(c.id);
     setConfirmingId(null);
@@ -28,61 +42,26 @@ export default function ConversationList() {
   const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
-    <ul className="convo-list">
+    <div className={collapsed ? "conv-tiles collapsed" : "conv-tiles"}>
       {sorted.map((c) => (
-        <li
+        <ConversationTile
           key={c.id}
-          className={c.id === activeId ? "convo active" : "convo"}
-          // Clicking a row cancels any pending confirm and selects it.
-          onClick={() => {
+          conversation={c}
+          client={client}
+          collapsed={collapsed}
+          runState={c.runId ? runByRunId.get(c.runId) : undefined}
+          question={c.runId ? interrupts.get(c.runId) : undefined}
+          active={c.id === activeId}
+          confirming={confirmingId === c.id}
+          onSelect={() => {
             setConfirmingId(null);
             select(c.id);
           }}
-          title={c.title}
-        >
-          <MessageSquare size={15} className="convo-icon" />
-          <span className="convo-title">{c.title}</span>
-          {c.baseAgent && <span className="convo-agent">{c.baseAgent}</span>}
-          {confirmingId === c.id ? (
-            <span className="convo-confirm">
-              <button
-                className="convo-del confirm"
-                title="Confirm delete"
-                aria-label="Confirm delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  doDelete(c);
-                }}
-              >
-                <Check size={14} />
-              </button>
-              <button
-                className="convo-del cancel"
-                title="Cancel"
-                aria-label="Cancel delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setConfirmingId(null);
-                }}
-              >
-                <X size={14} />
-              </button>
-            </span>
-          ) : (
-            <button
-              className="convo-del"
-              title="Delete conversation"
-              aria-label="Delete conversation"
-              onClick={(e) => {
-                e.stopPropagation();
-                setConfirmingId(c.id);
-              }}
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
-        </li>
+          onRequestDelete={() => setConfirmingId(c.id)}
+          onCancelDelete={() => setConfirmingId(null)}
+          onConfirmDelete={() => doDelete(c)}
+        />
       ))}
-    </ul>
+    </div>
   );
 }

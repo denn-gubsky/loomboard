@@ -82,7 +82,7 @@ export default function Sidebar({ view, onViewChange }: Props) {
       {view === "chat" ? (
         <>
           <NewChatButton />
-          <ConversationList />
+          <ConversationList collapsed={collapsed} />
         </>
       ) : (
         <div className="side-fill" />

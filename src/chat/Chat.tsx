@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Settings2 } from "lucide-react";
 import { createLoomcycleClient, type Connection } from "./lib/createClient";
 import { configIsCustom, type ChatConversation } from "./types";
@@ -25,6 +25,11 @@ export interface ChatProps {
   /** Force the palette. Omit to inherit a light/dark ancestor (a host that sets
    *  data-theme on a wrapper or <html>); the component defaults to dark. */
   theme?: "light" | "dark";
+  /** Inline style spread onto the root `.loomchat` element. The intended use is
+   *  overriding the CSS tokens the whole surface reads from — e.g.
+   *  `style={{ "--accent": agentColor } as CSSProperties}` — so a host (like an
+   *  agent tile / overlay) can recolor the chat per agent. */
+  style?: CSSProperties;
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -37,6 +42,7 @@ export default function Chat({
   conversation,
   onConversationChange,
   theme,
+  style,
 }: ChatProps) {
   const client = useMemo(
     () => createLoomcycleClient(connection),
@@ -66,7 +72,7 @@ export default function Chat({
     .map((msg) => msg.text);
 
   return (
-    <section className="loomchat" data-theme={theme}>
+    <section className="loomchat" data-theme={theme} style={style}>
       <header className="chat-header">
         <AgentPicker
           value={conversation.baseAgent}
