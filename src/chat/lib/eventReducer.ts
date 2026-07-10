@@ -1,7 +1,9 @@
+import type { TranscriptResponse } from "@loomcycle/client";
 import { accumulateUsage, emptyMetrics, type TokenMetrics } from "./metrics";
 import {
   describeFallback,
   describeLimit,
+  transcriptToEvents,
   type ChatEvent,
   type InterruptionInfo,
 } from "./events";
@@ -361,4 +363,16 @@ function finalizeError(messages: ChatMessage[], error: string): ChatMessage[] {
     return next;
   }
   return [...messages, { role: "assistant", parts: [], status: "error", error }];
+}
+
+/** Fold a fetched transcript straight into the message view model, reusing the
+ *  exact live-stream path (transcriptToEvents → the reducer). For read-only
+ *  consumers (e.g. a compact tile preview) that want messages without running a
+ *  full <Chat>. Pure. */
+export function foldTranscript(t: TranscriptResponse): ChatMessage[] {
+  let state = initialChatState;
+  for (const event of transcriptToEvents(t)) {
+    state = chatReducer(state, { kind: "event", event });
+  }
+  return state.messages;
 }
