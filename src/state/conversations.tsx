@@ -45,6 +45,10 @@ interface ConversationsState {
   create: (baseAgent?: string, config?: ConversationConfig) => Conversation;
   update: (id: string, patch: Partial<Conversation>) => void;
   remove: (id: string) => void;
+  /** Continue a prior chat from History: select its local record if we have one
+   *  (by sessionId), else materialize one from the server session and select it.
+   *  The local layer carries config/fork the History registry doesn't store. */
+  openSession: (session: { sessionId: string; agent?: string; title?: string }) => void;
 }
 
 const Ctx = createContext<ConversationsState | null>(null);
@@ -96,14 +100,42 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     setActiveId((cur) => (cur === id ? null : cur));
   }, []);
 
+  const openSession = useCallback<ConversationsState["openSession"]>(
+    (session) => {
+      const existing = conversations.find((c) => c.sessionId === session.sessionId);
+      if (existing) {
+        setActiveId(existing.id);
+        return;
+      }
+      const now = Date.now();
+      const convo: Conversation = {
+        id: crypto.randomUUID(),
+        title: session.title || "Chat",
+        baseAgent: session.agent || "",
+        config: {},
+        sessionId: session.sessionId,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setConversations((prev) => {
+        if (prev.some((c) => c.sessionId === session.sessionId)) return prev;
+        const next = [convo, ...prev];
+        persist(next);
+        return next;
+      });
+      setActiveId(convo.id);
+    },
+    [conversations],
+  );
+
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
     [conversations, activeId],
   );
 
   const value = useMemo<ConversationsState>(
-    () => ({ conversations, activeId, active, select, create, update, remove }),
-    [conversations, activeId, active, select, create, update, remove],
+    () => ({ conversations, activeId, active, select, create, update, remove, openSession }),
+    [conversations, activeId, active, select, create, update, remove, openSession],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
