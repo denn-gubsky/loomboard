@@ -1,54 +1,64 @@
-import { useMemo } from "react";
-import { Check, Trash2, X } from "lucide-react";
+import { useMemo, useRef } from "react";
+import { ArchiveRestore, Check, Pencil, Trash2, X } from "lucide-react";
 import type { InterruptRow, LoomcycleClient } from "@loomcycle/client";
-import type { Conversation } from "../../state/conversations";
+import type { DisplayChat } from "../../lib/chatIndex";
 import { agentIdentity } from "../../lib/agentIdentity";
 import { tileDisplayState, type RunTile } from "../../lib/runStates";
 import { useInView, useTilePreview } from "../../hooks/useTilePreview";
+import type { PreviewLine } from "../../lib/tilePreview";
 import AgentChatTile from "./AgentChatTile";
 
-// A minimized view of one of the user's chats for the sidebar: identity from the
-// conversation's agent, live state joined from the aggregate run-state feed
-// (by runId) + pending question, and an in-view-gated transcript preview. Click
-// selects it (the main pane expands it). Delete keeps the list's two-step confirm.
+// A minimized view of one prior chat for the sidebar. A chat comes from the merge
+// of History (server, authoritative title/summary/status) and the local store
+// (agent/config for continuing). Identity keys off the agent; the LABEL is the
+// renamable title. Live state joins the aggregate run-state feed by sessionId +
+// pending question. Delete archives a sent chat (reversible) or drops a draft.
 export default function ConversationTile({
-  conversation,
+  chat,
   client,
   collapsed,
   runState,
   question,
   active,
   confirming,
+  renaming,
   onSelect,
+  onStartRename,
+  onCommitRename,
+  onCancelRename,
   onRequestDelete,
   onCancelDelete,
   onConfirmDelete,
 }: {
-  conversation: Conversation;
+  chat: DisplayChat;
   client: LoomcycleClient;
   collapsed: boolean;
   runState?: RunTile;
   question?: InterruptRow;
   active: boolean;
   confirming: boolean;
+  renaming: boolean;
   onSelect: () => void;
+  onStartRename: () => void;
+  onCommitRename: (title: string) => void;
+  onCancelRename: () => void;
   onRequestDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
 }) {
-  const name = conversation.baseAgent || conversation.title || "New chat";
+  const label = chat.title || chat.agent || "New chat";
   const identity = useMemo(
-    () => agentIdentity(conversation.baseAgent || conversation.title || conversation.id),
-    [conversation.baseAgent, conversation.title, conversation.id],
+    () => agentIdentity(chat.agent || chat.title || chat.key),
+    [chat.agent, chat.title, chat.key],
   );
 
   const [ref, inView] = useInView<HTMLDivElement>();
   // Refetch the preview when the run transitions; string key so a not-started
   // chat (no runState) still has a stable key.
-  const refreshKey = runState?.ts ?? String(conversation.updatedAt);
+  const refreshKey = runState?.ts ?? String(chat.lastActivity);
   const { lines, loading } = useTilePreview(
     client,
-    conversation.sessionId,
+    chat.sessionId,
     refreshKey,
     inView && !collapsed,
     2,
@@ -58,6 +68,14 @@ export default function ConversationTile({
   const alert =
     runState?.status === "failed" ? runState.error || "run failed" : undefined;
 
+  // A live transcript is the freshest signal; when the chat is idle and has a
+  // stored recap, show that instead — it's the point of the summary in the list.
+  const summaryLine: PreviewLine[] =
+    chat.summary && state !== "running" && lines.length === 0
+      ? [{ role: "assistant", kind: "notice", text: chat.summary }]
+      : [];
+  const preview = lines.length > 0 ? lines : summaryLine;
+
   if (collapsed) {
     const { Icon } = identity;
     return (
@@ -66,7 +84,7 @@ export default function ConversationTile({
         className={active ? "convtile-mini active" : "convtile-mini"}
         style={{ ["--tile-accent" as string]: identity.color }}
         onClick={onSelect}
-        title={name}
+        title={label}
       >
         <span className="act-avatar" aria-hidden>
           <Icon size={16} />
@@ -77,15 +95,35 @@ export default function ConversationTile({
     );
   }
 
+  if (renaming) {
+    return (
+      <div className={active ? "convtile active" : "convtile"}>
+        <RenameForm
+          initial={chat.title}
+          onCommit={onCommitRename}
+          onCancel={onCancelRename}
+        />
+      </div>
+    );
+  }
+
+  // A draft (no session) is removed outright; a sent chat is archived (soft-hide,
+  // reversible). An already-archived row's primary action is Restore.
+  const primaryLabel = chat.archived
+    ? "Restore chat"
+    : chat.sessionId
+      ? "Archive chat"
+      : "Delete chat";
+
   return (
     <div ref={ref} className={active ? "convtile active" : "convtile"}>
       <AgentChatTile
-        agentName={name}
+        agentName={label}
         Icon={identity.Icon}
         accentColor={identity.color}
         state={state}
-        preview={lines}
-        loadingPreview={loading && lines.length === 0}
+        preview={preview}
+        loadingPreview={loading && preview.length === 0}
         alert={alert}
         question={question ? question.question || "The agent is asking for input." : undefined}
         questionPriority={question?.priority}
@@ -95,8 +133,8 @@ export default function ConversationTile({
         <span className="convtile-confirm">
           <button
             className="convtile-del confirm"
-            title="Confirm delete"
-            aria-label="Confirm delete"
+            title={`Confirm — ${primaryLabel.toLowerCase()}`}
+            aria-label={`Confirm ${primaryLabel.toLowerCase()}`}
             onClick={(e) => {
               e.stopPropagation();
               onConfirmDelete();
@@ -107,7 +145,7 @@ export default function ConversationTile({
           <button
             className="convtile-del cancel"
             title="Cancel"
-            aria-label="Cancel delete"
+            aria-label="Cancel"
             onClick={(e) => {
               e.stopPropagation();
               onCancelDelete();
@@ -117,18 +155,81 @@ export default function ConversationTile({
           </button>
         </span>
       ) : (
-        <button
-          className="convtile-del"
-          title="Delete conversation"
-          aria-label="Delete conversation"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRequestDelete();
-          }}
-        >
-          <Trash2 size={13} />
-        </button>
+        <span className="convtile-actions">
+          {!chat.archived && (
+            <button
+              className="convtile-del"
+              title="Rename chat"
+              aria-label="Rename chat"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartRename();
+              }}
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+          <button
+            className="convtile-del"
+            title={primaryLabel}
+            aria-label={primaryLabel}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestDelete();
+            }}
+          >
+            {chat.archived ? <ArchiveRestore size={13} /> : <Trash2 size={13} />}
+          </button>
+        </span>
       )}
     </div>
+  );
+}
+
+// Uncontrolled so a title refresh mid-edit can't clobber the field; committed on
+// Enter / ✓, cancelled on Escape / ✕. Not on blur — blur races the ✓ click.
+function RenameForm({
+  initial,
+  onCommit,
+  onCancel,
+}: {
+  initial: string;
+  onCommit: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <form
+      className="convtile-rename"
+      onClick={(e) => e.stopPropagation()}
+      onSubmit={(e) => {
+        e.preventDefault();
+        const v = ref.current?.value.trim();
+        if (v) onCommit(v);
+        else onCancel();
+      }}
+    >
+      <input
+        ref={ref}
+        defaultValue={initial}
+        autoFocus
+        aria-label="Chat title"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onCancel();
+        }}
+      />
+      <button type="submit" className="convtile-del confirm" title="Save" aria-label="Save">
+        <Check size={13} />
+      </button>
+      <button
+        type="button"
+        className="convtile-del cancel"
+        title="Cancel"
+        aria-label="Cancel"
+        onClick={onCancel}
+      >
+        <X size={13} />
+      </button>
+    </form>
   );
 }
