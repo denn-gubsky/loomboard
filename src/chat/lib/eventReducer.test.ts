@@ -132,6 +132,24 @@ describe("chatReducer — interrupts", () => {
     s = chatReducer(s, { kind: "clearInterrupt" });
     expect(s.pendingInterrupt).toBeNull();
   });
+
+  it("cancelled drops the parked question, clears awaiting, and records a notice", () => {
+    let s = run([
+      ev("text", { text: "working…" }),
+      ev("awaiting_input", { awaiting_input: { since_turn: 1 } }),
+      ev("interruption_pending", {
+        interruption: { interrupt_id: "intr_1", kind: "question", question: "Proceed?" },
+      }),
+    ]);
+    expect(s.pendingInterrupt).not.toBeNull();
+    expect(s.awaitingInput).toBe(true);
+
+    s = chatReducer(s, { kind: "cancelled" });
+    expect(s.pendingInterrupt).toBeNull();
+    expect(s.awaitingInput).toBe(false);
+    const last = assistant(s, s.messages.length - 1);
+    expect(last.parts).toEqual([{ type: "notice", level: "info", text: "Run cancelled." }]);
+  });
 });
 
 describe("chatReducer — user turns and multi-turn replay", () => {

@@ -15,6 +15,7 @@ import { transcriptToEvents, type ChatEvent } from "../lib/events";
 import { tokensPerSecond } from "../lib/metrics";
 import { buildUserSegments } from "../lib/segments";
 import { resolveConversationAgent } from "../lib/agentFork";
+import { pickCancelableAgent } from "../lib/runControl";
 import type { SentAttachment, StagedAttachment } from "../lib/attachments";
 import { describeError, isAbortError } from "../lib/errors";
 
@@ -234,15 +235,27 @@ export function useChat(
   );
 
   const cancel = useCallback(async () => {
-    try {
-      if (agentIdRef.current) await client.cancelAgent(agentIdRef.current);
-    } catch {
-      // best-effort
-    }
+    // Supersede any live stream first so nothing keeps dispatching mid-cancel.
+    genRef.current++;
     abortRef.current?.abort();
     liveRef.current = false;
     setRunning(false);
-  }, [client]);
+    try {
+      let agentId = agentIdRef.current;
+      // A reopened parked chat never attached the live stream, so we don't know
+      // the agent_id — resolve it from the user's agents by session (see
+      // pickCancelableAgent). cancelAgent cascades to children.
+      if (!agentId && conversation?.sessionId) {
+        const me = await client.whoami();
+        const agents = await client.listUserAgents(me.subject);
+        agentId = pickCancelableAgent(agents, conversation.sessionId);
+      }
+      if (agentId) await client.cancelAgent(agentId, { reason: "operator cancelled" });
+    } catch {
+      // best-effort — the local stream is already aborted either way
+    }
+    dispatch({ kind: "cancelled" });
+  }, [client, conversation]);
 
   const compact = useCallback(async () => {
     if (!state.runId) return undefined;

@@ -81,6 +81,7 @@ export type ChatAction =
   | { kind: "user"; text: string; attachments?: SentAttachment[] }
   | { kind: "thinkingDuration"; ms: number }
   | { kind: "clearInterrupt" }
+  | { kind: "cancelled" }
   | { kind: "reset"; seed?: Partial<ChatState> };
 
 // ---- Pure helpers over the message list ----
@@ -198,6 +199,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...initialChatState, ...action.seed };
     case "clearInterrupt":
       return { ...state, pendingInterrupt: null };
+    case "cancelled":
+      // Operator cancelled the run: drop the parked question, clear the awaiting
+      // state, and record it in the transcript so the outcome is visible.
+      return {
+        ...state,
+        pendingInterrupt: null,
+        awaitingInput: false,
+        messages: [
+          ...closeOpen(state.messages),
+          {
+            role: "assistant",
+            status: "done",
+            parts: [{ type: "notice", level: "info", text: "Run cancelled." }],
+          },
+        ],
+      };
     case "user":
       return {
         ...state,
