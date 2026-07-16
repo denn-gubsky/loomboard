@@ -43,6 +43,15 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
     [history.sessions, conversations],
   );
 
+  // Local conversations by id, so a tile can read its own persisted runId — the
+  // interrupts poll keys on run_id, and a chat just parked on a question is often
+  // not in the aggregate run-state feed yet, so the sessionId→tile→runId join
+  // alone misses it. The local runId is known the moment the run starts.
+  const convById = useMemo(
+    () => new Map(conversations.map((c) => [c.id, c])),
+    [conversations],
+  );
+
   // Auto-recap the active chat when it sits idle (see useAutoRecap). "Idle"
   // includes a chat parked awaiting your input — the Claude-Code "you timed out"
   // case. runCount comes from the History row for that session.
@@ -145,7 +154,13 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
       <div className={collapsed ? "conv-tiles collapsed" : "conv-tiles"}>
         {rows.map((chat) => {
           const run = chat.sessionId ? runBySession.get(chat.sessionId) : undefined;
-          const question = run ? interrupts.get(run.runId) : undefined;
+          // Join the pending question by ANY runId we know for this chat: the
+          // local conversation's persisted runId (immediate for chats started
+          // here) OR the tile's runId (server-only chats, other devices).
+          const localRunId = chat.localId ? convById.get(chat.localId)?.runId : undefined;
+          const question =
+            (localRunId ? interrupts.get(localRunId) : undefined) ??
+            (run ? interrupts.get(run.runId) : undefined);
           return (
             <ConversationTile
               key={chat.key}

@@ -957,18 +957,26 @@ button {
 .conv-archived-toggle:hover { color: var(--text); }
 .conv-archived-toggle.active { color: var(--accent); border-color: var(--accent); }
 
-/* Rename + delete share a hover-revealed cluster in the tile's top-right. */
+/* Rename + delete cluster, top-right of the tile. Always visible (dimmed) so the
+   controls are discoverable at a glance — not hover-only, which reads as "no
+   button" — and full-strength on hover / keyboard focus. */
 .convtile-actions {
   position: absolute;
   top: 6px;
   right: 6px;
   display: inline-flex;
   gap: 0.25em;
-  opacity: 0;
+  opacity: 0.55;
   transition: opacity 0.1s;
 }
-.convtile:hover .convtile-actions { opacity: 1; }
+.convtile:hover .convtile-actions,
+.convtile:focus-within .convtile-actions {
+  opacity: 1;
+}
 .convtile-actions .convtile-del { position: static; opacity: 1; }
+/* Reserve room at the header's right so the always-visible actions don't overlap
+   the chat name or the status dot. */
+.convtile .act-head { padding-right: 3.4em; }
 
 /* Inline rename replaces the tile body while editing. */
 .convtile-rename {
