@@ -299,8 +299,29 @@
 .loomchat .interrupt.prio-high .interrupt-head {
   color: var(--danger);
 }
+.loomchat .interrupt-head-spacer {
+  flex: 1;
+}
+.loomchat .interrupt-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 0.25em 0.6em;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.loomchat .interrupt-cancel:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.loomchat .interrupt-cancel:disabled {
+  opacity: 0.5;
+}
 .loomchat .prio-badge {
-  margin-left: auto;
   text-transform: uppercase;
   font-size: 0.65rem;
   letter-spacing: 0.05em;
