@@ -6,12 +6,24 @@ import type {
 } from "@loomcycle/client";
 import { describeError } from "../lib/errors";
 
-export type AgentEntry = LibraryEntry<LibraryAgentDefinition>;
+// The library rows carry the soft-reclaim status the loomcycle server sends (its
+// own "Hide retired" filter reads it), but the SDK's LibraryEntry type doesn't
+// declare it yet — widen locally. The field is present in the JSON at runtime.
+export type AgentEntry = LibraryEntry<LibraryAgentDefinition> & {
+  active_retired?: boolean;
+};
 
 interface AgentsResult {
   agents: AgentEntry[];
   loading: boolean;
   error: string | null;
+}
+
+/** Agents pickable in the dropdown: retired ones are hidden, except the
+ *  currently-selected agent (`selected`) — a chat already on a since-retired
+ *  agent must still show its selection rather than silently switch. Pure. */
+export function pickableAgents(agents: AgentEntry[], selected: string): AgentEntry[] {
+  return agents.filter((a) => !a.active_retired || a.name === selected);
 }
 
 /** Fetch the runtime's library agents once per client. */
