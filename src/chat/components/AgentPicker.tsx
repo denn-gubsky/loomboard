@@ -1,5 +1,5 @@
 import { Bot, AlertCircle } from "lucide-react";
-import type { AgentEntry } from "../hooks/useAgents";
+import { pickableAgents, type AgentEntry } from "../hooks/useAgents";
 
 interface Props {
   value: string;
@@ -26,6 +26,8 @@ export default function AgentPicker({
     );
   }
 
+  const options = pickableAgents(agents, value);
+
   return (
     <label className="agent-picker">
       <Bot size={16} />
@@ -37,10 +39,14 @@ export default function AgentPicker({
         <option value="" disabled>
           {loading ? "Loading agents…" : "Select an agent"}
         </option>
-        {agents.map((a) => (
+        {options.map((a) => (
           <option key={a.name} value={a.name}>
             {a.name}
-            {a.static_definition?.tier ? ` · ${a.static_definition.tier}` : ""}
+            {a.active_retired
+              ? " · retired"
+              : a.static_definition?.tier
+                ? ` · ${a.static_definition.tier}`
+                : ""}
           </option>
         ))}
       </select>
