@@ -15,7 +15,6 @@ import { transcriptToEvents, type ChatEvent } from "../lib/events";
 import { tokensPerSecond } from "../lib/metrics";
 import { buildUserSegments } from "../lib/segments";
 import { resolveConversationAgent } from "../lib/agentFork";
-import { pickCancelableAgent } from "../lib/runControl";
 import type { SentAttachment, StagedAttachment } from "../lib/attachments";
 import { describeError, isAbortError } from "../lib/errors";
 
@@ -54,7 +53,6 @@ export function useChat(
   const abortRef = useRef<AbortController | null>(null);
   const genRef = useRef(0); // active-stream generation
   const runIdRef = useRef("");
-  const agentIdRef = useRef("");
   const liveRef = useRef(false);
 
   const turnStartRef = useRef(0);
@@ -89,7 +87,6 @@ export function useChat(
           const event = ev as ChatEvent;
           if (event.type === "agent") {
             if (event.run_id) runIdRef.current = event.run_id;
-            if (event.agent_id) agentIdRef.current = event.agent_id;
           }
 
           // Time the reasoning phase and stamp its duration onto the thinking
@@ -235,27 +232,28 @@ export function useChat(
   );
 
   const cancel = useCallback(async () => {
-    // Supersede any live stream first so nothing keeps dispatching mid-cancel.
+    // Stop the CURRENT turn — the in-flight generation plus the tool calls it
+    // started, including a blocked Interruption (RFC BH cancelTurn). The run
+    // parks at awaiting_input with the session intact, so the next message
+    // resumes it. This is the "Esc" gesture, NOT whole-run cancel (cancelAgent),
+    // which would end the chat. cancelTurn keys on run_id — known live
+    // (runIdRef) or from a reopened conversation (state.runId).
+    const runId = runIdRef.current || state.runId || "";
+    // Supersede any live stream so its frames stop landing while we settle; the
+    // next send resumes the parked run via continueSession.
     genRef.current++;
     abortRef.current?.abort();
     liveRef.current = false;
     setRunning(false);
     try {
-      let agentId = agentIdRef.current;
-      // A reopened parked chat never attached the live stream, so we don't know
-      // the agent_id — resolve it from the user's agents by session (see
-      // pickCancelableAgent). cancelAgent cascades to children.
-      if (!agentId && conversation?.sessionId) {
-        const me = await client.whoami();
-        const agents = await client.listUserAgents(me.subject);
-        agentId = pickCancelableAgent(agents, conversation.sessionId);
-      }
-      if (agentId) await client.cancelAgent(agentId, { reason: "operator cancelled" });
-    } catch {
-      // best-effort — the local stream is already aborted either way
+      if (runId) await client.cancelTurn(runId, { reason: "operator cancelled" });
+    } catch (e) {
+      // 409 (not mid-turn / not interactive) or 404 (run gone): nothing to
+      // stop — settle the UI anyway. Logged for devtools.
+      console.warn("[chat] cancelTurn failed", e);
     }
-    dispatch({ kind: "cancelled" });
-  }, [client, conversation]);
+    dispatch({ kind: "turnStopped" });
+  }, [client, state.runId]);
 
   const compact = useCallback(async () => {
     if (!state.runId) return undefined;
@@ -294,7 +292,6 @@ export function useChat(
     abortRef.current?.abort();
     abortRef.current = null;
     runIdRef.current = "";
-    agentIdRef.current = "";
     liveRef.current = false;
     outputTokensRef.current = 0;
     outputAtTurnStartRef.current = 0;

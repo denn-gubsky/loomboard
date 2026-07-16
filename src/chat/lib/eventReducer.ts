@@ -81,7 +81,7 @@ export type ChatAction =
   | { kind: "user"; text: string; attachments?: SentAttachment[] }
   | { kind: "thinkingDuration"; ms: number }
   | { kind: "clearInterrupt" }
-  | { kind: "cancelled" }
+  | { kind: "turnStopped" }
   | { kind: "reset"; seed?: Partial<ChatState> };
 
 // ---- Pure helpers over the message list ----
@@ -199,19 +199,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...initialChatState, ...action.seed };
     case "clearInterrupt":
       return { ...state, pendingInterrupt: null };
-    case "cancelled":
-      // Operator cancelled the run: drop the parked question, clear the awaiting
-      // state, and record it in the transcript so the outcome is visible.
+    case "turnStopped":
+      // Operator stopped the current turn (RFC BH cancelTurn): the run parks at
+      // awaiting_input with the session intact — so we drop any pending
+      // question, mark it parked (ready for the next message / compaction), and
+      // note it in the transcript.
       return {
         ...state,
         pendingInterrupt: null,
-        awaitingInput: false,
+        awaitingInput: true,
         messages: [
           ...closeOpen(state.messages),
           {
             role: "assistant",
             status: "done",
-            parts: [{ type: "notice", level: "info", text: "Run cancelled." }],
+            parts: [{ type: "notice", level: "info", text: "Stopped." }],
           },
         ],
       };

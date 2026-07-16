@@ -58,9 +58,10 @@ export default function Chat({
   )?.static_definition;
   const chat = useChat(client, conversation, baseDef, onConversationChange);
 
-  // Esc cancels the current operation, like Claude Code — a live turn or a run
-  // parked on a question. Window-level so it works regardless of focus; gated so
-  // it never fires (and never preventDefaults) on an idle chat.
+  // Esc stops the current operation, like Claude Code — a live turn or a run
+  // parked on a question — via RFC BH turn-cancel: the chat stays alive to
+  // continue, it isn't terminated. Window-level so it works regardless of focus;
+  // gated so it never fires (and never preventDefaults) on an idle chat.
   const { running, cancel } = chat;
   const parked = chat.state.pendingInterrupt;
   useEffect(() => {
