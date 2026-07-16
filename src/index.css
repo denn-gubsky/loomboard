@@ -886,3 +886,117 @@ button {
   background: var(--warn);
   border: 2px solid var(--bg-elevated);
 }
+
+/* ---- history panel: search + archived toggle + the scrolling tile list ---- */
+.conv-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.conv-panel.collapsed { gap: 0.4rem; }
+.conv-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.history-search { display: flex; flex-direction: column; gap: 0.25rem; }
+.history-search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.3em 0.45em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+.history-search-icon { color: var(--text-dim); flex: none; }
+.history-search-row input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.history-search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2em;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  flex: none;
+}
+.history-search-btn:hover:not(:disabled) { color: var(--accent); }
+.history-search-btn:disabled { opacity: 0.4; cursor: default; }
+.history-search-note {
+  margin: 0;
+  padding: 0 0.2em;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.conv-archived-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  align-self: flex-start;
+  padding: 0.3em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.conv-archived-toggle:hover { color: var(--text); }
+.conv-archived-toggle.active { color: var(--accent); border-color: var(--accent); }
+
+/* Rename + delete cluster, top-right of the tile. Always visible (dimmed) so the
+   controls are discoverable at a glance — not hover-only, which reads as "no
+   button" — and full-strength on hover / keyboard focus. */
+.convtile-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  gap: 0.25em;
+  opacity: 0.55;
+  transition: opacity 0.1s;
+}
+.convtile:hover .convtile-actions,
+.convtile:focus-within .convtile-actions {
+  opacity: 1;
+}
+.convtile-actions .convtile-del { position: static; opacity: 1; }
+/* Reserve room at the header's right so the always-visible actions don't overlap
+   the chat name or the status dot. */
+.convtile .act-head { padding-right: 3.4em; }
+
+/* Inline rename replaces the tile body while editing. */
+.convtile-rename {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  min-height: 88px;
+  padding: 0.5rem;
+  border: 1px solid var(--tile-accent, var(--border));
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+.convtile-rename input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.convtile-rename .convtile-del { position: static; opacity: 1; }
