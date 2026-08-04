@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Archive, ArchiveRestore } from "lucide-react";
 import type { InterruptRow } from "@loomcycle/client";
 import { useConversations } from "../state/conversations";
+import { useActiveChat } from "../state/activeChat";
 import { useConnection, useLoomcycle } from "../state/connection";
 import { deleteConversationAgent } from "../chat/lib/agentFork";
 import { useUserRunStates } from "../hooks/useUserRunStates";
@@ -45,6 +46,9 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   const history = useChatHistory(client, Boolean(userId));
   const { tiles } = useUserRunStates(client, userId);
   const interrupts = useUserInterrupts(client, userId);
+  // The active chat's live "working" state, published by <Chat> — the aggregate
+  // feed lags a just-started run, so its tile dot would otherwise read stale.
+  const { running: activeRunning } = useActiveChat();
 
   // Newest run per session — for the tile's live status dot + preview refresh.
   const runBySession = useMemo(() => {
@@ -184,6 +188,7 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
               runState={run}
               question={question}
               active={chat.localId != null && chat.localId === activeId}
+              liveRunning={chat.localId === activeId && activeRunning}
               confirming={confirmingKey === chat.key}
               renaming={renamingKey === chat.key}
               onSelect={() => doOpen(chat)}

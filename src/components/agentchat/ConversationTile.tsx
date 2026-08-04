@@ -3,7 +3,7 @@ import { ArchiveRestore, Check, Pencil, Trash2, X } from "lucide-react";
 import type { InterruptRow, LoomcycleClient } from "@loomcycle/client";
 import type { DisplayChat } from "../../lib/chatIndex";
 import { agentIdentity } from "../../lib/agentIdentity";
-import { tileDisplayState, type RunTile } from "../../lib/runStates";
+import { tileDisplayState, type RunTile, type TileDisplayState } from "../../lib/runStates";
 import { useInView, useTilePreview } from "../../hooks/useTilePreview";
 import type { PreviewLine } from "../../lib/tilePreview";
 import AgentChatTile from "./AgentChatTile";
@@ -20,6 +20,7 @@ export default function ConversationTile({
   runState,
   question,
   active,
+  liveRunning,
   confirming,
   renaming,
   onSelect,
@@ -36,6 +37,9 @@ export default function ConversationTile({
   runState?: RunTile;
   question?: InterruptRow;
   active: boolean;
+  /** The active chat's agent is working now (from <Chat>) — authoritative over
+   *  the aggregate feed, which lags a run started this session. */
+  liveRunning?: boolean;
   confirming: boolean;
   renaming: boolean;
   onSelect: () => void;
@@ -78,7 +82,16 @@ export default function ConversationTile({
     3,
   );
 
-  const state = runState ? tileDisplayState(runState, Boolean(question)) : "idle";
+  // A pending question wins (needs input); else the live "working" signal from
+  // the active <Chat> (authoritative, and immediate) makes the dot pulse; else
+  // fall back to the aggregate feed; else idle.
+  const state: TileDisplayState = question
+    ? "needs_input"
+    : liveRunning
+      ? "running"
+      : runState
+        ? tileDisplayState(runState, false)
+        : "idle";
   const alert =
     runState?.status === "failed" ? runState.error || "run failed" : undefined;
 

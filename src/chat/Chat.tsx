@@ -30,6 +30,10 @@ export interface ChatProps {
    *  `style={{ "--accent": agentColor } as CSSProperties}` — so a host (like an
    *  agent tile / overlay) can recolor the chat per agent. */
   style?: CSSProperties;
+  /** Called when the run's active state changes (true = the agent is thinking /
+   *  responding / using tools). Lets a host show a live activity indicator — the
+   *  aggregate run-state feed often lags a just-started run. */
+  onRunStatus?: (running: boolean) => void;
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -43,6 +47,7 @@ export default function Chat({
   onConversationChange,
   theme,
   style,
+  onRunStatus,
 }: ChatProps) {
   const client = useMemo(
     () => createLoomcycleClient(connection),
@@ -75,6 +80,13 @@ export default function Chat({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [running, parked, cancel]);
+
+  // Publish the run's active state to the host (sidebar tile activity dot).
+  useEffect(() => {
+    onRunStatus?.(running);
+  }, [running, onRunStatus]);
+  // Reset when this chat unmounts (deselected), so its tile stops reading active.
+  useEffect(() => () => onRunStatus?.(false), [onRunStatus]);
 
   const custom = configIsCustom(conversation.config);
   const noAgent = !conversation.baseAgent;
