@@ -53,16 +53,20 @@ export default function ConversationTile({
   );
 
   const [ref, inView] = useInView<HTMLDivElement>();
-  // While a run is live, poll the transcript so the tile's preview visibly
-  // scrolls (the aggregate feed carries no text). Gated on in-view + expanded so
-  // it costs nothing for off-screen / collapsed tiles.
+  // Poll the transcript so the preview stays live and visibly scrolls (the
+  // aggregate feed carries no text). While a run is generating — but ALSO always
+  // for the ACTIVE chat: a run started this session usually isn't in the
+  // aggregate feed yet, so `runState` is undefined and "running" can't be
+  // trusted, and the active chat is the one the user is watching. Gated on
+  // in-view + expanded so off-screen / collapsed tiles cost nothing.
   const live = runState?.status === "running";
+  const poll = (live || active) && !collapsed && inView;
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    if (!live || collapsed || !inView) return;
+    if (!poll) return;
     const id = setInterval(() => setTick((t) => t + 1), 2500);
     return () => clearInterval(id);
-  }, [live, collapsed, inView]);
+  }, [poll]);
   // Refetch on run transition or each poll tick; string key so a not-started
   // chat (no runState) still has a stable key.
   const refreshKey = `${runState?.ts ?? chat.lastActivity}:${tick}`;
