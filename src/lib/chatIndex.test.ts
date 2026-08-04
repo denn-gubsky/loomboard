@@ -79,12 +79,13 @@ describe("mergeChats", () => {
     expect(rows.map((r) => r.key)).toEqual(["pin", "new", "old"]);
   });
 
-  it("hides sessions served by loomcycle's internal maintenance agents", () => {
+  it("hides sessions served by loomcycle's internal service agents", () => {
     const rows = mergeChats(
       [
         chat({ session_id: "real", agent: "chat/medium" }),
         chat({ session_id: "svc1", agent: "memory/extractor" }),
         chat({ session_id: "svc2", agent: "memory/consolidator" }),
+        chat({ session_id: "svc3", agent: "dev/exec" }),
       ],
       [],
     );

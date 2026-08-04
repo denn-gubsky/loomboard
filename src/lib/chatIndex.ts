@@ -38,13 +38,17 @@ function ms(iso: string | undefined, fallback: number): number {
   return Number.isNaN(t) ? fallback : t;
 }
 
-// loomcycle's own maintenance agents (config `internal: true`) create sessions
-// that are runtime bookkeeping, not conversations — memory extraction /
-// consolidation. The server History list hides them by default, but sessions
-// from before an agent was marked internal (or an instance that didn't) leak
-// through, so we also guard here. Keep this to the exact known service agents so
-// a user's legitimately-named chat is never hidden.
-const INTERNAL_AGENTS = new Set(["memory/extractor", "memory/consolidator"]);
+// loomcycle's own service agents create sessions that are runtime bookkeeping,
+// not conversations — memory extraction/consolidation, sandbox exec. The server
+// History list hides `internal: true` agents by default, but sessions from
+// before an agent was marked internal (or an instance that didn't) leak through,
+// so we also guard here. Keep this to the exact known service agents so a user's
+// legitimately-named chat is never hidden.
+const INTERNAL_AGENTS = new Set([
+  "memory/extractor",
+  "memory/consolidator",
+  "dev/exec",
+]);
 
 export function isInternalAgent(agent: string): boolean {
   return INTERNAL_AGENTS.has(agent);
