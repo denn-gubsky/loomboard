@@ -53,7 +53,7 @@ function buildConnection(s: ConnSettings): Connection {
 function ChatArea() {
   const { settings } = useConnection();
   const { active, update } = useConversations();
-  const { setRunning } = useActiveChat();
+  const { setStatus } = useActiveChat();
   const connection = useMemo<Connection | null>(
     () => (settings ? buildConnection(settings) : null),
     [settings],
@@ -88,7 +88,7 @@ function ChatArea() {
       connection={connection}
       conversation={active}
       onConversationChange={onConversationChange}
-      onRunStatus={setRunning}
+      onRunStatus={setStatus}
     />
   );
 }

@@ -21,6 +21,7 @@ export default function ConversationTile({
   question,
   active,
   liveRunning,
+  liveNeedsInput,
   confirming,
   renaming,
   onSelect,
@@ -40,6 +41,8 @@ export default function ConversationTile({
   /** The active chat's agent is working now (from <Chat>) — authoritative over
    *  the aggregate feed, which lags a run started this session. */
   liveRunning?: boolean;
+  /** The active chat parked on a question (from <Chat>). */
+  liveNeedsInput?: boolean;
   confirming: boolean;
   renaming: boolean;
   onSelect: () => void;
@@ -82,16 +85,17 @@ export default function ConversationTile({
     3,
   );
 
-  // A pending question wins (needs input); else the live "working" signal from
-  // the active <Chat> (authoritative, and immediate) makes the dot pulse; else
-  // fall back to the aggregate feed; else idle.
-  const state: TileDisplayState = question
-    ? "needs_input"
-    : liveRunning
-      ? "running"
-      : runState
-        ? tileDisplayState(runState, false)
-        : "idle";
+  // A pending question wins (needs input) — from the interrupts poll or the
+  // active <Chat>'s live signal; else the live "working" signal makes the dot
+  // pulse; else fall back to the aggregate feed; else idle.
+  const state: TileDisplayState =
+    question || liveNeedsInput
+      ? "needs_input"
+      : liveRunning
+        ? "running"
+        : runState
+          ? tileDisplayState(runState, false)
+          : "idle";
   const alert =
     runState?.status === "failed" ? runState.error || "run failed" : undefined;
 

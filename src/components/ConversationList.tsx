@@ -46,9 +46,10 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   const history = useChatHistory(client, Boolean(userId));
   const { tiles } = useUserRunStates(client, userId);
   const interrupts = useUserInterrupts(client, userId);
-  // The active chat's live "working" state, published by <Chat> — the aggregate
-  // feed lags a just-started run, so its tile dot would otherwise read stale.
-  const { running: activeRunning } = useActiveChat();
+  // The active chat's live run state, published by <Chat> — the aggregate feed
+  // lags a just-started run and can't tell working from parked, so its tile dot
+  // would otherwise read stale (and pulse forever on a parked question).
+  const { status: activeStatus } = useActiveChat();
 
   // Newest run per session — for the tile's live status dot + preview refresh.
   const runBySession = useMemo(() => {
@@ -188,7 +189,8 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
               runState={run}
               question={question}
               active={chat.localId != null && chat.localId === activeId}
-              liveRunning={chat.localId === activeId && activeRunning}
+              liveRunning={chat.localId === activeId && activeStatus.running}
+              liveNeedsInput={chat.localId === activeId && activeStatus.needsInput}
               confirming={confirmingKey === chat.key}
               renaming={renamingKey === chat.key}
               onSelect={() => doOpen(chat)}

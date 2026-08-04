@@ -30,10 +30,11 @@ export interface ChatProps {
    *  `style={{ "--accent": agentColor } as CSSProperties}` — so a host (like an
    *  agent tile / overlay) can recolor the chat per agent. */
   style?: CSSProperties;
-  /** Called when the run's active state changes (true = the agent is thinking /
-   *  responding / using tools). Lets a host show a live activity indicator — the
-   *  aggregate run-state feed often lags a just-started run. */
-  onRunStatus?: (running: boolean) => void;
+  /** Called when the run's active state changes. `running` = the agent is
+   *  working (thinking / responding / using tools); `needsInput` = it parked on
+   *  a question. Lets a host show a live activity indicator — the aggregate
+   *  run-state feed lags a just-started run and can't tell working from parked. */
+  onRunStatus?: (status: { running: boolean; needsInput: boolean }) => void;
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -81,12 +82,17 @@ export default function Chat({
     return () => window.removeEventListener("keydown", onKey);
   }, [running, parked, cancel]);
 
-  // Publish the run's active state to the host (sidebar tile activity dot).
+  // Publish the run's active state to the host (sidebar tile activity dot). A
+  // run parked on a question isn't "working" (the loop stays running until the
+  // answer, so `running` alone would pulse forever) — report needsInput instead.
   useEffect(() => {
-    onRunStatus?.(running);
-  }, [running, onRunStatus]);
+    onRunStatus?.({ running: running && !parked, needsInput: Boolean(parked) });
+  }, [running, parked, onRunStatus]);
   // Reset when this chat unmounts (deselected), so its tile stops reading active.
-  useEffect(() => () => onRunStatus?.(false), [onRunStatus]);
+  useEffect(
+    () => () => onRunStatus?.({ running: false, needsInput: false }),
+    [onRunStatus],
+  );
 
   const custom = configIsCustom(conversation.config);
   const noAgent = !conversation.baseAgent;
