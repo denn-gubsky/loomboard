@@ -325,6 +325,34 @@ export function useChat(
         for (const event of transcriptToEvents(t)) {
           dispatch({ kind: "event", event });
         }
+        // Re-attach a genuinely-pending interrupt with its LIVE id (the
+        // transcript's historical one is skipped — its id would be stale and
+        // answering it 409s). Keyed on the run; best-effort.
+        if (convo.runId) {
+          const res = await client.listRunInterrupts(convo.runId, {
+            status: "pending",
+            signal: ac.signal,
+          });
+          if (genRef.current !== gen) return;
+          const pending = res.interrupts[0];
+          if (pending) {
+            dispatch({
+              kind: "event",
+              event: {
+                type: "interruption_pending",
+                interruption: {
+                  interrupt_id: pending.interrupt_id,
+                  kind: pending.kind,
+                  question: pending.question,
+                  options: pending.options,
+                  context: pending.context_data,
+                  priority: pending.priority,
+                  expires_at: pending.expires_at,
+                },
+              } as ChatEvent,
+            });
+          }
+        }
       } catch (e) {
         if (!isAbortError(e) && genRef.current === gen) {
           dispatch({
