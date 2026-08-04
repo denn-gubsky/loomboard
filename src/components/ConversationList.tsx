@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Archive, ArchiveRestore } from "lucide-react";
+import type { InterruptRow } from "@loomcycle/client";
 import { useConversations } from "../state/conversations";
 import { useConnection, useLoomcycle } from "../state/connection";
 import { deleteConversationAgent } from "../chat/lib/agentFork";
@@ -11,6 +12,21 @@ import { mergeChats, type DisplayChat } from "../lib/chatIndex";
 import type { RunTile } from "../lib/runStates";
 import HistorySearch, { NO_FILTER, type ChatFilter } from "./HistorySearch";
 import ConversationTile from "./agentchat/ConversationTile";
+
+// The first pending question on any of a chat's runs. The interrupts poll keys on
+// run_id and a chat can span several runs (steer, re-open, resident sub-turns), so
+// we check every run id we know for the session — not just the newest.
+function firstPending(
+  runIds: Set<string> | undefined,
+  interrupts: Map<string, InterruptRow>,
+): InterruptRow | undefined {
+  if (!runIds) return undefined;
+  for (const rid of runIds) {
+    const q = interrupts.get(rid);
+    if (q) return q;
+  }
+  return undefined;
+}
 
 // The left panel: the user's prior chats as MINIMIZED live tiles. The list is the
 // merge of loomcycle History (server-side, per-user, authoritative title/summary/
@@ -30,42 +46,44 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   const { tiles } = useUserRunStates(client, userId);
   const interrupts = useUserInterrupts(client, userId);
 
-  // Newest run per session — the aggregate feed is keyed by runId and a chat may
-  // span several runs, so join live status/questions by sessionId via the latest.
+  // Newest run per session — for the tile's live status dot + preview refresh.
   const runBySession = useMemo(() => {
     const m = new Map<string, RunTile>();
     for (const t of tiles) if (t.sessionId && !m.has(t.sessionId)) m.set(t.sessionId, t);
     return m;
   }, [tiles]);
 
+  // ALL run ids we know per session (the aggregate feed + each local chat's
+  // persisted runId), so a pending question is found whichever run raised it —
+  // and immediately for a chat just parked here, before the feed catches up.
+  const runIdsBySession = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    const add = (sid: string | undefined, rid: string | undefined) => {
+      if (!sid || !rid) return;
+      const set = m.get(sid) ?? new Set<string>();
+      set.add(rid);
+      m.set(sid, set);
+    };
+    for (const t of tiles) add(t.sessionId, t.runId);
+    for (const c of conversations) add(c.sessionId, c.runId);
+    return m;
+  }, [tiles, conversations]);
+
   const merged = useMemo(
     () => mergeChats(history.sessions, conversations),
     [history.sessions, conversations],
   );
 
-  // Local conversations by id, so a tile can read its own persisted runId — the
-  // interrupts poll keys on run_id, and a chat just parked on a question is often
-  // not in the aggregate run-state feed yet, so the sessionId→tile→runId join
-  // alone misses it. The local runId is known the moment the run starts.
-  const convById = useMemo(
-    () => new Map(conversations.map((c) => [c.id, c])),
-    [conversations],
-  );
-
-  // Auto-recap the active chat when it sits idle (see useAutoRecap). "Idle"
-  // includes a chat parked awaiting your input — the Claude-Code "you timed out"
-  // case. runCount comes from the History row for that session.
+  // Auto-recap the active chat when it sits idle for 3 min (see useAutoRecap).
+  // Keyed on the History row's last_activity — a parked interactive run still
+  // reports "running", so idle can't be read off the run status.
   const activeSessionId = conversations.find((c) => c.id === activeId)?.sessionId;
-  const activeRun = activeSessionId ? runBySession.get(activeSessionId) : undefined;
-  const activeBusy =
-    activeRun?.status === "running" && !interrupts.get(activeRun.runId);
-  const activeRunCount = activeSessionId
-    ? merged.find((c) => c.sessionId === activeSessionId)?.runCount ?? 0
+  const activeLastActivity = activeSessionId
+    ? merged.find((c) => c.sessionId === activeSessionId)?.lastActivity ?? 0
     : 0;
   useAutoRecap({
     sessionId: activeSessionId,
-    runCount: activeRunCount,
-    busy: Boolean(activeBusy),
+    lastActivity: activeLastActivity,
     recap: history.recap,
   });
 
@@ -154,13 +172,9 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
       <div className={collapsed ? "conv-tiles collapsed" : "conv-tiles"}>
         {rows.map((chat) => {
           const run = chat.sessionId ? runBySession.get(chat.sessionId) : undefined;
-          // Join the pending question by ANY runId we know for this chat: the
-          // local conversation's persisted runId (immediate for chats started
-          // here) OR the tile's runId (server-only chats, other devices).
-          const localRunId = chat.localId ? convById.get(chat.localId)?.runId : undefined;
-          const question =
-            (localRunId ? interrupts.get(localRunId) : undefined) ??
-            (run ? interrupts.get(run.runId) : undefined);
+          const question = chat.sessionId
+            ? firstPending(runIdsBySession.get(chat.sessionId), interrupts)
+            : undefined;
           return (
             <ConversationTile
               key={chat.key}

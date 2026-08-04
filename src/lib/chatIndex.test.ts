@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Conversation } from "../state/conversations";
 import type { HistoryChat } from "./historyTypes";
-import { mergeChats, shouldRecap } from "./chatIndex";
+import { mergeChats } from "./chatIndex";
 
 function chat(p: Partial<HistoryChat> & { session_id: string }): HistoryChat {
   return {
@@ -78,16 +78,16 @@ describe("mergeChats", () => {
     );
     expect(rows.map((r) => r.key)).toEqual(["pin", "new", "old"]);
   });
-});
 
-describe("shouldRecap", () => {
-  it("recaps a long chat that has had new turns since the last recap", () => {
-    expect(shouldRecap({ runCount: 5 }, 3)).toBe(true);
-  });
-  it("skips short chats", () => {
-    expect(shouldRecap({ runCount: 2 }, 0)).toBe(false);
-  });
-  it("skips when no new turns happened since the last recap", () => {
-    expect(shouldRecap({ runCount: 5 }, 5)).toBe(false);
+  it("hides sessions served by loomcycle's internal maintenance agents", () => {
+    const rows = mergeChats(
+      [
+        chat({ session_id: "real", agent: "chat/medium" }),
+        chat({ session_id: "svc1", agent: "memory/extractor" }),
+        chat({ session_id: "svc2", agent: "memory/consolidator" }),
+      ],
+      [],
+    );
+    expect(rows.map((r) => r.key)).toEqual(["real"]);
   });
 });

@@ -38,6 +38,18 @@ function ms(iso: string | undefined, fallback: number): number {
   return Number.isNaN(t) ? fallback : t;
 }
 
+// loomcycle's own maintenance agents (config `internal: true`) create sessions
+// that are runtime bookkeeping, not conversations — memory extraction /
+// consolidation. The server History list hides them by default, but sessions
+// from before an agent was marked internal (or an instance that didn't) leak
+// through, so we also guard here. Keep this to the exact known service agents so
+// a user's legitimately-named chat is never hidden.
+const INTERNAL_AGENTS = new Set(["memory/extractor", "memory/consolidator"]);
+
+export function isInternalAgent(agent: string): boolean {
+  return INTERNAL_AGENTS.has(agent);
+}
+
 export function mergeChats(
   sessions: HistoryChat[],
   locals: Conversation[],
@@ -55,6 +67,7 @@ export function mergeChats(
   // returns archived rows when asked (include_archived), so normally there are
   // none here anyway.
   for (const s of sessions) {
+    if (isInternalAgent(s.agent)) continue; // runtime bookkeeping, not a chat
     const local = localBySession.get(s.session_id);
     out.push({
       key: s.session_id,
@@ -93,18 +106,4 @@ export function mergeChats(
     return b.lastActivity - a.lastActivity;
   });
   return out;
-}
-
-/** Whether the active chat is due a fresh recap: it's long enough to be worth
- *  summarizing and has had new turns since we last recapped it. Staleness is
- *  keyed on `runCount` (monotonic — a recap can't add a run) rather than
- *  `last_activity`, so a recap that bumps activity can't trigger another recap.
- *  `lastRecapRunCount` is the run count we recapped at previously (0 if never). */
-export function shouldRecap(
-  chat: { runCount: number },
-  lastRecapRunCount: number,
-  minRuns = 3,
-): boolean {
-  if (chat.runCount < minRuns) return false;
-  return chat.runCount > lastRecapRunCount;
 }

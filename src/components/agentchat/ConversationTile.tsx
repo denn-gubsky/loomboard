@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArchiveRestore, Check, Pencil, Trash2, X } from "lucide-react";
 import type { InterruptRow, LoomcycleClient } from "@loomcycle/client";
 import type { DisplayChat } from "../../lib/chatIndex";
@@ -53,15 +53,25 @@ export default function ConversationTile({
   );
 
   const [ref, inView] = useInView<HTMLDivElement>();
-  // Refetch the preview when the run transitions; string key so a not-started
+  // While a run is live, poll the transcript so the tile's preview visibly
+  // scrolls (the aggregate feed carries no text). Gated on in-view + expanded so
+  // it costs nothing for off-screen / collapsed tiles.
+  const live = runState?.status === "running";
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!live || collapsed || !inView) return;
+    const id = setInterval(() => setTick((t) => t + 1), 2500);
+    return () => clearInterval(id);
+  }, [live, collapsed, inView]);
+  // Refetch on run transition or each poll tick; string key so a not-started
   // chat (no runState) still has a stable key.
-  const refreshKey = runState?.ts ?? String(chat.lastActivity);
+  const refreshKey = `${runState?.ts ?? chat.lastActivity}:${tick}`;
   const { lines, loading } = useTilePreview(
     client,
     chat.sessionId,
     refreshKey,
     inView && !collapsed,
-    2,
+    3,
   );
 
   const state = runState ? tileDisplayState(runState, Boolean(question)) : "idle";
