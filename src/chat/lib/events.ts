@@ -1,4 +1,4 @@
-import type { AgentEvent, TranscriptResponse } from "@loomcycle/client";
+import type { AgentEvent, TranscriptEvent, TranscriptResponse } from "@loomcycle/client";
 
 // The SDK's AgentEvent type models only a subset of the event types the server
 // emits — the SSE parser passes through unmodeled types (e.g. "thinking",
@@ -123,6 +123,17 @@ export function transcriptToEvents(t: TranscriptResponse): ChatEvent[] {
     out.push({ ...base, type: te.type } as ChatEvent);
   }
   return out;
+}
+
+/** The highest event `seq` belonging to `runId` in a session transcript — the
+ *  point to re-attach (streamRunByID) a tail from, so the already-rendered
+ *  history isn't replayed. 0 when the run has no events here. Pure. */
+export function lastSeqForRun(events: TranscriptEvent[], runId: string): number {
+  let max = 0;
+  for (const e of events) {
+    if (e.run_id === runId && e.seq > max) max = e.seq;
+  }
+  return max;
 }
 
 /** Normalize an interrupt's `options` (array | JSON string | absent) to a

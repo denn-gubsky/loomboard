@@ -11,7 +11,7 @@ import {
   initialChatState,
   type ChatState,
 } from "../lib/eventReducer";
-import { transcriptToEvents, type ChatEvent } from "../lib/events";
+import { lastSeqForRun, transcriptToEvents, type ChatEvent } from "../lib/events";
 import { tokensPerSecond } from "../lib/metrics";
 import { buildUserSegments } from "../lib/segments";
 import { resolveConversationAgent } from "../lib/agentFork";
@@ -183,14 +183,22 @@ export function useChat(
       beginTurnTiming();
 
       try {
-        // Fast path: steer a live run with plain text (no attachments).
+        // Fast path: steer the live run with plain text (no attachments) so the
+        // whole conversation stays under ONE run_id. If the steer fails (the run
+        // was reaped / went terminal since we attached), fall through to
+        // continueSession, which resumes the session with a fresh run.
         if (ready.length === 0 && liveRef.current && runIdRef.current) {
-          await client.sendRunInput(runIdRef.current, trimmed);
-          return;
+          try {
+            await client.sendRunInput(runIdRef.current, trimmed);
+            return;
+          } catch (e) {
+            if (isAbortError(e)) return;
+            liveRef.current = false;
+            console.warn("[chat] steer failed; resuming via continueSession", e);
+          }
         }
-        // Segments path: attachments, or a fresh/resumed turn. Supersede any
-        // live stream (the abandoned parked run is replayed server-side by
-        // continueSession).
+        // Segments path: attachments, or a fresh/resumed turn (no live run to
+        // steer). continueSession replays the session server-side into a new run.
         const segments = buildUserSegments(trimmed, ready);
         if (segments.length === 0) {
           setRunning(false);
@@ -312,10 +320,11 @@ export function useChat(
     if (!convo.sessionId) return;
 
     // Reload history from the transcript (role-aware: keeps user turns, skips
-    // the system prompt). We deliberately don't re-attach to a live run via
-    // streamRunByID — its replay synthesizes role-blind steer frames that would
-    // leak the system prompt and double user turns. The next send resumes the
-    // session via continueSession.
+    // the system prompt), THEN re-attach to the session's live interactive run
+    // (below) so follow-up turns steer the SAME run — keeping the whole
+    // conversation under one run_id. Safe because we tail from the run's last
+    // seq (no history replay) and the reducer ignores steer frames (so the
+    // re-attach can't double user turns or leak the flattened system prompt).
     const ac = new AbortController();
     abortRef.current = ac;
     void (async () => {
@@ -352,6 +361,20 @@ export function useChat(
               } as ChatEvent,
             });
           }
+
+          // Re-attach so plain follow-ups STEER this run (one run_id per
+          // session). Tail from the run's last seq so the rendered history
+          // isn't replayed. consume() flips liveRef on: a parked run keeps the
+          // stream open (→ steer path); a terminal run drains + ends, so liveRef
+          // falls back off and the next send uses continueSession.
+          runIdRef.current = convo.runId;
+          void consume(
+            client.streamRunByID(convo.runId, {
+              fromSeq: lastSeqForRun(t.events, convo.runId),
+              signal: ac.signal,
+            }),
+            gen,
+          );
         }
       } catch (e) {
         if (!isAbortError(e) && genRef.current === gen) {
