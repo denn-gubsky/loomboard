@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Archive, ArchiveRestore } from "lucide-react";
 import type { InterruptRow } from "@loomcycle/client";
 import { useConversations } from "../state/conversations";
@@ -49,7 +49,7 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   // The active chat's live run state, published by <Chat> — the aggregate feed
   // lags a just-started run and can't tell working from parked, so its tile dot
   // would otherwise read stale (and pulse forever on a parked question).
-  const { status: activeStatus } = useActiveChat();
+  const { status: activeStatus, setRecap } = useActiveChat();
 
   // Newest run per session — for the tile's live status dot + preview refresh.
   const runBySession = useMemo(() => {
@@ -83,9 +83,17 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   // Keyed on the History row's last_activity — a parked interactive run still
   // reports "running", so idle can't be read off the run status.
   const activeSessionId = conversations.find((c) => c.id === activeId)?.sessionId;
-  const activeLastActivity = activeSessionId
-    ? merged.find((c) => c.sessionId === activeSessionId)?.lastActivity ?? 0
-    : 0;
+  const activeChat = activeSessionId
+    ? merged.find((c) => c.sessionId === activeSessionId)
+    : undefined;
+  const activeLastActivity = activeChat?.lastActivity ?? 0;
+
+  // Publish the active chat's recap to the main pane (it renders it as a ghost
+  // message — the tile has no room). null clears it when there's no active chat.
+  useEffect(() => {
+    setRecap(activeChat?.summary ?? null);
+  }, [activeChat?.summary, setRecap]);
+
   useAutoRecap({
     sessionId: activeSessionId,
     lastActivity: activeLastActivity,

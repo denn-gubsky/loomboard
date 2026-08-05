@@ -5,7 +5,6 @@ import type { DisplayChat } from "../../lib/chatIndex";
 import { agentIdentity } from "../../lib/agentIdentity";
 import { tileDisplayState, type RunTile, type TileDisplayState } from "../../lib/runStates";
 import { useInView, useTilePreview } from "../../hooks/useTilePreview";
-import type { PreviewLine } from "../../lib/tilePreview";
 import AgentChatTile from "./AgentChatTile";
 
 // A minimized view of one prior chat for the sidebar. A chat comes from the merge
@@ -99,20 +98,10 @@ export default function ConversationTile({
   const alert =
     runState?.status === "failed" ? runState.error || "run failed" : undefined;
 
-  // While the agent is working, show the live transcript (it scrolls). When the
-  // chat is idle, prefer its recap summary — that's the whole point of the
-  // auto-recap — falling back to the last transcript lines until a recap exists.
-  const summaryLine: PreviewLine[] = chat.summary
-    ? [{ role: "assistant", kind: "notice", text: chat.summary }]
-    : [];
-  const preview =
-    state === "running"
-      ? lines.length > 0
-        ? lines
-        : summaryLine
-      : summaryLine.length > 0
-        ? summaryLine
-        : lines;
+  // The tile shows the live transcript preview (it scrolls while the agent
+  // works). The recap summary is NOT shown here — a paragraph truncated to one
+  // line is unreadable; it renders as a ghost message in the main pane instead.
+  const preview = lines;
 
   if (collapsed) {
     const { Icon } = identity;
