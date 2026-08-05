@@ -6,12 +6,14 @@ import {
   type ReactNode,
 } from "react";
 
-// Bridges the active <Chat>'s live run state to the sidebar. The chat surface
-// knows when the agent is working (thinking / responding / using tools) vs
-// parked on a question (useChat); the aggregate run-state feed usually doesn't
-// have a just-started run, and its "running" can't tell working from parked. So
-// the tile's activity dot would read stale. ChatArea publishes here;
-// ConversationList reads it for the active tile.
+// Shared state bus for the ACTIVE chat, bridging the sidebar and the main pane:
+//  - status flows main → sidebar: the chat surface knows when the agent is
+//    working vs parked on a question (useChat); the aggregate run-state feed
+//    lags a just-started run and can't tell working from parked, so the tile's
+//    activity dot would read stale. ChatArea publishes; ConversationList reads.
+//  - recap flows sidebar → main: the History summary lives with the chat list
+//    (useChatHistory); ConversationList publishes it and the main pane renders
+//    it as a ghost message (the tile has no room for it).
 
 export interface ActiveChatStatus {
   /** The agent is actively working right now (not parked awaiting input). */
@@ -25,13 +27,20 @@ const IDLE: ActiveChatStatus = { running: false, needsInput: false };
 interface ActiveChatState {
   status: ActiveChatStatus;
   setStatus: (s: ActiveChatStatus) => void;
+  /** The active chat's stored recap summary, or null. */
+  recap: string | null;
+  setRecap: (s: string | null) => void;
 }
 
 const Ctx = createContext<ActiveChatState | null>(null);
 
 export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ActiveChatStatus>(IDLE);
-  const value = useMemo(() => ({ status, setStatus }), [status]);
+  const [recap, setRecap] = useState<string | null>(null);
+  const value = useMemo(
+    () => ({ status, setStatus, recap, setRecap }),
+    [status, recap],
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

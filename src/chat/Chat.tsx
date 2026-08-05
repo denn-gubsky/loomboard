@@ -35,6 +35,9 @@ export interface ChatProps {
    *  a question. Lets a host show a live activity indicator — the aggregate
    *  run-state feed lags a just-started run and can't tell working from parked. */
   onRunStatus?: (status: { running: boolean; needsInput: boolean }) => void;
+  /** The conversation's stored recap summary, shown as a ghost note at the top
+   *  of the transcript. The host supplies it (e.g. from the History tool). */
+  recap?: string;
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -49,6 +52,7 @@ export default function Chat({
   theme,
   style,
   onRunStatus,
+  recap,
 }: ChatProps) {
   const client = useMemo(
     () => createLoomcycleClient(connection),
@@ -157,7 +161,7 @@ export default function Chat({
         />
       )}
 
-      <MessageList messages={chat.state.messages} running={chat.running} />
+      <MessageList messages={chat.state.messages} running={chat.running} recap={recap} />
 
       {chat.state.pendingInterrupt && (
         <InterruptCard
