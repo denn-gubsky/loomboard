@@ -99,13 +99,20 @@ export default function ConversationTile({
   const alert =
     runState?.status === "failed" ? runState.error || "run failed" : undefined;
 
-  // A live transcript is the freshest signal; when the chat is idle and has a
-  // stored recap, show that instead — it's the point of the summary in the list.
-  const summaryLine: PreviewLine[] =
-    chat.summary && state !== "running" && lines.length === 0
-      ? [{ role: "assistant", kind: "notice", text: chat.summary }]
-      : [];
-  const preview = lines.length > 0 ? lines : summaryLine;
+  // While the agent is working, show the live transcript (it scrolls). When the
+  // chat is idle, prefer its recap summary — that's the whole point of the
+  // auto-recap — falling back to the last transcript lines until a recap exists.
+  const summaryLine: PreviewLine[] = chat.summary
+    ? [{ role: "assistant", kind: "notice", text: chat.summary }]
+    : [];
+  const preview =
+    state === "running"
+      ? lines.length > 0
+        ? lines
+        : summaryLine
+      : summaryLine.length > 0
+        ? summaryLine
+        : lines;
 
   if (collapsed) {
     const { Icon } = identity;
