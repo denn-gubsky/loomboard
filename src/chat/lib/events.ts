@@ -105,6 +105,11 @@ export function transcriptToEvents(t: TranscriptResponse): ChatEvent[] {
   const out: ChatEvent[] = [];
   for (const te of t.events) {
     if (te.type === "system_prompt") continue;
+    // Interruptions are LIVE control-flow, not renderable history. Replaying a
+    // historical one resurfaces an already-resolved question whose id is stale —
+    // answering it 409s "interrupt does not belong to that run". A genuinely
+    // pending interrupt is re-attached live on reopen (see useChat), not here.
+    if (te.type === "interruption_pending") continue;
     if (te.type === "user_input") {
       const text = userInputText(te.payload);
       // Skip rows with no user-role text (e.g. a pure system-prompt row).

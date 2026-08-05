@@ -1,9 +1,9 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArchiveRestore, Check, Pencil, Trash2, X } from "lucide-react";
 import type { InterruptRow, LoomcycleClient } from "@loomcycle/client";
 import type { DisplayChat } from "../../lib/chatIndex";
 import { agentIdentity } from "../../lib/agentIdentity";
-import { tileDisplayState, type RunTile } from "../../lib/runStates";
+import { tileDisplayState, type RunTile, type TileDisplayState } from "../../lib/runStates";
 import { useInView, useTilePreview } from "../../hooks/useTilePreview";
 import type { PreviewLine } from "../../lib/tilePreview";
 import AgentChatTile from "./AgentChatTile";
@@ -20,6 +20,8 @@ export default function ConversationTile({
   runState,
   question,
   active,
+  liveRunning,
+  liveNeedsInput,
   confirming,
   renaming,
   onSelect,
@@ -36,6 +38,11 @@ export default function ConversationTile({
   runState?: RunTile;
   question?: InterruptRow;
   active: boolean;
+  /** The active chat's agent is working now (from <Chat>) — authoritative over
+   *  the aggregate feed, which lags a run started this session. */
+  liveRunning?: boolean;
+  /** The active chat parked on a question (from <Chat>). */
+  liveNeedsInput?: boolean;
   confirming: boolean;
   renaming: boolean;
   onSelect: () => void;
@@ -53,18 +60,42 @@ export default function ConversationTile({
   );
 
   const [ref, inView] = useInView<HTMLDivElement>();
-  // Refetch the preview when the run transitions; string key so a not-started
+  // Poll the transcript so the preview stays live and visibly scrolls (the
+  // aggregate feed carries no text). While a run is generating — but ALSO always
+  // for the ACTIVE chat: a run started this session usually isn't in the
+  // aggregate feed yet, so `runState` is undefined and "running" can't be
+  // trusted, and the active chat is the one the user is watching. Gated on
+  // in-view + expanded so off-screen / collapsed tiles cost nothing.
+  const live = runState?.status === "running";
+  const poll = (live || active) && !collapsed && inView;
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!poll) return;
+    const id = setInterval(() => setTick((t) => t + 1), 2500);
+    return () => clearInterval(id);
+  }, [poll]);
+  // Refetch on run transition or each poll tick; string key so a not-started
   // chat (no runState) still has a stable key.
-  const refreshKey = runState?.ts ?? String(chat.lastActivity);
+  const refreshKey = `${runState?.ts ?? chat.lastActivity}:${tick}`;
   const { lines, loading } = useTilePreview(
     client,
     chat.sessionId,
     refreshKey,
     inView && !collapsed,
-    2,
+    3,
   );
 
-  const state = runState ? tileDisplayState(runState, Boolean(question)) : "idle";
+  // A pending question wins (needs input) — from the interrupts poll or the
+  // active <Chat>'s live signal; else the live "working" signal makes the dot
+  // pulse; else fall back to the aggregate feed; else idle.
+  const state: TileDisplayState =
+    question || liveNeedsInput
+      ? "needs_input"
+      : liveRunning
+        ? "running"
+        : runState
+          ? tileDisplayState(runState, false)
+          : "idle";
   const alert =
     runState?.status === "failed" ? runState.error || "run failed" : undefined;
 

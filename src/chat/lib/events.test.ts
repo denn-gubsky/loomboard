@@ -46,6 +46,24 @@ describe("transcriptToEvents", () => {
     expect(events[2].stop_reason).toBe("end_turn");
   });
 
+  it("skips interruption_pending rows (live control-flow; a replayed one has a stale id)", () => {
+    const t: TranscriptResponse = {
+      session: { id: "s1", user_id: "u", agent: "chat", created_at: "" },
+      events: [
+        { seq: 0, run_id: "r1", ts_ns: 0, type: "text", event: { type: "text", text: "hi" } },
+        {
+          seq: 1,
+          run_id: "r1",
+          ts_ns: 1,
+          type: "interruption_pending",
+          event: { type: "interruption_pending", interruption: { interrupt_id: "i1", kind: "question", question: "?" } },
+        },
+        { seq: 2, run_id: "r1", ts_ns: 2, type: "done", event: { type: "done", stop_reason: "end_turn" } },
+      ],
+    } as unknown as TranscriptResponse;
+    expect(transcriptToEvents(t).map((e) => e.type)).toEqual(["text", "done"]);
+  });
+
   it("skips a user_input row that has no role:user text (pure system prompt)", () => {
     const t: TranscriptResponse = {
       session: { id: "s1", user_id: "u", agent: "chat", created_at: "" },

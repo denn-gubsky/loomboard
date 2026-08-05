@@ -1,5 +1,5 @@
 import { Bot, AlertCircle } from "lucide-react";
-import { pickableAgents, type AgentEntry } from "../hooks/useAgents";
+import { isRetiredAgent, pickableAgents, type AgentEntry } from "../hooks/useAgents";
 
 interface Props {
   value: string;
@@ -42,7 +42,7 @@ export default function AgentPicker({
         {options.map((a) => (
           <option key={a.name} value={a.name}>
             {a.name}
-            {a.active_retired
+            {isRetiredAgent(a)
               ? " · retired"
               : a.static_definition?.tier
                 ? ` · ${a.static_definition.tier}`

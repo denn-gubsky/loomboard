@@ -8,13 +8,30 @@ interface Props {
   running: boolean;
 }
 
-export default function MessageList({ messages, running }: Props) {
-  const endRef = useRef<HTMLDivElement>(null);
+// How close to the bottom (px) still counts as "pinned" — a small slack so a
+// sub-pixel/last-line gap doesn't unstick us.
+const STICK_THRESHOLD = 80;
 
-  // Keep the latest output in view as it streams.
+export default function MessageList({ messages, running }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Whether we're following the tail. Starts pinned; set false the moment the
+  // user scrolls up so streaming output can't yank them back down, true again
+  // when they scroll back to the bottom.
+  const stickRef = useRef(true);
+
+  // Keep the latest output in view as it streams — but ONLY while pinned, so a
+  // user reading earlier messages isn't dragged to the bottom on every delta.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    const el = containerRef.current;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
   }, [messages, running]);
+
+  function onScroll() {
+    const el = containerRef.current;
+    if (!el) return;
+    stickRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD;
+  }
 
   // Show the waiting indicator until the agent produces visible output.
   const last = messages[messages.length - 1];
@@ -35,12 +52,11 @@ export default function MessageList({ messages, running }: Props) {
   }
 
   return (
-    <div className="messages">
+    <div className="messages" ref={containerRef} onScroll={onScroll}>
       {messages.map((m, i) => (
         <Message key={i} message={m} />
       ))}
       {waiting && <TypingIndicator />}
-      <div ref={endRef} />
     </div>
   );
 }

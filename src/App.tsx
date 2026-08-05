@@ -7,6 +7,7 @@ import {
   useConversations,
   type Conversation,
 } from "./state/conversations";
+import { ActiveChatProvider, useActiveChat } from "./state/activeChat";
 import type { Connection } from "./chat/lib/createClient";
 import type { ConnectionSettings as ConnSettings } from "./state/settings";
 import { isTauri, proxyMode } from "./lib/proxyMode";
@@ -52,6 +53,7 @@ function buildConnection(s: ConnSettings): Connection {
 function ChatArea() {
   const { settings } = useConnection();
   const { active, update } = useConversations();
+  const { setStatus } = useActiveChat();
   const connection = useMemo<Connection | null>(
     () => (settings ? buildConnection(settings) : null),
     [settings],
@@ -86,6 +88,7 @@ function ChatArea() {
       connection={connection}
       conversation={active}
       onConversationChange={onConversationChange}
+      onRunStatus={setStatus}
     />
   );
 }
@@ -142,16 +145,18 @@ function AppShell() {
     new URLSearchParams(window.location.search).has("board");
   return (
     <ConversationsProvider>
-      <div className="app-shell">
-        <Sidebar view={view} onViewChange={setView} />
-        {devBoard ? (
-          <BoardArea />
-        ) : view === "library" ? (
-          <LibraryArea />
-        ) : (
-          <ChatArea />
-        )}
-      </div>
+      <ActiveChatProvider>
+        <div className="app-shell">
+          <Sidebar view={view} onViewChange={setView} />
+          {devBoard ? (
+            <BoardArea />
+          ) : view === "library" ? (
+            <LibraryArea />
+          ) : (
+            <ChatArea />
+          )}
+        </div>
+      </ActiveChatProvider>
     </ConversationsProvider>
   );
 }
