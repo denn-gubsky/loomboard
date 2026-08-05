@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptResponse } from "@loomcycle/client";
-import { optionsToArray, transcriptToEvents } from "./events";
+import { lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
 
 describe("optionsToArray", () => {
   it("passes through a string array", () => {
@@ -13,6 +13,23 @@ describe("optionsToArray", () => {
     expect(optionsToArray(undefined)).toEqual([]);
     expect(optionsToArray("not json")).toEqual([]);
     expect(optionsToArray(42)).toEqual([]);
+  });
+});
+
+describe("lastSeqForRun", () => {
+  const events = [
+    { seq: 1, run_id: "rA", ts_ns: 0, type: "text", event: {} },
+    { seq: 2, run_id: "rA", ts_ns: 0, type: "done", event: {} },
+    { seq: 3, run_id: "rB", ts_ns: 0, type: "text", event: {} },
+    { seq: 4, run_id: "rB", ts_ns: 0, type: "done", event: {} },
+  ] as unknown as TranscriptResponse["events"];
+
+  it("returns the max seq for the run (the tail-from point)", () => {
+    expect(lastSeqForRun(events, "rA")).toBe(2);
+    expect(lastSeqForRun(events, "rB")).toBe(4);
+  });
+  it("returns 0 for a run with no events here", () => {
+    expect(lastSeqForRun(events, "rC")).toBe(0);
   });
 });
 
