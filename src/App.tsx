@@ -52,8 +52,14 @@ function buildConnection(s: ConnSettings): Connection {
 
 function ChatArea() {
   const { settings } = useConnection();
-  const { active, update } = useConversations();
+  const { conversations, active, update } = useConversations();
   const { setStatus, recap } = useActiveChat();
+  // Agents the user has run before — suggestions for the picker's free-text
+  // fallback when the agent library can't be listed (a user token).
+  const knownAgents = useMemo(
+    () => Array.from(new Set(conversations.map((c) => c.baseAgent).filter(Boolean))),
+    [conversations],
+  );
   const connection = useMemo<Connection | null>(
     () => (settings ? buildConnection(settings) : null),
     [settings],
@@ -90,6 +96,7 @@ function ChatArea() {
       onConversationChange={onConversationChange}
       onRunStatus={setStatus}
       recap={recap ?? undefined}
+      knownAgents={knownAgents}
     />
   );
 }
@@ -139,11 +146,15 @@ function BoardArea() {
 // Connected app: a left rail that switches the main pane between the chat
 // surface and the Library.
 function AppShell() {
+  const { capabilities } = useConnection();
   const [view, setView] = useState<"chat" | "library">("chat");
   // Dev-only preview of the agent-tile board via `?board` — no nav entry yet.
   const devBoard =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).has("board");
+  // The Library needs substrate:tenant — a user token can't open it (the nav is
+  // hidden too), so fall back to chat rather than render a wall of 403s.
+  const showLibrary = view === "library" && capabilities.canTenant;
   return (
     <ConversationsProvider>
       <ActiveChatProvider>
@@ -151,7 +162,7 @@ function AppShell() {
           <Sidebar view={view} onViewChange={setView} />
           {devBoard ? (
             <BoardArea />
-          ) : view === "library" ? (
+          ) : showLibrary ? (
             <LibraryArea />
           ) : (
             <ChatArea />

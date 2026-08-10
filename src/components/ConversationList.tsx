@@ -40,10 +40,14 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   const { conversations, activeId, select, update, remove, openSession } =
     useConversations();
   const client = useLoomcycle();
-  const { principal } = useConnection();
+  const { principal, capabilities } = useConnection();
   const userId = principal?.subject ?? null;
+  // The History tool (/v1/_history) requires substrate:tenant — a delegated user
+  // token 403s, so skip it entirely and let the list fall back to the local
+  // store. Rename stays local, archive/search/recap are hidden (see below).
+  const canTenant = capabilities.canTenant;
 
-  const history = useChatHistory(client, Boolean(userId));
+  const history = useChatHistory(client, Boolean(userId) && canTenant);
   const { tiles } = useUserRunStates(client, userId);
   const interrupts = useUserInterrupts(client, userId);
   // The active chat's live run state, published by <Chat> — the aggregate feed
@@ -95,7 +99,8 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   }, [activeChat?.summary, setRecap]);
 
   useAutoRecap({
-    sessionId: activeSessionId,
+    // recap is a History op — don't arm it without tenant reach.
+    sessionId: canTenant ? activeSessionId : undefined,
     lastActivity: activeLastActivity,
     recap: history.recap,
   });
@@ -128,27 +133,27 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
 
   function doRename(chat: DisplayChat, title: string) {
     setRenamingKey(null);
-    if (chat.sessionId) {
-      void history.rename(chat.sessionId, title);
-      if (chat.localId) update(chat.localId, { title }); // keep the local mirror in sync
-    } else if (chat.localId) {
-      update(chat.localId, { title });
-    }
+    // Server rename is a History op — only when we can reach it; otherwise the
+    // local title still updates (the list is local-backed under a user token).
+    if (chat.sessionId && canTenant) void history.rename(chat.sessionId, title);
+    if (chat.localId) update(chat.localId, { title });
   }
 
   // The tile's primary destructive action: restore an archived chat, archive a
-  // sent chat (soft-hide), or hard-remove an unsent draft.
+  // sent chat (soft-hide), or hard-remove an unsent draft. Without tenant reach
+  // there's no archive, so just drop the local record.
   function doPrimary(chat: DisplayChat) {
     setConfirmingKey(null);
-    if (chat.archived && chat.sessionId) {
+    if (canTenant && chat.archived && chat.sessionId) {
       void history.archive(chat.sessionId, false);
-    } else if (chat.sessionId) {
+    } else if (canTenant && chat.sessionId) {
       void history.archive(chat.sessionId, true);
       if (chat.localId && chat.localId === activeId) select(null);
     } else if (chat.localId) {
       const local = conversations.find((c) => c.id === chat.localId);
       if (local?.forkDefName) void deleteConversationAgent(client, local.forkDefName);
       remove(chat.localId);
+      if (chat.localId === activeId) select(null);
     }
   }
 
@@ -166,19 +171,23 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
     <div className={collapsed ? "conv-panel collapsed" : "conv-panel"}>
       {!collapsed && (
         <div className="conv-toolbar">
-          <HistorySearch related={history.related} onChange={setFilter} />
-          <button
-            type="button"
-            className={showArchived ? "conv-archived-toggle active" : "conv-archived-toggle"}
-            title={showArchived ? "Show active chats" : "Show archived chats"}
-            onClick={() => {
-              setShowArchived((v) => !v);
-              setConfirmingKey(null);
-            }}
-          >
-            {showArchived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
-            <span>{showArchived ? "Active" : "Archived"}</span>
-          </button>
+          {/* Semantic search (History `related`) needs tenant reach; a title
+              filter over the loaded list always works. Archive is History-only. */}
+          <HistorySearch related={history.related} semantic={canTenant} onChange={setFilter} />
+          {canTenant && (
+            <button
+              type="button"
+              className={showArchived ? "conv-archived-toggle active" : "conv-archived-toggle"}
+              title={showArchived ? "Show active chats" : "Show archived chats"}
+              onClick={() => {
+                setShowArchived((v) => !v);
+                setConfirmingKey(null);
+              }}
+            >
+              {showArchived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+              <span>{showArchived ? "Active" : "Archived"}</span>
+            </button>
+          )}
         </div>
       )}
 

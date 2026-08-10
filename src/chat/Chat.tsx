@@ -38,6 +38,9 @@ export interface ChatProps {
   /** The conversation's stored recap summary, shown as a ghost note at the top
    *  of the transcript. The host supplies it (e.g. from the History tool). */
   recap?: string;
+  /** Agent-name suggestions for the free-text fallback the picker shows when the
+   *  agent library can't be read (a user token 403s on the tenant-scoped list). */
+  knownAgents?: string[];
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -53,6 +56,7 @@ export default function Chat({
   style,
   onRunStatus,
   recap,
+  knownAgents,
 }: ChatProps) {
   const client = useMemo(
     () => createLoomcycleClient(connection),
@@ -125,6 +129,7 @@ export default function Chat({
           agents={agents}
           loading={loading}
           error={error}
+          knownAgents={knownAgents}
         />
         <button
           className={custom ? "config-toggle active" : "config-toggle"}

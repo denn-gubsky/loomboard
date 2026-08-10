@@ -19,9 +19,13 @@ export const NO_FILTER: ChatFilter = { text: "", semanticIds: null };
 export default function HistorySearch({
   related,
   onChange,
+  semantic = true,
 }: {
   related: (q: string) => Promise<HistoryChat[] | null>;
   onChange: (f: ChatFilter) => void;
+  /** Offer server-side semantic search (History `related`). Off for a user
+   *  token, which can't reach the History tool — the title filter still works. */
+  semantic?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
@@ -70,23 +74,25 @@ export default function HistorySearch({
           aria-label="Search chats"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && semantic) {
               e.preventDefault();
               void runSemantic();
             }
             if (e.key === "Escape") clear();
           }}
         />
-        <button
-          type="button"
-          className="history-search-btn"
-          title="Semantic search"
-          aria-label="Semantic search"
-          disabled={busy || !q.trim()}
-          onClick={() => void runSemantic()}
-        >
-          <Sparkles size={13} />
-        </button>
+        {semantic && (
+          <button
+            type="button"
+            className="history-search-btn"
+            title="Semantic search"
+            aria-label="Semantic search"
+            disabled={busy || !q.trim()}
+            onClick={() => void runSemantic()}
+          >
+            <Sparkles size={13} />
+          </button>
+        )}
         {q && (
           <button
             type="button"

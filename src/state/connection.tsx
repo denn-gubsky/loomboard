@@ -3,12 +3,14 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import type { LoomcycleClient, WhoamiResponse } from "@loomcycle/client";
 import { getClient, resetClient } from "../lib/loomcycle";
+import { deriveCapabilities, type Capabilities } from "../lib/capabilities";
 import { describeError } from "../chat/lib/errors";
 import {
   clearSettings,
@@ -23,6 +25,9 @@ interface ConnectionState {
   status: Status;
   settings: ConnectionSettings | null;
   principal: WhoamiResponse | null;
+  /** What the bearer can reach (derived from the principal's scopes). Gates the
+   *  tenant-only surfaces so a delegated user token (RFC BX) stays usable. */
+  capabilities: Capabilities;
   error: string | null;
   connect: (s: ConnectionSettings) => Promise<void>;
   disconnect: () => void;
@@ -79,9 +84,11 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     if (persisted) void connect(persisted);
   }, [connect]);
 
+  const capabilities = useMemo(() => deriveCapabilities(principal), [principal]);
+
   return (
     <Ctx.Provider
-      value={{ status, settings, principal, error, connect, disconnect }}
+      value={{ status, settings, principal, capabilities, error, connect, disconnect }}
     >
       {children}
     </Ctx.Provider>

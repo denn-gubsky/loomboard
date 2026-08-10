@@ -165,6 +165,20 @@
   outline: none;
   border-color: var(--accent-dim);
 }
+/* Free-text agent field (fallback when the agent library can't be listed). */
+.loomchat .agent-freetext {
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4em 0.6em;
+  font: inherit;
+  min-width: 12rem;
+}
+.loomchat .agent-freetext:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
 .loomchat .config-toggle {
   display: inline-flex;
   align-items: center;
