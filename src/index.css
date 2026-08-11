@@ -441,10 +441,27 @@ button {
 }
 .who strong {
   font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
 }
 .who span {
   font-size: 0.72rem;
   color: var(--text-dim);
+}
+/* Token-kind badge (user / isolated / operator / admin / open). */
+.who-kind {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.05em 0.4em;
 }
 .btn-ghost.sm {
   padding: 0.4em;

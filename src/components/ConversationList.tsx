@@ -43,6 +43,9 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   const { principal } = useConnection();
   const userId = principal?.subject ?? null;
 
+  // RFC BY (loomcycle 1.51): /v1/_history is member-readable, capped server-side
+  // to the caller's own [self, user] scope — so a delegated user token gets its
+  // OWN chat list, rename, archive, recap and search, same as an operator.
   const history = useChatHistory(client, Boolean(userId));
   const { tiles } = useUserRunStates(client, userId);
   const interrupts = useUserInterrupts(client, userId);

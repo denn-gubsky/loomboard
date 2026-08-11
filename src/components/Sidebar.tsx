@@ -9,6 +9,7 @@ import {
   Sun,
 } from "lucide-react";
 import { useConnection } from "../state/connection";
+import { tokenKindLabel } from "../lib/capabilities";
 import { useTheme } from "../hooks/useTheme";
 import NewChatButton from "./NewChatButton";
 import ConversationList from "./ConversationList";
@@ -31,7 +32,7 @@ function loadCollapsed(): boolean {
 }
 
 export default function Sidebar({ view, onViewChange }: Props) {
-  const { principal, disconnect } = useConnection();
+  const { principal, capabilities, disconnect } = useConnection();
   const { theme, toggle } = useTheme();
   // Read synchronously on first render so there's no expand→collapse flash.
   const [collapsed, setCollapsed] = useState(loadCollapsed);
@@ -70,13 +71,17 @@ export default function Sidebar({ view, onViewChange }: Props) {
         >
           <MessageSquare size={16} /> <span className="label">Chats</span>
         </button>
-        <button
-          className={view === "library" ? "side-nav-btn active" : "side-nav-btn"}
-          onClick={() => onViewChange("library")}
-          title="Library"
-        >
-          <LibraryIcon size={16} /> <span className="label">Library</span>
-        </button>
+        {/* The Library reads /v1/_library/* (substrate:tenant) — hide it for a
+            delegated user token, which would only get 403s there. */}
+        {capabilities.canTenant && (
+          <button
+            className={view === "library" ? "side-nav-btn active" : "side-nav-btn"}
+            onClick={() => onViewChange("library")}
+            title="Library"
+          >
+            <LibraryIcon size={16} /> <span className="label">Library</span>
+          </button>
+        )}
       </nav>
 
       {view === "chat" ? (
@@ -91,11 +96,13 @@ export default function Sidebar({ view, onViewChange }: Props) {
       <div className="sidebar-foot">
         {!collapsed && (
           <div className="who">
-            <strong>{principal?.subject ?? "—"}</strong>
-            <span>
-              {principal?.tenant_id}
-              {principal?.open_mode ? " · open" : ""}
-            </span>
+            <strong>
+              {principal?.subject ?? "—"}
+              {tokenKindLabel(principal) && (
+                <span className="who-kind">{tokenKindLabel(principal)}</span>
+              )}
+            </strong>
+            <span>{principal?.tenant_id}</span>
           </div>
         )}
         <button

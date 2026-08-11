@@ -3,6 +3,7 @@ import type {
   LibraryAgentDefinition,
   LibraryEntry,
   LoomcycleClient,
+  RunnableAgent,
 } from "@loomcycle/client";
 import { describeError } from "../lib/errors";
 
@@ -41,7 +42,23 @@ export function pickableAgents(agents: AgentEntry[], selected: string): AgentEnt
   return agents.filter((a) => !isRetiredAgent(a) || a.name === selected);
 }
 
-/** Fetch the runtime's library agents once per client. */
+/** A runnable-agent catalog row (RFC BY) as a minimal AgentEntry — enough for the
+ *  picker (the name); no static definition, so the config panel shows defaults. */
+function fromRunnable(a: RunnableAgent): AgentEntry {
+  return {
+    name: a.name,
+    source: "dynamic-only",
+    in_static: false,
+    in_substrate: true,
+    version_count: 1,
+    live_version_count: 1,
+  };
+}
+
+/** The agents the caller can run. Prefers the full library (operator/admin);
+ *  when that's forbidden — a delegated user token can't read the tenant-scoped
+ *  library — falls back to the runnable-agent catalog (RFC BY, loomcycle
+ *  v1.51+), so a user token still gets a real picker. */
 export function useAgents(client: LoomcycleClient): AgentsResult {
   const [agents, setAgents] = useState<AgentEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,18 +68,21 @@ export function useAgents(client: LoomcycleClient): AgentsResult {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    client
-      .listLibraryAgents()
-      .then((r) => {
-        if (cancelled) return;
-        setAgents(r.entries);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(describeError(e));
-        setLoading(false);
-      });
+    void (async () => {
+      try {
+        const r = await client.listLibraryAgents();
+        if (!cancelled) setAgents(r.entries);
+      } catch {
+        try {
+          const r = await client.runnableAgents();
+          if (!cancelled) setAgents(r.agents.map(fromRunnable));
+        } catch (e2: unknown) {
+          if (!cancelled) setError(describeError(e2));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
     return () => {
       cancelled = true;
     };
