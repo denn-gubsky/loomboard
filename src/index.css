@@ -208,6 +208,11 @@ button {
   font-size: 1.2rem;
   color: var(--text);
 }
+.connect-logo {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
 
 .connect-sub {
   margin: 0;
@@ -275,10 +280,15 @@ button {
   justify-content: space-between;
   gap: 0.4em;
 }
-.sidebar-head .brand {
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  font-size: 1.05rem;
+.sidebar-head .brand-logo {
+  height: 20px;
+  width: auto;
+  display: block;
+}
+.sidebar-head .brand-mark {
+  width: 26px;
+  height: 26px;
+  display: block;
 }
 .collapse-btn {
   flex-shrink: 0;
@@ -290,7 +300,10 @@ button {
   padding: 0.8rem 0.5rem;
 }
 .sidebar.collapsed .sidebar-head {
-  justify-content: center;
+  /* Stack the square mark above the expand button — the 58px rail is too narrow
+     to sit them side by side. */
+  flex-direction: column;
+  gap: 0.6rem;
 }
 .sidebar.collapsed .new-chat {
   padding: 0.55em 0;

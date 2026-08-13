@@ -13,6 +13,11 @@ import { tokenKindLabel } from "../lib/capabilities";
 import { useTheme } from "../hooks/useTheme";
 import NewChatButton from "./NewChatButton";
 import ConversationList from "./ConversationList";
+// The wordmark ships in two fills (dark UI wants the white one, light the black);
+// the square mark stands in when the rail is collapsed to icon width.
+import logoWhite from "../assets/loomboard-logo-white.svg";
+import logoBlack from "../assets/loomboard-logo-black.svg";
+import brandMark from "../assets/loomboard-favicon.svg";
 
 export type SidebarView = "chat" | "library";
 
@@ -52,7 +57,15 @@ export default function Sidebar({ view, onViewChange }: Props) {
   return (
     <aside className={collapsed ? "sidebar collapsed" : "sidebar"}>
       <div className="sidebar-head">
-        {!collapsed && <span className="brand">loomboard</span>}
+        {collapsed ? (
+          <img className="brand-mark" src={brandMark} alt="loomboard" />
+        ) : (
+          <img
+            className="brand-logo"
+            src={theme === "dark" ? logoWhite : logoBlack}
+            alt="loomboard"
+          />
+        )}
         <button
           className="btn-ghost sm collapse-btn"
           onClick={toggleCollapsed}

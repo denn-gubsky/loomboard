@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Plug, Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { useConnection } from "../state/connection";
+import brandMark from "../assets/loomboard-favicon.svg";
 
 // The connection / login screen. Collects the loomcycle base URL + bearer
 // token, validates them with whoami(), and gates the rest of the app. Shown
@@ -22,7 +23,7 @@ export default function ConnectionSettings() {
     <div className="connect-screen">
       <form className="connect-card" onSubmit={onSubmit}>
         <div className="connect-head">
-          <Plug size={22} />
+          <img className="connect-logo" src={brandMark} alt="loomboard" />
           <h1>Connect to loomcycle</h1>
         </div>
         <p className="connect-sub">
