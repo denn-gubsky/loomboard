@@ -519,15 +519,20 @@ button {
   display: none;
 }
 
-/* ---- library pane (hosts the @loomcycle/library component in the main area) ---- */
-.library-pane {
+/* ---- library / explorer / memory panes (host the @loomcycle/* components in
+   the main area) ---- */
+.library-pane,
+.explorer-pane,
+.memory-pane {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-.library-pane > .loomcycle-library {
+.library-pane > .loomcycle-library,
+.explorer-pane > .loomcycle-explorer,
+.memory-pane > .loomcycle-memory-view {
   flex: 1;
   min-height: 0;
 }

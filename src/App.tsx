@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Library } from "@loomcycle/library";
+import { PathExplorer } from "@loomcycle/explorer";
+import { MemoryView } from "@loomcycle/memory-view";
 import { ConnectionProvider, useConnection } from "./state/connection";
 import {
   ConversationsProvider,
@@ -101,10 +103,10 @@ function ChatArea() {
   );
 }
 
-// The loomcycle Library (skills / MCP management) mounted in the main pane,
-// where the list + lineage + modals have room. It reuses the app's connection
-// (dev-proxy fetch included) and principal; theme is inherited from <html>
-// data-theme. Agents management is a later add — extend `tabs` with "agents".
+// The loomcycle Library (agent defs / skills / MCP management) mounted in the
+// main pane, where the list + lineage + modals have room. It reuses the app's
+// connection (dev-proxy fetch included) and principal; theme is inherited from
+// <html> data-theme.
 function LibraryArea() {
   const { settings, principal } = useConnection();
   const connection = useMemo<Connection | null>(
@@ -117,9 +119,46 @@ function LibraryArea() {
       <Library
         connection={connection}
         principal={principal ?? undefined}
-        tabs={["skills", "mcp"]}
+        tabs={["agents", "skills", "mcp"]}
         onError={(e) => console.error("[library]", e)}
       />
+    </section>
+  );
+}
+
+// The Path VFS + chunked-graph Document explorer (@loomcycle/explorer). Same
+// connection/principal seam as the Library. Documents need SQL Memory enabled
+// server-side; when it's off the component surfaces the refusal via onError.
+function DocumentsArea() {
+  const { settings, principal } = useConnection();
+  const connection = useMemo<Connection | null>(
+    () => (settings ? buildConnection(settings) : null),
+    [settings],
+  );
+  if (!connection) return null;
+  return (
+    <section className="explorer-pane">
+      <PathExplorer
+        connection={connection}
+        principal={principal ?? undefined}
+        onError={(e) => console.error("[explorer]", e)}
+      />
+    </section>
+  );
+}
+
+// The off-run Memory console (@loomcycle/memory-view): k/v entries, bi-temporal
+// facts, and semantic search. Same connection seam; its own scoped styles.
+function MemoryArea() {
+  const { settings } = useConnection();
+  const connection = useMemo<Connection | null>(
+    () => (settings ? buildConnection(settings) : null),
+    [settings],
+  );
+  if (!connection) return null;
+  return (
+    <section className="memory-pane">
+      <MemoryView connection={connection} />
     </section>
   );
 }
@@ -147,14 +186,19 @@ function BoardArea() {
 // surface and the Library.
 function AppShell() {
   const { capabilities } = useConnection();
-  const [view, setView] = useState<"chat" | "library">("chat");
+  const [view, setView] = useState<"chat" | "library" | "documents" | "memory">(
+    "chat",
+  );
   // Dev-only preview of the agent-tile board via `?board` — no nav entry yet.
   const devBoard =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).has("board");
-  // The Library needs substrate:tenant — a user token can't open it (the nav is
-  // hidden too), so fall back to chat rather than render a wall of 403s.
+  // Library, Documents and Memory are all substrate:tenant surfaces — a user
+  // token can't open them (the nav is hidden too), so fall back to chat rather
+  // than render a wall of 403s.
   const showLibrary = view === "library" && capabilities.canTenant;
+  const showDocuments = view === "documents" && capabilities.canTenant;
+  const showMemory = view === "memory" && capabilities.canTenant;
   return (
     <ConversationsProvider>
       <ActiveChatProvider>
@@ -164,6 +208,10 @@ function AppShell() {
             <BoardArea />
           ) : showLibrary ? (
             <LibraryArea />
+          ) : showDocuments ? (
+            <DocumentsArea />
+          ) : showMemory ? (
+            <MemoryArea />
           ) : (
             <ChatArea />
           )}

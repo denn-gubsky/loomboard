@@ -5,6 +5,10 @@ import { isTauri } from "./lib/proxyMode";
 import "./index.css";
 import "./chat/styles.css";
 import "@loomcycle/library/styles.css";
+import "@loomcycle/explorer/styles.css";
+// memory-view scopes its own classes (unlike library/explorer, which reuse the
+// shared loomcycle web styles), so this import is REQUIRED for it to render.
+import "@loomcycle/memory-view/styles.css";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("#root element not found");
