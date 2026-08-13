@@ -61,6 +61,8 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
+    "@loomcycle/explorer": "0.7.0",
+    "@loomcycle/memory-view": "0.1.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.47",
     "lucide-react": "^0.460.0",
@@ -77,7 +79,7 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.33",
     "@loomcycle/client": "^1.51.0",
-    "@loomcycle/library": "0.1.0",
+    "@loomcycle/library": "0.2.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/cli": "^2.11.4",
     "@tauri-apps/plugin-http": "^2.5.9",

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import {
+  Brain,
+  FolderTree,
   Library as LibraryIcon,
   LogOut,
   MessageSquare,
@@ -19,7 +21,7 @@ import logoWhite from "../assets/loomboard-logo-white.svg";
 import logoBlack from "../assets/loomboard-logo-black.svg";
 import brandMark from "../assets/loomboard-favicon.svg";
 
-export type SidebarView = "chat" | "library";
+export type SidebarView = "chat" | "library" | "documents" | "memory";
 
 interface Props {
   view: SidebarView;
@@ -84,16 +86,34 @@ export default function Sidebar({ view, onViewChange }: Props) {
         >
           <MessageSquare size={16} /> <span className="label">Chats</span>
         </button>
-        {/* The Library reads /v1/_library/* (substrate:tenant) — hide it for a
-            delegated user token, which would only get 403s there. */}
+        {/* Library, Documents and Memory are all substrate:tenant surfaces —
+            hide them for a delegated user token, which would only get 403s. */}
         {capabilities.canTenant && (
-          <button
-            className={view === "library" ? "side-nav-btn active" : "side-nav-btn"}
-            onClick={() => onViewChange("library")}
-            title="Library"
-          >
-            <LibraryIcon size={16} /> <span className="label">Library</span>
-          </button>
+          <>
+            <button
+              className={view === "library" ? "side-nav-btn active" : "side-nav-btn"}
+              onClick={() => onViewChange("library")}
+              title="Library"
+            >
+              <LibraryIcon size={16} /> <span className="label">Library</span>
+            </button>
+            <button
+              className={
+                view === "documents" ? "side-nav-btn active" : "side-nav-btn"
+              }
+              onClick={() => onViewChange("documents")}
+              title="Documents"
+            >
+              <FolderTree size={16} /> <span className="label">Documents</span>
+            </button>
+            <button
+              className={view === "memory" ? "side-nav-btn active" : "side-nav-btn"}
+              onClick={() => onViewChange("memory")}
+              title="Memory"
+            >
+              <Brain size={16} /> <span className="label">Memory</span>
+            </button>
+          </>
         )}
       </nav>
 
