@@ -1,6 +1,6 @@
 [package]
 name = "loomboard"
-version = "0.1.2"
+version = "0.2.0"
 description = "loomboard desktop — native-window client for the loomcycle agentic runtime"
 authors = ["Dennis Gubsky"]
 license = "Apache-2.0"
