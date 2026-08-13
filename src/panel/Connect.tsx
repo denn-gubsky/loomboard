@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Plug, Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import type { ConnectionSettings } from "../state/settings";
+import brandMark from "../assets/loomboard-favicon.svg";
 
 interface Props {
   onConnect: (s: ConnectionSettings) => void;
@@ -61,7 +62,7 @@ export default function Connect({ onConnect, error, initial }: Props) {
     <div className="connect-screen">
       <form className="connect-card" onSubmit={onSubmit}>
         <div className="connect-head">
-          <Plug size={22} />
+          <img className="connect-logo" src={brandMark} alt="loomboard" />
           <h1>Connect to loomcycle</h1>
         </div>
         <p className="connect-sub">
