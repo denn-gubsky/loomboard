@@ -21,14 +21,22 @@ describe("deriveCapabilities", () => {
     expect(deriveCapabilities(who({ legacy: true })).canTenant).toBe(true);
   });
 
-  it("denies tenant reach to a delegated user token (tenant or isolated mode)", () => {
-    const tenantUser = deriveCapabilities(who({ scopes: ["runs:create", "runs:read", "channel:publish", "channel:read"] }));
-    expect(tenantUser.canTenant).toBe(false);
-    expect(tenantUser.isIsolated).toBe(false);
+  it("grants tenant reach to a non-isolated member, confines an isolated user (RFC CB)", () => {
+    // A tenant-mode (member) user token: runs/channels, not isolated → reaches
+    // the tenant plane now that loomcycle admits members on those routes.
+    const member = deriveCapabilities(who({ scopes: ["runs:create", "runs:read", "channel:publish", "channel:read"] }));
+    expect(member.canTenant).toBe(true);
+    expect(member.isIsolated).toBe(false);
 
+    // An isolated substrate:user token stays confined.
     const isolated = deriveCapabilities(who({ scopes: ["substrate:user"] }));
     expect(isolated.canTenant).toBe(false);
     expect(isolated.isIsolated).toBe(true);
+
+    // A member who ALSO holds substrate:user (both) is not isolated → reaches it.
+    const both = deriveCapabilities(who({ scopes: ["substrate:user", "substrate:tenant"] }));
+    expect(both.canTenant).toBe(true);
+    expect(both.isIsolated).toBe(false);
   });
 
   it("null principal → no capabilities", () => {
