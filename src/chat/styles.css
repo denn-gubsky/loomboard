@@ -639,6 +639,73 @@
   font-size: 0.85rem;
   margin-bottom: 0.3em;
 }
+
+/* LLM-generated graphics: a ```svg fence or a data:image/* markdown image,
+   rendered as a picture with a Source/Copy/Save toolbar (GraphicFigure). */
+.loomchat .markdown .graphic {
+  display: block;
+  margin: 0.6em 0;
+  max-width: 100%;
+}
+.loomchat .markdown .graphic-toolbar {
+  display: flex;
+  gap: 0.3em;
+  margin-bottom: 0.35em;
+}
+.loomchat .markdown .graphic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.72rem;
+  padding: 0.2em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--overlay);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.loomchat .markdown .graphic-btn:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+.loomchat .markdown .graphic-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* Neutral mat so a transparent / dark-stroked graphic stays visible on the
+     dark theme. */
+  background: #fff;
+}
+.loomchat .markdown .graphic-source {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  padding: 0.7em 0.85em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--overlay);
+  color: var(--text);
+}
+.loomchat .markdown .graphic-error {
+  display: block;
+  color: var(--danger);
+  font-size: 0.85rem;
+  padding: 0.7em 0.85em;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+/* Plain (non-data-URI) markdown images. */
+.loomchat .markdown .msg-md-img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
 .loomchat .markdown table {
   border-collapse: collapse;
   margin: 0.6em 0;
