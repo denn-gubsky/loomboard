@@ -1,12 +1,17 @@
 import { Children, isValidElement, memo, useMemo, type ReactElement, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, {
+  defaultUrlTransform,
+  type Components,
+} from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkGemoji from "remark-gemoji";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import DiagramBlock from "./DiagramBlock";
+import GraphicFigure from "./GraphicFigure";
 import { codeLanguage, shouldRenderDiagram } from "../lib/diagram";
+import { shouldRenderSvg, isDataImageUrl } from "../lib/graphic";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
 
@@ -17,6 +22,13 @@ import "highlight.js/styles/github-dark.css";
 // executed (CLAUDE.md security rule 7).
 const remarkPlugins = [remarkGfm, remarkMath, remarkGemoji];
 const rehypePlugins = [rehypeKatex, rehypeHighlight];
+
+// Allow `data:image/*` URLs (react-markdown's default strips every data: URL) so
+// LLM/tool-emitted base64 images render, while keeping the default sanitization
+// (javascript:, etc.) for everything else.
+function urlTransform(url: string): string {
+  return isDataImageUrl(url) ? url : defaultUrlTransform(url);
+}
 
 type CodeProps = { className?: string; children?: ReactNode };
 
@@ -58,10 +70,35 @@ function MarkdownImpl({
       pre({ node: _node, children: preChildren, ...rest }) {
         const code = codeChild(preChildren);
         const lang = codeLanguage(code?.props.className);
+        const src = code ? codeText(code) : "";
         if (code && shouldRenderDiagram(lang, streaming)) {
-          return <DiagramBlock code={codeText(code)} />;
+          return <DiagramBlock code={src} />;
+        }
+        // A ```svg (or svg-bodied) fence renders as an image once finalized.
+        if (code && shouldRenderSvg(lang, src, streaming)) {
+          return <GraphicFigure source={src} />;
         }
         return <pre {...rest}>{preChildren}</pre>;
+      },
+      // A data:image/* markdown image renders with copy/download; other images
+      // (remote/relative) stay a plain constrained <img>.
+      img({ node: _node, src, alt }) {
+        if (typeof src === "string" && isDataImageUrl(src)) {
+          return (
+            <GraphicFigure
+              dataUri={src}
+              alt={typeof alt === "string" ? alt : undefined}
+            />
+          );
+        }
+        return (
+          <img
+            src={typeof src === "string" ? src : undefined}
+            alt={alt}
+            className="msg-md-img"
+            loading="lazy"
+          />
+        );
       },
     }),
     [streaming],
@@ -72,6 +109,7 @@ function MarkdownImpl({
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
+        urlTransform={urlTransform}
         components={components}
       >
         {children}
