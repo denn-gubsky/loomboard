@@ -23,10 +23,8 @@ describe("looksLikeSvg", () => {
 });
 
 describe("shouldRenderSvg", () => {
-  it("renders an explicit ```svg fence by its language", () => {
+  it("renders an svg-bodied svg/xml/html/unlabelled fence", () => {
     expect(shouldRenderSvg("svg", SVG, false)).toBe(true);
-  });
-  it("renders an svg-bodied xml/html/unlabelled fence", () => {
     expect(shouldRenderSvg("xml", SVG, false)).toBe(true);
     expect(shouldRenderSvg("html", SVG, false)).toBe(true);
     expect(shouldRenderSvg(null, SVG, false)).toBe(true);
@@ -34,6 +32,13 @@ describe("shouldRenderSvg", () => {
   it("leaves ordinary code fences alone", () => {
     expect(shouldRenderSvg("js", SVG, false)).toBe(false); // wrong language
     expect(shouldRenderSvg("xml", "<note>hi</note>", false)).toBe(false); // not svg
+  });
+  it("falls back to code when a ```svg fence has no svg body (empty/failed extraction)", () => {
+    // Guards the empty-graphic symptom: a labelled svg fence still needs a real
+    // <svg> body, so a botched source extraction renders as code, not a blank box.
+    expect(shouldRenderSvg("svg", "", false)).toBe(false);
+    expect(shouldRenderSvg("svg", "   ", false)).toBe(false);
+    expect(shouldRenderSvg("svg", "oops not svg", false)).toBe(false);
   });
   it("defers while the message is still streaming", () => {
     expect(shouldRenderSvg("svg", SVG, true)).toBe(false);

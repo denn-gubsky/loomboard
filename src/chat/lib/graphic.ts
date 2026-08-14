@@ -27,9 +27,12 @@ export function shouldRenderSvg(
   streaming: boolean,
 ): boolean {
   if (streaming) return false;
-  if (lang === "svg") return true;
-  if (lang === null || lang === "xml" || lang === "html") return looksLikeSvg(code);
-  return false;
+  if (lang !== null && lang !== "svg" && lang !== "xml" && lang !== "html") {
+    return false;
+  }
+  // Require a real `<svg>` body even for a ```svg fence — a failed/empty source
+  // extraction then falls back to a code block instead of an empty image.
+  return looksLikeSvg(code);
 }
 
 /** Encode an SVG document as an `<img>`-safe data URI. encodeURIComponent is

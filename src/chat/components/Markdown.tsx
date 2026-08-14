@@ -12,6 +12,7 @@ import DiagramBlock from "./DiagramBlock";
 import GraphicFigure from "./GraphicFigure";
 import { codeLanguage, shouldRenderDiagram } from "../lib/diagram";
 import { shouldRenderSvg, isDataImageUrl } from "../lib/graphic";
+import { nodeText } from "../lib/nodeText";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
 
@@ -43,15 +44,11 @@ function codeChild(children: ReactNode): ReactElement<CodeProps> | null {
   return isValidElement(el) ? (el as ReactElement<CodeProps>) : null;
 }
 
+// Recover the fenced source. rehype-highlight tokenizes recognized languages
+// (svg/xml/html/json/…) into nested <span>s, so a shallow read of the top-level
+// children returns "" — nodeText walks the tree to reconstruct the raw text.
 function codeText(el: ReactElement<CodeProps>): string {
-  const c = el.props.children;
-  const text =
-    typeof c === "string"
-      ? c
-      : Children.toArray(c)
-          .map((x) => (typeof x === "string" ? x : ""))
-          .join("");
-  return text.replace(/\n$/, "");
+  return nodeText(el.props.children).replace(/\n$/, "");
 }
 
 function MarkdownImpl({
