@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ScrollText } from "lucide-react";
+import { Loader2, ScrollText } from "lucide-react";
 import type { ChatMessage } from "../lib/eventReducer";
 import Message from "./Message";
 import TypingIndicator from "./TypingIndicator";
@@ -7,15 +7,24 @@ import TypingIndicator from "./TypingIndicator";
 interface Props {
   messages: ChatMessage[];
   running: boolean;
-  /** Stored recap summary of the conversation, shown as a ghost note at the top. */
+  /** Stored recap summary of the conversation, shown as a ghost note at the
+   *  BOTTOM — the transcript autoscrolls to the tail on open, so a top note is
+   *  never seen. */
   recap?: string;
+  /** True while a compaction request is in flight — shows a progress note. */
+  compacting?: boolean;
 }
 
 // How close to the bottom (px) still counts as "pinned" — a small slack so a
 // sub-pixel/last-line gap doesn't unstick us.
 const STICK_THRESHOLD = 80;
 
-export default function MessageList({ messages, running, recap }: Props) {
+export default function MessageList({
+  messages,
+  running,
+  recap,
+  compacting,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Whether we're following the tail. Starts pinned; set false the moment the
   // user scrolls up so streaming output can't yank them back down, true again
@@ -27,7 +36,7 @@ export default function MessageList({ messages, running, recap }: Props) {
   useEffect(() => {
     const el = containerRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages, running]);
+  }, [messages, running, recap, compacting]);
 
   function onScroll() {
     const el = containerRef.current;
@@ -56,6 +65,15 @@ export default function MessageList({ messages, running, recap }: Props) {
 
   return (
     <div className="messages" ref={containerRef} onScroll={onScroll}>
+      {messages.map((m, i) => (
+        <Message key={i} message={m} />
+      ))}
+      {waiting && <TypingIndicator />}
+      {compacting && (
+        <div className="compacting-note" role="status">
+          <Loader2 size={13} className="spin" /> Compacting context…
+        </div>
+      )}
       {recap && (
         <div className="ghost-recap" role="note">
           <span className="ghost-recap-head">
@@ -64,10 +82,6 @@ export default function MessageList({ messages, running, recap }: Props) {
           <p className="ghost-recap-body">{recap}</p>
         </div>
       )}
-      {messages.map((m, i) => (
-        <Message key={i} message={m} />
-      ))}
-      {waiting && <TypingIndicator />}
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Minimize2, Loader2 } from "lucide-react";
 import type { CompactRunResult } from "@loomcycle/client";
-import { formatCount } from "../lib/metrics";
 import { describeError } from "../lib/errors";
 
 interface Props {
@@ -10,8 +9,9 @@ interface Props {
   onCompact: () => Promise<CompactRunResult | undefined>;
 }
 
-// Summarizes the parked run's context to free tokens, then shows the
-// before→after result.
+// Summarizes the parked run's context to free tokens. A successful compaction
+// posts its before→after result into the transcript and refreshes the context
+// gauge; the inline note only covers the no-op and error cases.
 export default function CompactButton({ enabled, onCompact }: Props) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -21,11 +21,7 @@ export default function CompactButton({ enabled, onCompact }: Props) {
     setNote(null);
     try {
       const r = await onCompact();
-      if (r?.compacted) {
-        setNote(`${formatCount(r.before_tokens)}→${formatCount(r.after_tokens)}`);
-      } else {
-        setNote("nothing to compact");
-      }
+      if (r && !r.compacted) setNote("nothing to compact");
     } catch (e) {
       setNote(describeError(e));
     } finally {

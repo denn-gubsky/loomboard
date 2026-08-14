@@ -25,6 +25,8 @@ export interface UseChat {
   send: (text: string, attachments?: StagedAttachment[]) => void;
   cancel: () => void;
   compact: () => Promise<CompactRunResult | undefined>;
+  /** True while a compaction request is in flight (drives the in-chat progress). */
+  compacting: boolean;
   resolveInterrupt: (answer: string) => Promise<void>;
 }
 
@@ -263,10 +265,22 @@ export function useChat(
     dispatch({ kind: "turnStopped" });
   }, [client, state.runId]);
 
+  const [compacting, setCompacting] = useState(false);
   const compact = useCallback(async () => {
     if (!state.runId) return undefined;
     // compactRun 409s on a mid-turn run — callers gate this on awaitingInput.
-    return client.compactRun(state.runId);
+    setCompacting(true);
+    try {
+      const r = await client.compactRun(state.runId);
+      // On a real compaction, post the result to the transcript and refresh the
+      // context gauge (the button only signals no-op/errors now).
+      if (r?.compacted) {
+        dispatch({ kind: "compacted", before: r.before_tokens, after: r.after_tokens });
+      }
+      return r;
+    } finally {
+      setCompacting(false);
+    }
   }, [client, state.runId]);
 
   const resolveInterrupt = useCallback(
@@ -391,5 +405,14 @@ export function useChat(
   // Abort any live stream on unmount.
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  return { state, running, tokensPerSec, send, cancel, compact, resolveInterrupt };
+  return {
+    state,
+    running,
+    tokensPerSec,
+    send,
+    cancel,
+    compact,
+    compacting,
+    resolveInterrupt,
+  };
 }

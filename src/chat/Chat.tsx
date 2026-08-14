@@ -166,7 +166,12 @@ export default function Chat({
         />
       )}
 
-      <MessageList messages={chat.state.messages} running={chat.running} recap={recap} />
+      <MessageList
+        messages={chat.state.messages}
+        running={chat.running}
+        recap={recap}
+        compacting={chat.compacting}
+      />
 
       {chat.state.pendingInterrupt && (
         <InterruptCard
