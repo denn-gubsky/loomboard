@@ -271,6 +271,18 @@
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+/* In-transcript compaction progress, shown at the tail while compactRun runs. */
+.loomchat .compacting-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  max-width: 820px;
+  width: 100%;
+  margin: 0 auto;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
 .loomchat .hud-item.live {
   color: var(--accent);
 }
@@ -461,11 +473,12 @@
 }
 
 /* Ghost recap: the conversation's stored summary, shown as a faded note at the
-   top of the transcript (a glanceable digest of the discussion so far). */
+   BOTTOM of the transcript (the tail is what the autoscroll lands on, so a
+   glanceable digest belongs there, not up top where it's never seen). */
 .loomchat .ghost-recap {
   max-width: 820px;
   width: 100%;
-  margin: 0 auto;
+  margin: 0.4rem auto 0;
   padding: 0.6rem 0.9rem;
   border: 1px dashed var(--border);
   border-radius: 10px;

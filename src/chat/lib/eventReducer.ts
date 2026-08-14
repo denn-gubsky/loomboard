@@ -1,5 +1,10 @@
 import type { TranscriptResponse } from "@loomcycle/client";
-import { accumulateUsage, emptyMetrics, type TokenMetrics } from "./metrics";
+import {
+  accumulateUsage,
+  emptyMetrics,
+  formatCount,
+  type TokenMetrics,
+} from "./metrics";
 import {
   describeFallback,
   describeLimit,
@@ -82,6 +87,7 @@ export type ChatAction =
   | { kind: "thinkingDuration"; ms: number }
   | { kind: "clearInterrupt" }
   | { kind: "turnStopped" }
+  | { kind: "compacted"; before: number; after: number }
   | { kind: "reset"; seed?: Partial<ChatState> };
 
 // ---- Pure helpers over the message list ----
@@ -216,6 +222,29 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             parts: [{ type: "notice", level: "info", text: "Stopped." }],
           },
         ],
+      };
+    case "compacted":
+      // Compaction summarized the parked run's context. Post the before→after
+      // result as a transcript notice, and set contextTokens to the new
+      // footprint so the HUD gauge updates now instead of staying stale until
+      // the next turn's usage event.
+      return {
+        ...state,
+        messages: [
+          ...closeOpen(state.messages),
+          {
+            role: "assistant",
+            status: "done",
+            parts: [
+              {
+                type: "notice",
+                level: "info",
+                text: `Context compacted: ${formatCount(action.before)} → ${formatCount(action.after)} tokens`,
+              },
+            ],
+          },
+        ],
+        metrics: { ...state.metrics, contextTokens: action.after },
       };
     case "user":
       return {

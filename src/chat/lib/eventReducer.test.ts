@@ -120,6 +120,29 @@ describe("chatReducer — usage metrics", () => {
   });
 });
 
+describe("chatReducer — compaction", () => {
+  it("posts a before→after notice and resets contextTokens to the new footprint", () => {
+    let s = run([
+      ev("usage", {
+        usage: { input_tokens: 78000, output_tokens: 500, max_context_tokens: 200000 },
+      }),
+    ]);
+    expect(s.metrics.contextTokens).toBe(78500);
+
+    s = chatReducer(s, { kind: "compacted", before: 78000, after: 515 });
+    // The gauge reflects the freed footprint immediately (it used to stay stale
+    // until the next turn's usage event); the window ceiling is preserved.
+    expect(s.metrics.contextTokens).toBe(515);
+    expect(s.metrics.maxContextTokens).toBe(200000);
+    // Result lands in the transcript with a unit on BOTH numbers (the old inline
+    // label read "78k→515" — no unit on the second).
+    const last = assistant(s, s.messages.length - 1);
+    expect(last.parts).toEqual([
+      { type: "notice", level: "info", text: "Context compacted: 78k → 515 tokens" },
+    ]);
+  });
+});
+
 describe("chatReducer — interrupts", () => {
   it("sets and clears the pending interrupt", () => {
     let s = run([
