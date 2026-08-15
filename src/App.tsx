@@ -19,6 +19,7 @@ import ConnectionSettings from "./components/ConnectionSettings";
 import Sidebar from "./components/Sidebar";
 import Chat from "./chat/Chat";
 import AgentPortfolioGrid from "./components/agentchat/AgentPortfolioGrid";
+import WorkflowArea from "./components/workflow/WorkflowArea";
 
 // Turn the app's connection settings into the <Chat> connection. In proxy mode
 // (dev server or the standalone CLI) we route through a same-origin proxy
@@ -186,9 +187,9 @@ function BoardArea() {
 // surface and the Library.
 function AppShell() {
   const { capabilities } = useConnection();
-  const [view, setView] = useState<"chat" | "library" | "documents" | "memory">(
-    "chat",
-  );
+  const [view, setView] = useState<
+    "chat" | "library" | "documents" | "memory" | "workflow"
+  >("chat");
   // Dev-only preview of the agent-tile board via `?board` — no nav entry yet.
   const devBoard =
     import.meta.env.DEV &&
@@ -199,6 +200,7 @@ function AppShell() {
   const showLibrary = view === "library" && capabilities.canTenant;
   const showDocuments = view === "documents" && capabilities.canTenant;
   const showMemory = view === "memory" && capabilities.canTenant;
+  const showWorkflow = view === "workflow" && capabilities.canTenant;
   return (
     <ConversationsProvider>
       <ActiveChatProvider>
@@ -212,6 +214,8 @@ function AppShell() {
             <DocumentsArea />
           ) : showMemory ? (
             <MemoryArea />
+          ) : showWorkflow ? (
+            <WorkflowArea />
           ) : (
             <ChatArea />
           )}

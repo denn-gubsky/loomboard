@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Sun,
+  Workflow,
 } from "lucide-react";
 import { useConnection } from "../state/connection";
 import { tokenKindLabel } from "../lib/capabilities";
@@ -21,7 +22,7 @@ import logoWhite from "../assets/loomboard-logo-white.svg";
 import logoBlack from "../assets/loomboard-logo-black.svg";
 import brandMark from "../assets/loomboard-favicon.svg";
 
-export type SidebarView = "chat" | "library" | "documents" | "memory";
+export type SidebarView = "chat" | "library" | "documents" | "memory" | "workflow";
 
 interface Props {
   view: SidebarView;
@@ -112,6 +113,13 @@ export default function Sidebar({ view, onViewChange }: Props) {
               title="Memory"
             >
               <Brain size={16} /> <span className="label">Memory</span>
+            </button>
+            <button
+              className={view === "workflow" ? "side-nav-btn active" : "side-nav-btn"}
+              onClick={() => onViewChange("workflow")}
+              title="Workflow"
+            >
+              <Workflow size={16} /> <span className="label">Workflow</span>
             </button>
           </>
         )}
