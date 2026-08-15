@@ -1,9 +1,11 @@
 import type { TeamNameSummary } from "@loomcycle/client";
-import type { DocRow } from "../../lib/workflowApi";
+import type { ChunkRow, DocRow } from "../../lib/workflowApi";
+import WorkflowTree from "./WorkflowTree";
 
-// Left panel: pick a board Document, and bind a TeamDef to it (the binding is a
-// loomboard convention stored in the board's root-chunk fields). The team's
-// state machine supplies the board columns.
+// Left panel: pick a board Document, navigate its chunk TREE (select a section,
+// drag its child tasks onto the board), and bind a TeamDef (the binding is a
+// loomboard convention in the board's root-chunk fields). The team's states
+// become the board columns.
 export default function WorkflowLeft({
   boards,
   teams,
@@ -13,6 +15,12 @@ export default function WorkflowLeft({
   onBindTeam,
   listLoading,
   listError,
+  tasks,
+  rootChunkId,
+  sectionId,
+  onSelectSection,
+  onDragStart,
+  onDragEnd,
 }: {
   boards: DocRow[];
   teams: TeamNameSummary[];
@@ -22,6 +30,12 @@ export default function WorkflowLeft({
   onBindTeam: (name: string | undefined) => void;
   listLoading: boolean;
   listError: string | null;
+  tasks: ChunkRow[];
+  rootChunkId?: string;
+  sectionId: string | null;
+  onSelectSection: (id: string) => void;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
 }) {
   return (
     <div className="wf-left">
@@ -34,7 +48,7 @@ export default function WorkflowLeft({
         ) : boards.length === 0 ? (
           <div className="wf-dim">No documents in this scope.</div>
         ) : (
-          <ul className="wf-list">
+          <ul className="wf-list wf-boards">
             {boards.map((b) => (
               <li key={b.document_id}>
                 <button
@@ -49,6 +63,20 @@ export default function WorkflowLeft({
           </ul>
         )}
       </div>
+
+      {selectedDocId && (
+        <div className="wf-left-section wf-left-tree">
+          <div className="wf-left-title">Document — drag tasks to the board</div>
+          <WorkflowTree
+            tasks={tasks}
+            rootChunkId={rootChunkId}
+            sectionId={sectionId}
+            onSelectSection={onSelectSection}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+          />
+        </div>
+      )}
 
       <div className="wf-left-section">
         <div className="wf-left-title">Team</div>
@@ -66,7 +94,6 @@ export default function WorkflowLeft({
             </option>
           ))}
         </select>
-        {boundTeam && <div className="wf-dim wf-team-note">Columns follow this team's states.</div>}
       </div>
     </div>
   );

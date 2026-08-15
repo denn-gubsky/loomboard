@@ -578,14 +578,86 @@ button {
   display: flex;
 }
 .wf-left {
-  width: 240px;
+  width: 260px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
-  overflow: auto;
+  overflow: hidden;
   padding: 0.7rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+.wf-boards {
+  max-height: 30vh;
+  overflow-y: auto;
+}
+.wf-left-tree {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wf-left-tree .wf-tree {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* document chunk tree */
+.wf-tree,
+.wf-tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wf-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.25em 0.4em;
+  border-radius: 6px;
+  cursor: grab;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.wf-tree-row:hover {
+  background: var(--overlay);
+}
+.wf-tree-row.on {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.wf-tree-row:active {
+  cursor: grabbing;
+}
+.wf-tree-chev {
+  flex-shrink: 0;
+  transition: transform 0.12s ease;
+}
+.wf-tree-chev.open {
+  transform: rotate(90deg);
+}
+.wf-tree-dot {
+  width: 13px;
+  flex-shrink: 0;
+}
+.wf-tree-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-tree-status {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.4em;
+}
+.wf-tree-row.on .wf-tree-status {
+  color: var(--on-accent);
+  border-color: var(--on-accent);
 }
 .wf-left-title {
   font-size: 0.75rem;
