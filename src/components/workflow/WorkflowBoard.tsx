@@ -35,6 +35,7 @@ export default function WorkflowBoard({
   onDragStart,
   onDragEnd,
   onDrop,
+  onSelectRun,
 }: {
   graph?: TeamGraph;
   tasks: ChunkRow[];
@@ -46,6 +47,8 @@ export default function WorkflowBoard({
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onDrop: (id: string, toStatus: string) => void;
+  /** Open a run's chat in the right-panel dock (click an agent miniature). */
+  onSelectRun: (runId: string) => void;
 }) {
   const assigned = useMemo(() => tasks.filter((t) => t.status), [tasks]);
   const columns = useMemo(() => columnsFor(graph, assigned), [graph, assigned]);
@@ -145,22 +148,40 @@ export default function WorkflowBoard({
                             const Icon = rid.Icon;
                             const ni = interrupts.has(r.runId);
                             return (
-                              <span
+                              <button
                                 key={r.runId}
+                                type="button"
                                 className={ni ? "wf-mini needs-input" : "wf-mini running"}
-                                title={`${r.agent} — ${ni ? "needs input" : "working"}`}
+                                title={`${r.agent} — ${ni ? "needs input" : "working"} · open chat`}
                                 style={{ color: rid.color }}
+                                draggable={false}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSelectRun(r.runId);
+                                }}
                               >
                                 <Icon size={12} />
-                              </span>
+                              </button>
                             );
                           })}
                         </span>
                       )}
                       {needsInput && (
-                        <span className="wf-card-needs" title="An agent needs your answer">
+                        <button
+                          type="button"
+                          className="wf-card-needs"
+                          title="An agent needs your answer — open chat"
+                          draggable={false}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const asking = runs.find((r) => interrupts.has(r.runId));
+                            if (asking) onSelectRun(asking.runId);
+                          }}
+                        >
                           needs answer
-                        </span>
+                        </button>
                       )}
                     </div>
                   </div>

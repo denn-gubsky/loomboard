@@ -6,8 +6,10 @@ import { useUserRunStates } from "../../hooks/useUserRunStates";
 import { useUserInterrupts } from "../../hooks/useUserInterrupts";
 import { canTransition } from "../../lib/teamGraph";
 import { runsByChunk } from "../../lib/boardRuns";
+import { buildConnection } from "../../lib/buildConnection";
 import WorkflowLeft from "./WorkflowLeft";
 import WorkflowBoard from "./WorkflowBoard";
+import WorkflowChatDock from "./WorkflowChatDock";
 
 // How often to re-query task chunk statuses while a board is open (live card
 // movement). The agent miniatures update live off the run-state SSE; only the
@@ -37,11 +39,35 @@ export default function WorkflowArea() {
   // runs; group the runs by the board chunk they carry (loomcycle ≥1.54 stamps
   // parent_context.board_chunk_id on board-bound handler runs) → miniatures.
   const client = useLoomcycle();
-  const { principal } = useConnection();
+  const { principal, settings } = useConnection();
   const userId = principal?.subject ?? "";
   const { tiles } = useUserRunStates(client, userId);
   const interrupts = useUserInterrupts(client, userId);
   const runsForChunk = useMemo(() => runsByChunk(tiles), [tiles]);
+
+  // Right-panel chat dock (M3): selecting a card's agent miniature opens that
+  // run's live chat here. M3 shows one at a time; the array + focus state are the
+  // M4 (1–3 panes) foundation. `focusedRunId` owns the Escape key.
+  const connection = useMemo(() => (settings ? buildConnection(settings) : null), [settings]);
+  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
+  const [focusedRunId, setFocusedRunId] = useState<string | null>(null);
+  const selectRun = useCallback((runId: string) => {
+    setSelectedRunIds([runId]);
+    setFocusedRunId(runId);
+  }, []);
+  const closeRun = useCallback((runId: string) => {
+    setSelectedRunIds((ids) => ids.filter((id) => id !== runId));
+    setFocusedRunId((f) => (f === runId ? null : f));
+  }, []);
+  // Resolve the selected ids to live tiles (a completed run stays in `tiles`, so
+  // its pane persists until closed); drop any the stream no longer knows.
+  const dockRuns = useMemo(
+    () =>
+      selectedRunIds
+        .map((id) => tiles.find((t) => t.runId === id))
+        .filter((t): t is (typeof tiles)[number] => t != null),
+    [selectedRunIds, tiles],
+  );
 
   const tasks = useMemo(() => data?.tasks ?? [], [data]);
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t] as const)), [tasks]);
@@ -140,9 +166,22 @@ export default function WorkflowArea() {
               onDragStart={startDrag}
               onDragEnd={endDrag}
               onDrop={onDrop}
+              onSelectRun={selectRun}
             />
           )}
         </div>
+
+        {connection && dockRuns.length > 0 && (
+          <WorkflowChatDock
+            connection={connection}
+            client={client}
+            runs={dockRuns}
+            interrupts={interrupts}
+            focusedRunId={focusedRunId}
+            onFocus={setFocusedRunId}
+            onClose={closeRun}
+          />
+        )}
       </div>
     </section>
   );
