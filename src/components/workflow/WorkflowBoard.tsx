@@ -36,6 +36,8 @@ export default function WorkflowBoard({
   onDragEnd,
   onDrop,
   onSelectRun,
+  selectedTaskId,
+  onSelectTask,
 }: {
   graph?: TeamGraph;
   tasks: ChunkRow[];
@@ -49,6 +51,9 @@ export default function WorkflowBoard({
   onDrop: (id: string, toStatus: string) => void;
   /** Open a run's chat in the right-panel dock (click an agent miniature). */
   onSelectRun: (runId: string) => void;
+  /** The selected card (highlights its state in the team diagram). */
+  selectedTaskId: string | null;
+  onSelectTask: (id: string) => void;
 }) {
   const assigned = useMemo(() => tasks.filter((t) => t.status), [tasks]);
   const columns = useMemo(() => columnsFor(graph, assigned), [graph, assigned]);
@@ -129,8 +134,9 @@ export default function WorkflowBoard({
                 return (
                   <div
                     key={t.id}
-                    className="wf-card"
+                    className={t.id === selectedTaskId ? "wf-card selected" : "wf-card"}
                     draggable
+                    onClick={() => onSelectTask(t.id)}
                     onDragStart={(e) => {
                       e.dataTransfer.setData("text/plain", t.id);
                       e.dataTransfer.effectAllowed = "move";

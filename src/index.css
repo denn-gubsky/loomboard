@@ -718,6 +718,15 @@ button {
 .wf-team-note {
   margin-top: 0.35rem;
 }
+.wf-diagram {
+  margin-top: 0.6rem;
+  max-height: 34vh;
+  overflow: auto;
+}
+.wf-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
 .wf-center {
   flex: 1;
   min-width: 0;
@@ -805,6 +814,10 @@ button {
 }
 .wf-card:active {
   cursor: grabbing;
+}
+.wf-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .wf-card-title {
   font-size: 0.9rem;

@@ -1,6 +1,7 @@
 import type { TeamNameSummary } from "@loomcycle/client";
 import type { ChunkRow, DocRow } from "../../lib/workflowApi";
 import WorkflowTree from "./WorkflowTree";
+import TeamDiagramPanel from "./TeamDiagramPanel";
 
 // Left panel: pick a board Document, navigate its chunk TREE (select a section,
 // drag its child tasks onto the board), and bind a TeamDef (the binding is a
@@ -21,6 +22,7 @@ export default function WorkflowLeft({
   onSelectSection,
   onDragStart,
   onDragEnd,
+  highlightState,
 }: {
   boards: DocRow[];
   teams: TeamNameSummary[];
@@ -36,6 +38,8 @@ export default function WorkflowLeft({
   onSelectSection: (id: string) => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
+  /** The selected card's status — highlighted in the team diagram. */
+  highlightState?: string;
 }) {
   return (
     <div className="wf-left">
@@ -94,6 +98,7 @@ export default function WorkflowLeft({
             </option>
           ))}
         </select>
+        {boundTeam && <TeamDiagramPanel team={boundTeam} highlightState={highlightState} />}
       </div>
     </div>
   );

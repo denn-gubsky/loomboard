@@ -53,6 +53,7 @@ export default function WorkflowArea() {
   const [selected, setSelected] = useState<DocRow | null>(null);
   const [sectionId, setSectionId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const { boards, teams, loading: listLoading, error: listError } = useWorkflowLists(scope);
   const { data, loading, error, bindTeam, moveTask, refreshTasks } = useBoard(
@@ -137,11 +138,14 @@ export default function WorkflowArea() {
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t] as const)), [tasks]);
   const graph = data?.graph;
   const draggingTask = draggingId ? (tasksById.get(draggingId) ?? null) : null;
+  // The selected card's status highlights that state in the team diagram (M5b).
+  const highlightState = selectedTaskId ? tasksById.get(selectedTaskId)?.status || undefined : undefined;
 
-  // Reset the section selection + orchestrator pane when the board changes.
+  // Reset the section selection + orchestrator pane + card selection on board change.
   useEffect(() => {
     setSectionId(null);
     setOrchestratorOn(false);
+    setSelectedTaskId(null);
   }, [selected?.document_id]);
 
   // Poll task statuses while a board is open so cards move as agents drive them.
@@ -153,6 +157,12 @@ export default function WorkflowArea() {
 
   const startDrag = useCallback((id: string) => setDraggingId(id), []);
   const endDrag = useCallback(() => setDraggingId(null), []);
+  // Click a card body to highlight its state in the team diagram; click again to
+  // clear.
+  const selectTask = useCallback(
+    (id: string) => setSelectedTaskId((cur) => (cur === id ? null : id)),
+    [],
+  );
 
   // A drop places/moves the chunk into a column's state. From an unassigned tree
   // task → any state (initial placement); from a state → an allowed transition.
@@ -218,6 +228,7 @@ export default function WorkflowArea() {
           onSelectSection={setSectionId}
           onDragStart={startDrag}
           onDragEnd={endDrag}
+          highlightState={highlightState}
         />
 
         <div className="wf-center">
@@ -242,6 +253,8 @@ export default function WorkflowArea() {
               onDragEnd={endDrag}
               onDrop={onDrop}
               onSelectRun={selectRun}
+              selectedTaskId={selectedTaskId}
+              onSelectTask={selectTask}
             />
           )}
         </div>
