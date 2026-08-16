@@ -595,6 +595,29 @@ button {
   min-height: 0;
   display: flex;
 }
+/* Draggable gutter between the board / kanban / chat panels (Splitter.tsx). A
+   6px hit area with a thin center line that lights up on hover/drag. */
+.wf-splitter {
+  flex: 0 0 6px;
+  align-self: stretch;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  touch-action: none;
+}
+.wf-splitter::before {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: var(--border);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.wf-splitter:hover::before,
+.wf-splitter:active::before {
+  opacity: 1;
+  background: var(--accent);
+}
 .wf-left {
   width: 260px;
   flex-shrink: 0;
@@ -964,6 +987,11 @@ button {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  /* <Chat> (.loomchat) is `flex: 1` — it only fills (and scrolls its message
+     list internally) when its parent is a flex column. Without this it lays out
+     at content height and overflows the pane. */
+  display: flex;
+  flex-direction: column;
 }
 
 /* ---- chat area empty placeholder (app chrome; the chat surface itself is the

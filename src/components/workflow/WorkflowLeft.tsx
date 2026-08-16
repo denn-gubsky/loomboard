@@ -8,6 +8,7 @@ import TeamDiagramPanel from "./TeamDiagramPanel";
 // loomboard convention in the board's root-chunk fields). The team's states
 // become the board columns.
 export default function WorkflowLeft({
+  width,
   boards,
   teams,
   selectedDocId,
@@ -24,6 +25,8 @@ export default function WorkflowLeft({
   onDragEnd,
   highlightState,
 }: {
+  /** Splitter-controlled panel width (px). */
+  width: number;
   boards: DocRow[];
   teams: TeamNameSummary[];
   selectedDocId: string | null;
@@ -42,7 +45,7 @@ export default function WorkflowLeft({
   highlightState?: string;
 }) {
   return (
-    <div className="wf-left">
+    <div className="wf-left" style={{ width }}>
       <div className="wf-left-section">
         <div className="wf-left-title">Boards</div>
         {listError ? (
