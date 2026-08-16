@@ -149,5 +149,19 @@ export function useBoard(scope: BoardScope, doc: DocRow | null, teams: TeamNameS
     [client, scope, reload],
   );
 
-  return { data, loading, error, reload, bindTeam, moveTask };
+  // Lightweight live refresh: re-query just the task chunks (not the team graph /
+  // root) so cards move as agents drive their status. Called on a timer while a
+  // board is open; a transient failure keeps the prior tasks.
+  const refreshTasks = useCallback(async () => {
+    if (!doc) return;
+    try {
+      const r = await queryChunks(client, scope, doc.document_id);
+      const tasks = (r.chunks ?? []).filter((c) => c.id !== doc.root_chunk_id);
+      setData((d) => (d ? { ...d, tasks } : d));
+    } catch {
+      // Transient — keep the prior tasks; the next tick retries.
+    }
+  }, [client, scope, doc]);
+
+  return { data, loading, error, reload, bindTeam, moveTask, refreshTasks };
 }

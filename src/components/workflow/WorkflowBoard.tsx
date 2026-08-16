@@ -1,5 +1,7 @@
 import { useMemo } from "react";
+import type { InterruptRow } from "@loomcycle/client";
 import type { ChunkRow } from "../../lib/workflowApi";
+import type { RunTile } from "../../lib/runStates";
 import { allowedTargets, handlerAgents, type TeamGraph } from "../../lib/teamGraph";
 import { agentIdentity } from "../../lib/agentIdentity";
 
@@ -27,6 +29,8 @@ function columnsFor(graph: TeamGraph | undefined, assigned: ChunkRow[]): string[
 export default function WorkflowBoard({
   graph,
   tasks,
+  runsByChunk,
+  interrupts,
   draggingTask,
   onDragStart,
   onDragEnd,
@@ -34,6 +38,10 @@ export default function WorkflowBoard({
 }: {
   graph?: TeamGraph;
   tasks: ChunkRow[];
+  /** chunk id → the live agent runs working it (loomcycle ≥1.54 pinning). */
+  runsByChunk: Map<string, RunTile[]>;
+  /** run id → its pending interruption (awaiting-input badge). */
+  interrupts: Map<string, InterruptRow>;
   draggingTask: ChunkRow | null;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -112,22 +120,52 @@ export default function WorkflowBoard({
               </div>
             )}
             <div className="wf-col-body">
-              {(byStatus.get(col) ?? []).map((t) => (
-                <div
-                  key={t.id}
-                  className="wf-card"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData("text/plain", t.id);
-                    e.dataTransfer.effectAllowed = "move";
-                    onDragStart(t.id);
-                  }}
-                  onDragEnd={onDragEnd}
-                >
-                  <div className="wf-card-title">{t.title || "(untitled)"}</div>
-                  {t.type && <span className="wf-card-type">{t.type}</span>}
-                </div>
-              ))}
+              {(byStatus.get(col) ?? []).map((t) => {
+                const runs = runsByChunk.get(t.id) ?? [];
+                const needsInput = runs.some((r) => interrupts.has(r.runId));
+                return (
+                  <div
+                    key={t.id}
+                    className="wf-card"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", t.id);
+                      e.dataTransfer.effectAllowed = "move";
+                      onDragStart(t.id);
+                    }}
+                    onDragEnd={onDragEnd}
+                  >
+                    <div className="wf-card-title">{t.title || "(untitled)"}</div>
+                    <div className="wf-card-foot">
+                      {t.type && <span className="wf-card-type">{t.type}</span>}
+                      {runs.length > 0 && (
+                        <span className="wf-card-minis">
+                          {runs.map((r) => {
+                            const rid = agentIdentity(r.agent);
+                            const Icon = rid.Icon;
+                            const ni = interrupts.has(r.runId);
+                            return (
+                              <span
+                                key={r.runId}
+                                className={ni ? "wf-mini needs-input" : "wf-mini running"}
+                                title={`${r.agent} — ${ni ? "needs input" : "working"}`}
+                                style={{ color: rid.color }}
+                              >
+                                <Icon size={12} />
+                              </span>
+                            );
+                          })}
+                        </span>
+                      )}
+                      {needsInput && (
+                        <span className="wf-card-needs" title="An agent needs your answer">
+                          needs answer
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );

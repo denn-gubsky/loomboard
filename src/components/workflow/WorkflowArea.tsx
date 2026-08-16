@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BoardScope, DocRow } from "../../lib/workflowApi";
 import { useWorkflowLists, useBoard } from "../../hooks/useWorkflowBoard";
+import { useConnection, useLoomcycle } from "../../state/connection";
+import { useUserRunStates } from "../../hooks/useUserRunStates";
+import { useUserInterrupts } from "../../hooks/useUserInterrupts";
 import { canTransition } from "../../lib/teamGraph";
+import { runsByChunk } from "../../lib/boardRuns";
 import WorkflowLeft from "./WorkflowLeft";
 import WorkflowBoard from "./WorkflowBoard";
+
+// How often to re-query task chunk statuses while a board is open (live card
+// movement). The agent miniatures update live off the run-state SSE; only the
+// card statuses need this poll.
+const REFRESH_MS = 5000;
 
 // The Workflow surface (RFC BT P4 / RFC AC): a live operational board for
 // agentic teams. M1 = the static operable board — pick a board Document,
@@ -18,7 +27,21 @@ export default function WorkflowArea() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const { boards, teams, loading: listLoading, error: listError } = useWorkflowLists(scope);
-  const { data, loading, error, bindTeam, moveTask } = useBoard(scope, selected, teams);
+  const { data, loading, error, bindTeam, moveTask, refreshTasks } = useBoard(
+    scope,
+    selected,
+    teams,
+  );
+
+  // Live layer: one aggregate run-state stream + one interrupts poll for all
+  // runs; group the runs by the board chunk they carry (loomcycle ≥1.54 stamps
+  // parent_context.board_chunk_id on board-bound handler runs) → miniatures.
+  const client = useLoomcycle();
+  const { principal } = useConnection();
+  const userId = principal?.subject ?? "";
+  const { tiles } = useUserRunStates(client, userId);
+  const interrupts = useUserInterrupts(client, userId);
+  const runsForChunk = useMemo(() => runsByChunk(tiles), [tiles]);
 
   const tasks = useMemo(() => data?.tasks ?? [], [data]);
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t] as const)), [tasks]);
@@ -29,6 +52,13 @@ export default function WorkflowArea() {
   useEffect(() => {
     setSectionId(null);
   }, [selected?.document_id]);
+
+  // Poll task statuses while a board is open so cards move as agents drive them.
+  useEffect(() => {
+    if (!selected) return;
+    const id = setInterval(() => void refreshTasks(), REFRESH_MS);
+    return () => clearInterval(id);
+  }, [selected, refreshTasks]);
 
   const startDrag = useCallback((id: string) => setDraggingId(id), []);
   const endDrag = useCallback(() => setDraggingId(null), []);
@@ -104,6 +134,8 @@ export default function WorkflowArea() {
             <WorkflowBoard
               graph={graph}
               tasks={tasks}
+              runsByChunk={runsForChunk}
+              interrupts={interrupts}
               draggingTask={draggingTask}
               onDragStart={startDrag}
               onDragEnd={endDrag}
