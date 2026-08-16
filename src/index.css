@@ -609,9 +609,13 @@ button {
   content: "";
   position: absolute;
   inset: 0 2px;
-  background: var(--border);
-  opacity: 0;
-  transition: opacity 0.12s ease;
+  /* A visible grey divider by default (not the panel background); accent on
+     hover/drag so the grab target reads. */
+  background: var(--text-dim);
+  opacity: 0.55;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease;
 }
 .wf-splitter:hover::before,
 .wf-splitter:active::before {
@@ -1018,6 +1022,13 @@ button {
      at content height and overflows the pane. */
   display: flex;
   flex-direction: column;
+}
+/* .loomchat is flex:1 but ships without min-height:0, so in this flex column its
+   auto-min-height = its content height (the whole transcript) and it refuses to
+   shrink — the message list then never scrolls and the pane grows endlessly.
+   min-height:0 lets it shrink to the pane so <Chat>'s own .messages scrolls. */
+.wf-pane-chat .loomchat {
+  min-height: 0;
 }
 
 /* ---- chat area empty placeholder (app chrome; the chat surface itself is the
