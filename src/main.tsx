@@ -9,6 +9,8 @@ import "@loomcycle/explorer/styles.css";
 // memory-view scopes its own classes (unlike library/explorer, which reuse the
 // shared loomcycle web styles), so this import is REQUIRED for it to render.
 import "@loomcycle/memory-view/styles.css";
+// loomboard (RFC BT view surfaces) is likewise self-scoped — required to render.
+import "@loomcycle/loomboard/styles.css";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("#root element not found");

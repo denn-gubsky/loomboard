@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { Library } from "@loomcycle/library";
 import { PathExplorer } from "@loomcycle/explorer";
 import { MemoryView } from "@loomcycle/memory-view";
+import { Loomboard } from "@loomcycle/loomboard";
 import { ConnectionProvider, useConnection } from "./state/connection";
 import {
   ConversationsProvider,
@@ -130,6 +131,23 @@ function MemoryArea() {
   );
 }
 
+// The RFC BT view layer (@loomcycle/loomboard): saved table / cards / kanban /
+// list views over loomcycle Documents. Same connection seam; its own scoped
+// styles. Boards persist as `type=view` Documents in the user/tenant scope.
+function BoardsArea() {
+  const { settings } = useConnection();
+  const connection = useMemo<Connection | null>(
+    () => (settings ? buildConnection(settings) : null),
+    [settings],
+  );
+  if (!connection) return null;
+  return (
+    <section className="boards-pane">
+      <Loomboard connection={connection} onError={(e) => console.error("[loomboard]", e)} />
+    </section>
+  );
+}
+
 // Live agent-run portfolio grid (compact tiles + enlarge overlay). A dev-only
 // verification harness for the agent-chat-tile component — NOT product nav; the
 // RFC AC board will place these tiles. Mount with `?board` in a dev build.
@@ -154,18 +172,19 @@ function BoardArea() {
 function AppShell() {
   const { capabilities } = useConnection();
   const [view, setView] = useState<
-    "chat" | "library" | "documents" | "memory" | "workflow"
+    "chat" | "library" | "documents" | "memory" | "boards" | "workflow"
   >("chat");
   // Dev-only preview of the agent-tile board via `?board` — no nav entry yet.
   const devBoard =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).has("board");
-  // Library, Documents and Memory are all substrate:tenant surfaces — a user
-  // token can't open them (the nav is hidden too), so fall back to chat rather
-  // than render a wall of 403s.
+  // Library, Documents, Memory, Boards and Workflow are all substrate:tenant
+  // surfaces — a user token can't open them (the nav is hidden too), so fall back
+  // to chat rather than render a wall of 403s.
   const showLibrary = view === "library" && capabilities.canTenant;
   const showDocuments = view === "documents" && capabilities.canTenant;
   const showMemory = view === "memory" && capabilities.canTenant;
+  const showBoards = view === "boards" && capabilities.canTenant;
   const showWorkflow = view === "workflow" && capabilities.canTenant;
   return (
     <ConversationsProvider>
@@ -180,6 +199,8 @@ function AppShell() {
             <DocumentsArea />
           ) : showMemory ? (
             <MemoryArea />
+          ) : showBoards ? (
+            <BoardsArea />
           ) : showWorkflow ? (
             <WorkflowArea />
           ) : (

@@ -62,6 +62,7 @@
   },
   "dependencies": {
     "@loomcycle/explorer": "0.7.0",
+    "@loomcycle/loomboard": "0.1.0",
     "@loomcycle/memory-view": "0.1.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.47",

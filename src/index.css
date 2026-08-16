@@ -523,7 +523,8 @@ button {
    the main area) ---- */
 .library-pane,
 .explorer-pane,
-.memory-pane {
+.memory-pane,
+.boards-pane {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -532,7 +533,8 @@ button {
 }
 .library-pane > .loomcycle-library,
 .explorer-pane > .loomcycle-explorer,
-.memory-pane > .loomcycle-memory-view {
+.memory-pane > .loomcycle-memory-view,
+.boards-pane > .loomcycle-loomboard {
   flex: 1;
   min-height: 0;
 }
