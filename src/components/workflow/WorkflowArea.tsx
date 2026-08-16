@@ -11,6 +11,7 @@ import { buildConnection } from "../../lib/buildConnection";
 import WorkflowLeft from "./WorkflowLeft";
 import WorkflowBoard from "./WorkflowBoard";
 import WorkflowChatDock, { type WorkflowPane } from "./WorkflowChatDock";
+import Splitter from "./Splitter";
 
 // How often to re-query task chunk statuses while a board is open (live card
 // movement). The agent miniatures update live off the run-state SSE; only the
@@ -19,6 +20,11 @@ const REFRESH_MS = 5000;
 
 // How many agent chats the right-panel dock hosts at once (RFC BT P4: "1–3").
 const MAX_PANES = 3;
+
+// Splitter-resizable panel widths (px): [default, min, max]. The center board
+// takes the remaining space.
+const LEFT = { def: 260, min: 180, max: 520 };
+const DOCK = { def: 420, min: 300, max: 760 };
 
 // The seed message for the orchestrator pane (M5): hands the team/orchestrator
 // the board's identity + scope so it can drive the tasks via its Document and
@@ -54,6 +60,8 @@ export default function WorkflowArea() {
   const [sectionId, setSectionId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [leftWidth, setLeftWidth] = useState(LEFT.def);
+  const [dockWidth, setDockWidth] = useState(DOCK.def);
 
   const { boards, teams, loading: listLoading, error: listError } = useWorkflowLists(scope);
   const { data, loading, error, bindTeam, moveTask, refreshTasks } = useBoard(
@@ -214,6 +222,7 @@ export default function WorkflowArea() {
 
       <div className="wf-body">
         <WorkflowLeft
+          width={leftWidth}
           boards={boards}
           teams={teams}
           selectedDocId={selected?.document_id ?? null}
@@ -229,6 +238,13 @@ export default function WorkflowArea() {
           onDragStart={startDrag}
           onDragEnd={endDrag}
           highlightState={highlightState}
+        />
+        <Splitter
+          label="Resize board panel"
+          getSize={() => leftWidth}
+          setSize={setLeftWidth}
+          min={LEFT.min}
+          max={LEFT.max}
         />
 
         <div className="wf-center">
@@ -260,15 +276,26 @@ export default function WorkflowArea() {
         </div>
 
         {connection && dockPanes.length > 0 && (
-          <WorkflowChatDock
-            connection={connection}
-            client={client}
-            panes={dockPanes}
-            interrupts={interrupts}
-            focusedId={focusedId}
-            onFocus={setFocusedId}
-            onClose={closePane}
-          />
+          <>
+            <Splitter
+              label="Resize chat panel"
+              getSize={() => dockWidth}
+              setSize={setDockWidth}
+              min={DOCK.min}
+              max={DOCK.max}
+              invert
+            />
+            <WorkflowChatDock
+              width={dockWidth}
+              connection={connection}
+              client={client}
+              panes={dockPanes}
+              interrupts={interrupts}
+              focusedId={focusedId}
+              onFocus={setFocusedId}
+              onClose={closePane}
+            />
+          </>
         )}
       </div>
     </section>
