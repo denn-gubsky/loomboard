@@ -46,6 +46,10 @@ export interface ChatProps {
    *  <Chat> panes must set this true for ONLY the focused pane — otherwise one
    *  Escape cancels every running pane at once. */
   escapeStops?: boolean;
+  /** Seed the composer with this text on first mount (the user reviews and sends
+   *  it). Lets a host open a chat pre-filled with a task — e.g. the workflow
+   *  board starting an orchestrator with the board's context. */
+  initialInput?: string;
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -63,6 +67,7 @@ export default function Chat({
   recap,
   knownAgents,
   escapeStops = true,
+  initialInput,
 }: ChatProps) {
   const client = useMemo(
     () => createLoomcycleClient(connection),
@@ -195,6 +200,7 @@ export default function Chat({
         freeTokens={freeTokens}
         history={userInputs}
         historyKey={conversation.id}
+        initialText={initialInput}
         onSend={chat.send}
         onStop={chat.cancel}
         placeholder={

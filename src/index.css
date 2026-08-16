@@ -555,6 +555,22 @@ button {
 .wf-board-title {
   font-weight: 600;
 }
+.wf-orchestrate {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.3em 0.7em;
+  font-size: 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.wf-orchestrate:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
 .scope-toggle {
   display: inline-flex;
   border: 1px solid var(--border);

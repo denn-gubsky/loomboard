@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Bot } from "lucide-react";
 import type { BoardScope, DocRow } from "../../lib/workflowApi";
 import { useWorkflowLists, useBoard } from "../../hooks/useWorkflowBoard";
 import { useConnection, useLoomcycle } from "../../state/connection";
@@ -9,7 +10,7 @@ import { runsByChunk } from "../../lib/boardRuns";
 import { buildConnection } from "../../lib/buildConnection";
 import WorkflowLeft from "./WorkflowLeft";
 import WorkflowBoard from "./WorkflowBoard";
-import WorkflowChatDock from "./WorkflowChatDock";
+import WorkflowChatDock, { type WorkflowPane } from "./WorkflowChatDock";
 
 // How often to re-query task chunk statuses while a board is open (live card
 // movement). The agent miniatures update live off the run-state SSE; only the
@@ -18,6 +19,28 @@ const REFRESH_MS = 5000;
 
 // How many agent chats the right-panel dock hosts at once (RFC BT P4: "1–3").
 const MAX_PANES = 3;
+
+// The seed message for the orchestrator pane (M5): hands the team/orchestrator
+// the board's identity + scope so it can drive the tasks via its Document and
+// TeamDef tools. The user reviews and sends it — no run starts until they do.
+function orchestratorPrompt(doc: DocRow, scope: BoardScope, team?: string): string {
+  const lines = [
+    `Drive the workflow board "${doc.title}".`,
+    ``,
+    `- Document id: ${doc.document_id}`,
+    `- Scope: ${scope}`,
+  ];
+  if (team) lines.push(`- Bound team: ${team}`);
+  lines.push(
+    ``,
+    `Inspect the board's task chunks with your Document tool (query_chunks on ` +
+      `this document_id, ${scope} scope) and drive them through the team's states. ` +
+      `When you run a team on a task, pass that task's chunk id as board_chunk_id ` +
+      `so its progress shows on the board. Start by summarizing the current board ` +
+      `and proposing the next actions.`,
+  );
+  return lines.join("\n");
+}
 
 // The Workflow surface (RFC BT P4 / RFC AC): a live operational board for
 // agentic teams. M1 = the static operable board — pick a board Document,
@@ -48,21 +71,34 @@ export default function WorkflowArea() {
   const interrupts = useUserInterrupts(client, userId);
   const runsForChunk = useMemo(() => runsByChunk(tiles), [tiles]);
 
-  // Right-panel chat dock (M3/M4): selecting a card's agent miniature opens that
-  // run's live chat here — up to MAX_PANES stacked at once. Opening a new run
-  // beyond the cap drops the oldest; reselecting an open run just refocuses it.
-  // `focusedRunId` owns the Escape key (only that pane's turn-cancel fires).
+  // Right-panel chat dock (M3/M4/M5): selecting a card's agent miniature opens
+  // that run's live chat here — up to MAX_PANES stacked. Opening a new run beyond
+  // the cap drops the oldest; reselecting an open run just refocuses it. M5 adds
+  // an orchestrator pane (a team/orchestrator run you start to drive the board).
+  // `focusedId` owns the Escape key (only that pane's turn-cancel fires).
   const connection = useMemo(() => (settings ? buildConnection(settings) : null), [settings]);
   const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
-  const [focusedRunId, setFocusedRunId] = useState<string | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [orchestratorOn, setOrchestratorOn] = useState(false);
+  const orchestratorId = selected ? `orch:${selected.document_id}` : "orch";
+
   const selectRun = useCallback((runId: string) => {
     setSelectedRunIds((ids) => (ids.includes(runId) ? ids : [...ids, runId].slice(-MAX_PANES)));
-    setFocusedRunId(runId);
+    setFocusedId(runId);
   }, []);
-  const closeRun = useCallback((runId: string) => {
-    setSelectedRunIds((ids) => ids.filter((id) => id !== runId));
-    setFocusedRunId((f) => (f === runId ? null : f));
-  }, []);
+  const startOrchestrator = useCallback(() => {
+    setOrchestratorOn(true);
+    setFocusedId(orchestratorId);
+  }, [orchestratorId]);
+  const closePane = useCallback(
+    (id: string) => {
+      if (id === orchestratorId) setOrchestratorOn(false);
+      else setSelectedRunIds((ids) => ids.filter((r) => r !== id));
+      setFocusedId((f) => (f === id ? null : f));
+    },
+    [orchestratorId],
+  );
+
   // Resolve the selected ids to live tiles (a completed run stays in `tiles`, so
   // its pane persists until closed); drop any the stream no longer knows.
   const dockRuns = useMemo(
@@ -73,14 +109,39 @@ export default function WorkflowArea() {
     [selectedRunIds, tiles],
   );
 
+  // Orchestrator pane first (the driver), then the selected run panes. The
+  // orchestrator opens pre-filled with the board's context so it can drive via
+  // its Document/TeamDef tools; the user reviews and sends.
+  const dockPanes = useMemo<WorkflowPane[]>(() => {
+    const panes: WorkflowPane[] = [];
+    if (orchestratorOn && selected) {
+      panes.push({
+        id: orchestratorId,
+        agent: "team/orchestrator",
+        initialInput: orchestratorPrompt(selected, scope, data?.team),
+      });
+    }
+    for (const t of dockRuns) {
+      panes.push({
+        id: t.runId,
+        agent: t.agent,
+        runId: t.runId,
+        sessionId: t.sessionId,
+        initialRunning: t.status === "running",
+      });
+    }
+    return panes;
+  }, [orchestratorOn, selected, orchestratorId, scope, data?.team, dockRuns]);
+
   const tasks = useMemo(() => data?.tasks ?? [], [data]);
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t] as const)), [tasks]);
   const graph = data?.graph;
   const draggingTask = draggingId ? (tasksById.get(draggingId) ?? null) : null;
 
-  // Reset the section selection when the board Document changes.
+  // Reset the section selection + orchestrator pane when the board changes.
   useEffect(() => {
     setSectionId(null);
+    setOrchestratorOn(false);
   }, [selected?.document_id]);
 
   // Poll task statuses while a board is open so cards move as agents drive them.
@@ -129,6 +190,16 @@ export default function WorkflowArea() {
           ))}
         </div>
         {data?.doc && <span className="wf-board-title">{data.doc.title}</span>}
+        {selected && !orchestratorOn && (
+          <button
+            type="button"
+            className="wf-orchestrate"
+            onClick={startOrchestrator}
+            title="Open a team orchestrator chat to drive this board"
+          >
+            <Bot size={14} /> Orchestrator
+          </button>
+        )}
       </div>
 
       <div className="wf-body">
@@ -175,15 +246,15 @@ export default function WorkflowArea() {
           )}
         </div>
 
-        {connection && dockRuns.length > 0 && (
+        {connection && dockPanes.length > 0 && (
           <WorkflowChatDock
             connection={connection}
             client={client}
-            runs={dockRuns}
+            panes={dockPanes}
             interrupts={interrupts}
-            focusedRunId={focusedRunId}
-            onFocus={setFocusedRunId}
-            onClose={closeRun}
+            focusedId={focusedId}
+            onFocus={setFocusedId}
+            onClose={closePane}
           />
         )}
       </div>
