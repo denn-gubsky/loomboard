@@ -41,6 +41,15 @@ export interface ChatProps {
   /** Agent-name suggestions for the free-text fallback the picker shows when the
    *  agent library can't be read (a user token 403s on the tenant-scoped list). */
   knownAgents?: string[];
+  /** Whether pressing Escape cancels this chat's current turn (RFC BH). Default
+   *  true. The Escape listener is window-global, so a host stacking several
+   *  <Chat> panes must set this true for ONLY the focused pane — otherwise one
+   *  Escape cancels every running pane at once. */
+  escapeStops?: boolean;
+  /** Seed the composer with this text on first mount (the user reviews and sends
+   *  it). Lets a host open a chat pre-filled with a task — e.g. the workflow
+   *  board starting an orchestrator with the board's context. */
+  initialInput?: string;
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -57,6 +66,8 @@ export default function Chat({
   onRunStatus,
   recap,
   knownAgents,
+  escapeStops = true,
+  initialInput,
 }: ChatProps) {
   const client = useMemo(
     () => createLoomcycleClient(connection),
@@ -79,7 +90,9 @@ export default function Chat({
   const { running, cancel } = chat;
   const parked = chat.state.pendingInterrupt;
   useEffect(() => {
-    if (!running && !parked) return;
+    // Skip when idle (never preventDefault an inert Escape) or when the host has
+    // handed Escape to another pane (escapeStops=false) — see the prop doc.
+    if ((!running && !parked) || !escapeStops) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -88,7 +101,7 @@ export default function Chat({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [running, parked, cancel]);
+  }, [running, parked, cancel, escapeStops]);
 
   // Publish the run's active state to the host (sidebar tile activity dot). A
   // run parked on a question isn't "working" (the loop stays running until the
@@ -187,6 +200,7 @@ export default function Chat({
         freeTokens={freeTokens}
         history={userInputs}
         historyKey={conversation.id}
+        initialText={initialInput}
         onSend={chat.send}
         onStop={chat.cancel}
         placeholder={

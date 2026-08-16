@@ -36,6 +36,8 @@ interface Props {
   history: string[];
   /** Conversation id — changes reset the history cursor on chat switch. */
   historyKey?: string;
+  /** Seed the input on first mount (the host may pre-fill a task to review). */
+  initialText?: string;
   onSend: (text: string, attachments: StagedAttachment[]) => void;
   onStop: () => void;
   placeholder?: string;
@@ -82,11 +84,14 @@ export default function Composer({
   freeTokens,
   history,
   historyKey,
+  initialText,
   onSend,
   onStop,
   placeholder,
 }: Props) {
-  const [text, setText] = useState("");
+  // Seed once on mount; the user edits/sends from there (a later switch to a
+  // different pre-filled chat remounts via the host's React key).
+  const [text, setText] = useState(initialText ?? "");
   const [atts, setAtts] = useState<StagedAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);

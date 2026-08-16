@@ -12,46 +12,13 @@ import {
 } from "./state/conversations";
 import { ActiveChatProvider, useActiveChat } from "./state/activeChat";
 import type { Connection } from "./chat/lib/createClient";
-import type { ConnectionSettings as ConnSettings } from "./state/settings";
-import { isTauri, proxyMode } from "./lib/proxyMode";
-import { getNativeFetch } from "./lib/nativeTransport";
+import { buildConnection } from "./lib/buildConnection";
 import { getClient } from "./lib/loomcycle";
 import ConnectionSettings from "./components/ConnectionSettings";
 import Sidebar from "./components/Sidebar";
 import Chat from "./chat/Chat";
 import AgentPortfolioGrid from "./components/agentchat/AgentPortfolioGrid";
-
-// Turn the app's connection settings into the <Chat> connection. In proxy mode
-// (dev server or the standalone CLI) we route through a same-origin proxy
-// (same-origin + a per-request target header) so any reachable runtime works
-// with no CORS; a plain production build hits the base URL directly. This proxy
-// detail is the APP's concern — the component just takes a Connection.
-function buildConnection(s: ConnSettings): Connection {
-  if (isTauri) {
-    // Desktop: hit the absolute loomcycle URL directly via native HTTP (Rust),
-    // which bypasses webview CORS. getNativeFetch() is a stable singleton so
-    // <Chat>'s client memo (keyed on connection.fetch) doesn't churn. Blank URL
-    // → the same local default the CLI uses.
-    return {
-      baseUrl: s.baseUrl || "http://127.0.0.1:8787",
-      token: s.token,
-      fetch: getNativeFetch(),
-    };
-  }
-  if (proxyMode) {
-    const target = s.baseUrl;
-    return {
-      baseUrl: "",
-      token: s.token,
-      fetch: (input, init) => {
-        const headers = new Headers(init?.headers);
-        if (target) headers.set("x-loomcycle-target", target);
-        return fetch(input, { ...init, headers });
-      },
-    };
-  }
-  return { baseUrl: s.baseUrl, token: s.token };
-}
+import WorkflowArea from "./components/workflow/WorkflowArea";
 
 function ChatArea() {
   const { settings } = useConnection();
@@ -205,19 +172,20 @@ function BoardArea() {
 function AppShell() {
   const { capabilities } = useConnection();
   const [view, setView] = useState<
-    "chat" | "library" | "documents" | "memory" | "boards"
+    "chat" | "library" | "documents" | "memory" | "boards" | "workflow"
   >("chat");
   // Dev-only preview of the agent-tile board via `?board` — no nav entry yet.
   const devBoard =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).has("board");
-  // Library, Documents, Memory and Boards are all substrate:tenant surfaces — a
-  // user token can't open them (the nav is hidden too), so fall back to chat
-  // rather than render a wall of 403s.
+  // Library, Documents, Memory, Boards and Workflow are all substrate:tenant
+  // surfaces — a user token can't open them (the nav is hidden too), so fall back
+  // to chat rather than render a wall of 403s.
   const showLibrary = view === "library" && capabilities.canTenant;
   const showDocuments = view === "documents" && capabilities.canTenant;
   const showMemory = view === "memory" && capabilities.canTenant;
   const showBoards = view === "boards" && capabilities.canTenant;
+  const showWorkflow = view === "workflow" && capabilities.canTenant;
   return (
     <ConversationsProvider>
       <ActiveChatProvider>
@@ -233,6 +201,8 @@ function AppShell() {
             <MemoryArea />
           ) : showBoards ? (
             <BoardsArea />
+          ) : showWorkflow ? (
+            <WorkflowArea />
           ) : (
             <ChatArea />
           )}

@@ -21,6 +21,22 @@ export interface RunTile {
    *  full <Chat> (which reloads history by sessionId) in the overlay. */
   sessionId?: string;
   parentAgentId?: string;
+  /** The board task (Document chunk) this run is working, from the run's
+   *  `parent_context.board_chunk_id` (loomcycle ≥1.54, RFC BT P4). Lets the
+   *  workflow board pin a live agent miniature to its card. */
+  boardChunkId?: string;
+}
+
+// Read `parent_context.board_chunk_id` defensively: the field ships on the wire
+// (loomcycle ≥1.54) but the pinned @loomcycle/client type predates it, so we
+// don't rely on the static type.
+function readBoardChunk(source: { parent_context?: unknown }): string | undefined {
+  const pc = source.parent_context;
+  if (pc && typeof pc === "object") {
+    const v = (pc as Record<string, unknown>).board_chunk_id;
+    if (typeof v === "string" && v) return v;
+  }
+  return undefined;
 }
 
 // The aggregate stream types `status` as a plain string; the runtime's
@@ -50,6 +66,7 @@ export function tileFromAgent(a: Agent): RunTile {
     stopReason: a.stop_reason ?? undefined,
     sessionId: a.session_id || undefined,
     parentAgentId: a.parent_agent_id ?? undefined,
+    boardChunkId: readBoardChunk(a),
   };
 }
 
@@ -71,6 +88,8 @@ export function applyRunStateEvent(
     stopReason: ev.stop_reason ?? undefined,
     sessionId: prev?.sessionId,
     parentAgentId: ev.parent_agent_id ?? prev?.parentAgentId,
+    // Board events carry parent_context; preserve a prior value if a frame omits it.
+    boardChunkId: readBoardChunk(ev) ?? prev?.boardChunkId,
   });
   return next;
 }
