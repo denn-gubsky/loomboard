@@ -1,17 +1,22 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from "react";
 
-// A vertical drag handle between two horizontal panes. Drift-free: it records
-// the size + pointer x at drag start and sets an absolute size from the total
-// delta (accumulating deltas drifts once a clamp is hit). Pointer capture keeps
-// the drag alive over iframes (the mermaid diagram / chat embeds), which would
-// otherwise swallow the move events. `invert` is for a right-edge handle where
-// dragging left should GROW the pane to its right.
+// A drag handle between two panes. Drift-free: it records the size + pointer
+// position at drag start and sets an absolute size from the total delta
+// (accumulating deltas drifts once a clamp is hit). Pointer capture keeps the
+// drag alive over iframes (the mermaid diagram / chat embeds), which would
+// otherwise swallow the move events.
+//
+// orientation "vertical" = a vertical bar between horizontal panes (resizes
+// width, uses clientX); "horizontal" = a horizontal bar between stacked panes
+// (resizes height, uses clientY). `invert` is for a trailing-edge handle where
+// dragging toward the pane should GROW it (e.g. a right dock, or a bottom pane).
 export default function Splitter({
   getSize,
   setSize,
   min,
   max,
   invert = false,
+  orientation = "vertical",
   label,
 }: {
   getSize: () => number;
@@ -19,19 +24,22 @@ export default function Splitter({
   min: number;
   max: number;
   invert?: boolean;
+  orientation?: "vertical" | "horizontal";
   label: string;
 }) {
-  const drag = useRef<{ startX: number; startSize: number } | null>(null);
+  const drag = useRef<{ start: number; startSize: number } | null>(null);
+  const horizontal = orientation === "horizontal";
 
   const onPointerDown = (e: ReactPointerEvent) => {
-    drag.current = { startX: e.clientX, startSize: getSize() };
+    drag.current = { start: horizontal ? e.clientY : e.clientX, startSize: getSize() };
     e.currentTarget.setPointerCapture(e.pointerId);
     e.preventDefault();
   };
   const onPointerMove = (e: ReactPointerEvent) => {
     const d = drag.current;
     if (!d) return;
-    const delta = (e.clientX - d.startX) * (invert ? -1 : 1);
+    const pos = horizontal ? e.clientY : e.clientX;
+    const delta = (pos - d.start) * (invert ? -1 : 1);
     setSize(Math.max(min, Math.min(max, d.startSize + delta)));
   };
   const end = (e: ReactPointerEvent) => {
@@ -42,9 +50,9 @@ export default function Splitter({
 
   return (
     <div
-      className="wf-splitter"
+      className={horizontal ? "wf-splitter horizontal" : "wf-splitter"}
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={orientation}
       aria-label={label}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

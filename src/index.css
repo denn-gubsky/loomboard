@@ -618,6 +618,13 @@ button {
   opacity: 1;
   background: var(--accent);
 }
+/* Horizontal variant: a 6px-tall bar between stacked left-panel sections. */
+.wf-splitter.horizontal {
+  cursor: row-resize;
+}
+.wf-splitter.horizontal::before {
+  inset: 2px 0;
+}
 .wf-left {
   width: 260px;
   flex-shrink: 0;
@@ -627,6 +634,22 @@ button {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+/* Splitter layout (a board is open): sections carry their own height and the
+   splitters provide the separation, so drop the flex gap. */
+.wf-left-split {
+  gap: 0;
+}
+/* A fixed-height left section scrolls its own content; drop the inner caps
+   (30vh boards list / 34vh diagram) so the section height governs instead. */
+.wf-left-scroll {
+  flex-shrink: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+.wf-left-scroll .wf-boards,
+.wf-left-scroll .wf-diagram {
+  max-height: none;
 }
 .wf-boards {
   max-height: 30vh;
@@ -919,13 +942,16 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  /* Bounded height (no scroll-grow): panes split it and each chat scrolls
+     internally. overflow:auto here would let a pane grow to content, which
+     un-bounds the chat and pushes the transcript off-screen. */
+  overflow: hidden;
 }
 .wf-pane {
-  flex: 1 1 auto;
-  /* A floor so stacked panes stay usable; the dock scrolls past it. A single
-     pane still fills the height via flex-grow. */
-  min-height: 260px;
+  /* flex-basis 0 + min-height 0 → panes SPLIT the dock height and stay bounded,
+     so <Chat>'s message list scrolls inside each pane instead of overflowing. */
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   border-bottom: 1px solid var(--border);
