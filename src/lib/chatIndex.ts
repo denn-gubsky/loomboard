@@ -54,6 +54,18 @@ export function isInternalAgent(agent: string): boolean {
   return INTERNAL_AGENTS.has(agent);
 }
 
+// Conversational agents live under the `chat/*` path — loomcycle's chat bundle
+// ships chat/medium, chat/local, chat/local-small — and a per-conversation fork
+// keeps the prefix (`chat/medium__lb-1a2b`). Every OTHER agent that gets a
+// session (team members, board-spawned agents, tool runners) is real work, but
+// it isn't a chat the user started here, so the list shows only `chat/*` unless
+// "All agents" is ticked.
+// An empty agent is a fresh local draft that hasn't picked one yet: keep it
+// visible, or a just-created New Chat row would disappear as you look at it.
+export function isChatAgent(agent: string): boolean {
+  return agent === "" || agent.startsWith("chat/");
+}
+
 export function mergeChats(
   sessions: HistoryChat[],
   locals: Conversation[],

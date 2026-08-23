@@ -9,7 +9,7 @@ import { useUserRunStates } from "../hooks/useUserRunStates";
 import { useUserInterrupts } from "../hooks/useUserInterrupts";
 import { useChatHistory } from "../hooks/useChatHistory";
 import { useAutoRecap } from "../hooks/useAutoRecap";
-import { mergeChats, type DisplayChat } from "../lib/chatIndex";
+import { isChatAgent, mergeChats, type DisplayChat } from "../lib/chatIndex";
 import type { RunTile } from "../lib/runStates";
 import HistorySearch, { NO_FILTER, type ChatFilter } from "./HistorySearch";
 import ConversationTile from "./agentchat/ConversationTile";
@@ -104,12 +104,17 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   });
 
   const [showArchived, setShowArchived] = useState(false);
+  // Off by default: the list is the user's CHATS, and loomcycle gives a session
+  // to plenty of non-chat work (team members, board-spawned agents) that would
+  // otherwise crowd it out. Ticking this shows every session in scope.
+  const [showAllAgents, setShowAllAgents] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>(NO_FILTER);
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     let r = merged.filter((c) => (showArchived ? c.archived : !c.archived));
+    if (!showAllAgents) r = r.filter((c) => isChatAgent(c.agent));
     if (filter.semanticIds) {
       const order = new Map(filter.semanticIds.map((id, i) => [id, i] as const));
       r = r
@@ -119,7 +124,7 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
       r = r.filter((c) => c.title.toLowerCase().includes(filter.text));
     }
     return r;
-  }, [merged, showArchived, filter]);
+  }, [merged, showArchived, showAllAgents, filter]);
 
   function doOpen(chat: DisplayChat) {
     setConfirmingKey(null);
@@ -155,33 +160,58 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
     }
   }
 
+  // Hidden-by-the-agent-filter is its own empty state: without it a list full of
+  // non-chat sessions reads as "you have nothing", with no hint that the box
+  // one line above is what's hiding them.
+  const hiddenByAgentFilter =
+    !showAllAgents &&
+    merged.some((c) => (showArchived ? c.archived : !c.archived) && !isChatAgent(c.agent));
+
   const emptyMessage = history.error
     ? history.error
     : history.loading && merged.length === 0
       ? "Loading chats…"
-      : showArchived
-        ? "No archived chats."
-        : filter.text || filter.semanticIds
-          ? "No matching chats."
-          : "No conversations yet.";
+      : filter.text || filter.semanticIds
+        ? "No matching chats."
+        : hiddenByAgentFilter
+          ? "No chat agents here — tick “All agents” to show other sessions."
+          : showArchived
+            ? "No archived chats."
+            : "No conversations yet.";
 
   return (
     <div className={collapsed ? "conv-panel collapsed" : "conv-panel"}>
       {!collapsed && (
         <div className="conv-toolbar">
           <HistorySearch related={history.related} onChange={setFilter} />
-          <button
-            type="button"
-            className={showArchived ? "conv-archived-toggle active" : "conv-archived-toggle"}
-            title={showArchived ? "Show active chats" : "Show archived chats"}
-            onClick={() => {
-              setShowArchived((v) => !v);
-              setConfirmingKey(null);
-            }}
-          >
-            {showArchived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
-            <span>{showArchived ? "Active" : "Archived"}</span>
-          </button>
+          <div className="conv-toolbar-row">
+            <button
+              type="button"
+              className={showArchived ? "conv-archived-toggle active" : "conv-archived-toggle"}
+              title={showArchived ? "Show active chats" : "Show archived chats"}
+              onClick={() => {
+                setShowArchived((v) => !v);
+                setConfirmingKey(null);
+              }}
+            >
+              {showArchived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+              <span>{showArchived ? "Active" : "Archived"}</span>
+            </button>
+            <label
+              className="conv-allagents-toggle"
+              title="Also list sessions run by non-chat agents (teams, boards, tools)"
+            >
+              <input
+                type="checkbox"
+                checked={showAllAgents}
+                onChange={(e) => {
+                  setShowAllAgents(e.target.checked);
+                  setConfirmingKey(null);
+                }}
+              />
+              <span>All agents</span>
+            </label>
+          </div>
         </div>
       )}
 
