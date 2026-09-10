@@ -27,6 +27,8 @@ export interface WorkflowPane {
 export interface WorkflowChatDockProps {
   connection: Connection;
   client: LoomcycleClient;
+  /** Splitter-controlled dock width (px). */
+  width: number;
   /** Panes to show, in order (orchestrator first, then selected runs). */
   panes: WorkflowPane[];
   /** run id → its pending interruption, for the answer bar (run panes). */
@@ -40,6 +42,7 @@ export interface WorkflowChatDockProps {
 export default function WorkflowChatDock({
   connection,
   client,
+  width,
   panes,
   interrupts,
   focusedId,
@@ -48,7 +51,7 @@ export default function WorkflowChatDock({
 }: WorkflowChatDockProps) {
   if (panes.length === 0) return null;
   return (
-    <aside className="wf-dock" aria-label="Agent chats">
+    <aside className="wf-dock" aria-label="Agent chats" style={{ width }}>
       {panes.map((p) => (
         <DockPane
           key={p.id}

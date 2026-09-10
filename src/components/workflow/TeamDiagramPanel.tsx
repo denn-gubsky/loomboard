@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLoomcycle } from "../../state/connection";
 import DiagramBlock from "../../chat/components/DiagramBlock";
 
@@ -35,11 +35,12 @@ export default function TeamDiagramPanel({
     };
   }, [client, team, highlightState]);
 
+  // Keep the element identity stable across the parent's frequent re-renders
+  // (the run-state stream ticks many times/sec while a team runs) so the diagram
+  // renders once per source and never re-mounts/blinks.
+  const diagram = useMemo(() => (code ? <DiagramBlock code={code} /> : null), [code]);
+
   if (error) return <div className="wf-error">{error}</div>;
   if (!code) return <div className="wf-dim">Loading diagram…</div>;
-  return (
-    <div className="wf-diagram">
-      <DiagramBlock code={code} />
-    </div>
-  );
+  return <div className="wf-diagram">{diagram}</div>;
 }
