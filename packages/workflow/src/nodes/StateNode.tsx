@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import type { FlowNodeData } from "../lib/flow";
+import { HANDLE, type FlowNodeData } from "../lib/flow";
 
 // One component for every handler kind, rather than one per kind.
 //
@@ -34,10 +34,22 @@ export function StateNode({ data, selected }: NodeProps) {
 
   return (
     <div className={classes} data-testid={`node-${node.id}`}>
-      {/* A terminal state accepts inbound edges only; teamgraph refuses an
-          outbound one, so not rendering the source handle makes that rule a
-          property of the UI rather than an error message after the fact. */}
-      <Handle type="target" position={Position.Left} className="lb-wf-handle" />
+      {/* Four handles, not two. A forward edge runs right → left across the
+          row; a BACKWARD one (any pushback loop) runs through the bottom pair
+          instead, so it arcs below the row rather than curving back through
+          the nodes and stacking on top of the forward edge. See lib/flow.ts. */}
+      <Handle
+        id={HANDLE.targetLeft}
+        type="target"
+        position={Position.Left}
+        className="lb-wf-handle"
+      />
+      <Handle
+        id={HANDLE.targetBottom}
+        type="target"
+        position={Position.Bottom}
+        className="lb-wf-handle lb-wf-handle--loop"
+      />
 
       <div className="lb-wf-node__head">
         <span className="lb-wf-node__title" title={node.id}>
@@ -95,8 +107,24 @@ export function StateNode({ data, selected }: NodeProps) {
         </div>
       )}
 
+      {/* A terminal state accepts inbound edges only; teamgraph refuses an
+          outbound one, so withholding BOTH source handles makes that rule a
+          property of the UI rather than an error message after the fact. */}
       {node.kind !== "terminal" && (
-        <Handle type="source" position={Position.Right} className="lb-wf-handle" />
+        <>
+          <Handle
+            id={HANDLE.sourceRight}
+            type="source"
+            position={Position.Right}
+            className="lb-wf-handle"
+          />
+          <Handle
+            id={HANDLE.sourceBottom}
+            type="source"
+            position={Position.Bottom}
+            className="lb-wf-handle lb-wf-handle--loop"
+          />
+        </>
       )}
     </div>
   );

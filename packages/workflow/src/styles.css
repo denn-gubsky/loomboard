@@ -241,6 +241,23 @@
   background: var(--lb-wf-accent);
   border: none;
 }
+/* The loop handles carry BACKWARD edges (pushback routes). Both sit on the
+ * bottom edge, so they are nudged apart — stacked they would be one dot that
+ * accepts two different connections. Muted because they are structural: an
+ * operator drags between the side handles, and these mostly just receive the
+ * loop the layout puts there. */
+.loomboard-workflow .lb-wf-handle--loop {
+  opacity: 0.4;
+}
+.loomboard-workflow .lb-wf-handle--loop:hover {
+  opacity: 1;
+}
+.loomboard-workflow .react-flow__handle-bottom[data-handleid="t-bottom"] {
+  left: 35%;
+}
+.loomboard-workflow .react-flow__handle-bottom[data-handleid="s-bottom"] {
+  left: 65%;
+}
 
 /* ---- findings ---- */
 .loomboard-workflow .lb-wf-finding {
