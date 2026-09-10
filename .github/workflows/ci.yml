@@ -21,19 +21,26 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+
+      # packages/workflow is a self-contained unit with its own deps, vitest
+      # config and jsdom environment. Its install comes FIRST because the app
+      # consumes the package from SOURCE via a Vite alias + tsconfig paths, so
+      # the ROOT `tsc --noEmit` follows that alias into packages/workflow/src
+      # and must be able to resolve @xyflow/react and @loomcycle/def-fields
+      # from packages/workflow/node_modules. Ordering this after the root
+      # typecheck fails the build with "cannot find module" (PR #53, first run).
+      - name: workflow package — install
+        working-directory: packages/workflow
+        run: npm ci
+
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:lib
       - run: npm run build:standalone
 
-      # packages/workflow is a self-contained unit with its own deps, vitest
-      # config and jsdom environment, and the app runner deliberately excludes
-      # it (see vite.config.ts). Without these steps its 85 tests would never
-      # run in CI, and the app build would still pass because the app consumes
-      # it from source via a Vite alias.
-      - name: workflow package — install
-        working-directory: packages/workflow
-        run: npm ci
+      # The app runner excludes packages/** (see vite.config.ts), so without
+      # these the package's tests would never execute in CI while the app
+      # build stayed green.
       - name: workflow package — typecheck
         working-directory: packages/workflow
         run: npm run typecheck
