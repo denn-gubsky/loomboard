@@ -56,6 +56,21 @@ export default defineConfig(({ mode }) => ({
       "@loomboard/workflow/styles.css": workflowStyles,
       "@loomboard/workflow": workflowSrc,
     },
+    // packages/workflow has its OWN node_modules (it needs react + react-dom
+    // to build and test standalone). Consuming it from source therefore lets
+    // Vite resolve a SECOND React: our own files resolve `react` to the root
+    // copy, but @xyflow/react is a PRE-BUILT dep whose internal react import
+    // resolves relative to ITS location — packages/workflow/node_modules.
+    //
+    // The result is react-dom rendering with the root React while
+    // ReactFlowProvider calls hooks on the nested one, so the dispatcher is
+    // null: "Cannot read properties of null (reading 'useState')". React
+    // unmounts the whole tree, so the symptom is a completely blank page —
+    // no canvas, no sidebar, and no error on screen.
+    //
+    // dedupe forces every importer, nested ones included, onto the root copy.
+    // Same fix and same reasoning as loomcycle's web/vite.config.ts.
+    dedupe: ["react", "react-dom", "react/jsx-runtime"],
   },
   // `tauri dev` loads the app from this dev server, so the port must match
   // devUrl in tauri.conf.json. Only pin it for the Tauri build to avoid forcing
@@ -66,6 +81,17 @@ export default defineConfig(({ mode }) => ({
   test: {
     // Pure reducer/metrics tests run in node.
     environment: "node",
+    server: {
+      deps: {
+        // resolve.dedupe fixes the browser, but Vitest EXTERNALISES packages
+        // under node_modules and lets Node resolve them — so @xyflow/react
+        // would still pull packages/workflow/node_modules/react and the
+        // duplicate-React crash would reproduce only in tests, or worse, be
+        // fixed in tests while broken in the browser. Inlining routes them
+        // through Vite's transform pipeline, where dedupe applies.
+        inline: [/@xyflow\/react/, /@loomcycle\/def-fields/],
+      },
+    },
     // packages/* are self-contained units with their own vitest config, deps
     // and environment (the canvas needs jsdom, which is installed there and
     // not here). Globbing them from the app runner picks up their files
