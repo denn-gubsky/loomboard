@@ -1,0 +1,739 @@
+{
+  "_comment": [
+    "Shared validation fixtures for the TeamDef graph. ONE file, TWO validators.",
+    "",
+    "  consumer 1: src/lib/validate.test.ts \u2014 the canvas's TypeScript mirror.",
+    "  consumer 2: loomcycle's internal/teamgraph shared-cases test, which reads",
+    "              THIS file out of node_modules/@loomboard/workflow/testdata/",
+    "              once the component is integrated there.",
+    "",
+    "The canvas mirrors teamgraph.Validate so an operator sees a broken graph",
+    "while drawing rather than when op=create refuses it. Two implementations of",
+    "one rule set drift, silently, and this file is what stops it: a rule added",
+    "to validate.go without a case here is a rule the canvas will not surface.",
+    "Shipping the fixture in the package (package.json `files`) is what lets the",
+    "coupling survive the repo boundary instead of becoming a copy that rots.",
+    "",
+    "go_valid / ts_valid are separate on purpose. They agree everywhere except",
+    "where RFC CZ decision 3 requires them not to \u2014 an unknown handler kind is an",
+    "error to the runtime and merely UNKNOWN to a canvas that may simply be older",
+    "than the runtime. Any case where they differ must say why in why_divergent.",
+    "",
+    "NOTE: until the loomcycle integration lands, go_valid is an UNVERIFIED claim",
+    "about the Go validator. It was checked by hand against internal/teamgraph at",
+    "loomcycle 61de2cbb; the integration test is what makes it self-enforcing."
+  ],
+  "cases": [
+    {
+      "name": "minimal linear team",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "parallel with consolidator and at_least wait",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "review",
+        "states": [
+          {
+            "state": "review",
+            "handler": {
+              "kind": "parallel",
+              "agents": [
+                "sec",
+                "qa"
+              ],
+              "wait": "at_least:2",
+              "consolidator": "judge"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "review",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "pushback loop is legal",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "code",
+        "states": [
+          {
+            "state": "code",
+            "handler": {
+              "kind": "agent",
+              "agent": "coder"
+            }
+          },
+          {
+            "state": "review",
+            "handler": {
+              "kind": "consolidator",
+              "agent": "judge"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "code",
+            "to": "review",
+            "on": "success"
+          },
+          {
+            "from": "review",
+            "to": "done",
+            "on": "success"
+          },
+          {
+            "from": "review",
+            "to": "code",
+            "on": "pushback:redo"
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty entry",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "",
+        "states": [
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": []
+      }
+    },
+    {
+      "name": "entry does not resolve to a state",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "nope",
+        "states": [
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": []
+      }
+    },
+    {
+      "name": "no states",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [],
+        "transitions": []
+      }
+    },
+    {
+      "name": "duplicate state id",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "a",
+        "states": [
+          {
+            "state": "a",
+            "handler": {
+              "kind": "agent",
+              "agent": "x"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "a",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "unreachable state",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "orphan",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "terminal with an outbound transition",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          },
+          {
+            "from": "done",
+            "to": "start",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "non-terminal dead end",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "stuck",
+            "handler": {
+              "kind": "agent",
+              "agent": "b"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "stuck",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate outbound label makes the route ambiguous",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "x",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "y",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "x",
+            "on": "success"
+          },
+          {
+            "from": "start",
+            "to": "y",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid transition label",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "maybe"
+          }
+        ]
+      }
+    },
+    {
+      "name": "pushback with an empty reason",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "pushback:"
+          }
+        ]
+      }
+    },
+    {
+      "name": "agent handler without an agent",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "agent handler also setting agents",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "agents": [
+                "b"
+              ]
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "parallel without a consolidator",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "review",
+        "states": [
+          {
+            "state": "review",
+            "handler": {
+              "kind": "parallel",
+              "agents": [
+                "a",
+                "b"
+              ]
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "review",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "parallel with an empty agents list",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "review",
+        "states": [
+          {
+            "state": "review",
+            "handler": {
+              "kind": "parallel",
+              "agents": [],
+              "consolidator": "j"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "review",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "parallel with an invalid wait",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "review",
+        "states": [
+          {
+            "state": "review",
+            "handler": {
+              "kind": "parallel",
+              "agents": [
+                "a"
+              ],
+              "consolidator": "j",
+              "wait": "at_least:0"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "review",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "terminal handler setting an agent",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal",
+              "agent": "nope"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "handler with no kind",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {}
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "negative handler timeout",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "timeout_ms": -1
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "max_iterations above the ceiling",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "max_iterations": 1001,
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown handler kind from a newer runtime",
+      "go_valid": false,
+      "ts_valid": true,
+      "why_divergent": "RFC CZ decision 3. The runtime rejects a kind it does not implement, and must. The canvas must NOT: it may be an older build talking to a newer runtime, and refusing to render a `starter` would push the operator back to hand-editing JSON. The canvas renders it opaque, preserves it byte-for-byte, reports it at info, and lets the server be the authority.",
+      "definition": {
+        "entry": "on-pr",
+        "states": [
+          {
+            "state": "on-pr",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "pr-events",
+                "wait": "any"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "verdicts"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "on-pr",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -12,12 +12,6 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    "baseUrl": ".",
-    "paths": {
-      "@loomboard/workflow": ["packages/workflow/src/index.ts"],
-      "@loomboard/workflow/styles.css": ["packages/workflow/src/styles.css"]
-    },
-
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -25,7 +19,7 @@
     "noUncheckedSideEffectImports": true,
     "skipLibCheck": true,
 
-    "types": ["vite/client", "node", "chrome"]
+    "types": ["vite/client", "node"]
   },
-  "include": ["src", "extension", "vite.config.ts", "vite.config.extension.ts"]
+  "include": ["src", "vite.config.lib.ts"]
 }

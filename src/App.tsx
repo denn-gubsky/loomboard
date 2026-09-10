@@ -15,10 +15,11 @@ import type { Connection } from "./chat/lib/createClient";
 import { buildConnection } from "./lib/buildConnection";
 import { getClient } from "./lib/loomcycle";
 import ConnectionSettings from "./components/ConnectionSettings";
-import Sidebar from "./components/Sidebar";
+import Sidebar, { type SidebarView } from "./components/Sidebar";
 import Chat from "./chat/Chat";
 import AgentPortfolioGrid from "./components/agentchat/AgentPortfolioGrid";
 import WorkflowArea from "./components/workflow/WorkflowArea";
+import CanvasArea from "./components/workflow/CanvasArea";
 
 function ChatArea() {
   const { settings } = useConnection();
@@ -171,9 +172,7 @@ function BoardArea() {
 // surface and the Library.
 function AppShell() {
   const { capabilities } = useConnection();
-  const [view, setView] = useState<
-    "chat" | "library" | "documents" | "memory" | "boards" | "workflow"
-  >("chat");
+  const [view, setView] = useState<SidebarView>("chat");
   // Dev-only preview of the agent-tile board via `?board` — no nav entry yet.
   const devBoard =
     import.meta.env.DEV &&
@@ -186,6 +185,7 @@ function AppShell() {
   const showMemory = view === "memory" && capabilities.canTenant;
   const showBoards = view === "boards" && capabilities.canTenant;
   const showWorkflow = view === "workflow" && capabilities.canTenant;
+  const showCanvas = view === "canvas" && capabilities.canTenant;
   return (
     <ConversationsProvider>
       <ActiveChatProvider>
@@ -203,6 +203,8 @@ function AppShell() {
             <BoardsArea />
           ) : showWorkflow ? (
             <WorkflowArea />
+          ) : showCanvas ? (
+            <CanvasArea />
           ) : (
             <ChatArea />
           )}

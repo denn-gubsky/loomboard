@@ -1,7 +1,8 @@
 name: CI
 
-# Green-gate on every PR and every push to main: typecheck, unit tests, and both
-# package builds (the @loomboard/chat library + the @loomboard/app standalone SPA).
+# Green-gate on every PR and every push to main: typecheck, unit tests, and the
+# package builds (the @loomboard/chat library + the @loomboard/app standalone
+# SPA + the @loomboard/workflow canvas).
 on:
   pull_request:
   push:
@@ -20,7 +21,32 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+
+      # packages/workflow is a self-contained unit with its own deps, vitest
+      # config and jsdom environment. Its install comes FIRST because the app
+      # consumes the package from SOURCE via a Vite alias + tsconfig paths, so
+      # the ROOT `tsc --noEmit` follows that alias into packages/workflow/src
+      # and must be able to resolve @xyflow/react and @loomcycle/def-fields
+      # from packages/workflow/node_modules. Ordering this after the root
+      # typecheck fails the build with "cannot find module" (PR #53, first run).
+      - name: workflow package — install
+        working-directory: packages/workflow
+        run: npm ci
+
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:lib
       - run: npm run build:standalone
+
+      # The app runner excludes packages/** (see vite.config.ts), so without
+      # these the package's tests would never execute in CI while the app
+      # build stayed green.
+      - name: workflow package — typecheck
+        working-directory: packages/workflow
+        run: npm run typecheck
+      - name: workflow package — test
+        working-directory: packages/workflow
+        run: npm test
+      - name: workflow package — build
+        working-directory: packages/workflow
+        run: npm run build:lib
