@@ -524,17 +524,36 @@ button {
 .library-pane,
 .explorer-pane,
 .memory-pane,
-.boards-pane {
+.boards-pane,
+.canvas-area {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
+.canvas-area__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+.canvas-area__error {
+  color: var(--danger, #dc2626);
+}
+.canvas-area__empty {
+  margin: auto;
+  max-width: 32rem;
+  text-align: center;
+  color: var(--text-dim);
+}
+
 .library-pane > .loomcycle-library,
 .explorer-pane > .loomcycle-explorer,
 .memory-pane > .loomcycle-memory-view,
-.boards-pane > .loomcycle-loomboard {
+.boards-pane > .loomcycle-loomboard,
+.canvas-area > .loomboard-workflow {
   flex: 1;
   min-height: 0;
 }
