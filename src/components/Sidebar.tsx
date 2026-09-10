@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Sun,
+  Share2,
   Workflow,
 } from "lucide-react";
 import { useConnection } from "../state/connection";
@@ -23,7 +24,14 @@ import logoWhite from "../assets/loomboard-logo-white.svg";
 import logoBlack from "../assets/loomboard-logo-black.svg";
 import brandMark from "../assets/loomboard-favicon.svg";
 
-export type SidebarView = "chat" | "library" | "documents" | "memory" | "boards" | "workflow";
+export type SidebarView =
+  | "chat"
+  | "library"
+  | "documents"
+  | "memory"
+  | "boards"
+  | "workflow"
+  | "canvas";
 
 interface Props {
   view: SidebarView;
@@ -128,6 +136,13 @@ export default function Sidebar({ view, onViewChange }: Props) {
               title="Workflow"
             >
               <Workflow size={16} /> <span className="label">Workflow</span>
+            </button>
+            <button
+              className={view === "canvas" ? "side-nav-btn active" : "side-nav-btn"}
+              onClick={() => onViewChange("canvas")}
+              title="Canvas — edit a team's workflow graph"
+            >
+              <Share2 size={16} /> <span className="label">Canvas</span>
             </button>
           </>
         )}

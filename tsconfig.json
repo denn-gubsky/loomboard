@@ -12,6 +12,12 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    "baseUrl": ".",
+    "paths": {
+      "@loomboard/workflow": ["packages/workflow/src/index.ts"],
+      "@loomboard/workflow/styles.css": ["packages/workflow/src/styles.css"]
+    },
+
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

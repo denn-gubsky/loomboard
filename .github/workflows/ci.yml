@@ -1,7 +1,8 @@
 name: CI
 
-# Green-gate on every PR and every push to main: typecheck, unit tests, and both
-# package builds (the @loomboard/chat library + the @loomboard/app standalone SPA).
+# Green-gate on every PR and every push to main: typecheck, unit tests, and the
+# package builds (the @loomboard/chat library + the @loomboard/app standalone
+# SPA + the @loomboard/workflow canvas).
 on:
   pull_request:
   push:
@@ -24,3 +25,21 @@ jobs:
       - run: npm test
       - run: npm run build:lib
       - run: npm run build:standalone
+
+      # packages/workflow is a self-contained unit with its own deps, vitest
+      # config and jsdom environment, and the app runner deliberately excludes
+      # it (see vite.config.ts). Without these steps its 85 tests would never
+      # run in CI, and the app build would still pass because the app consumes
+      # it from source via a Vite alias.
+      - name: workflow package — install
+        working-directory: packages/workflow
+        run: npm ci
+      - name: workflow package — typecheck
+        working-directory: packages/workflow
+        run: npm run typecheck
+      - name: workflow package — test
+        working-directory: packages/workflow
+        run: npm test
+      - name: workflow package — build
+        working-directory: packages/workflow
+        run: npm run build:lib
