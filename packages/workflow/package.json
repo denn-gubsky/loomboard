@@ -2,7 +2,7 @@
   "name": "@loomboard/workflow",
   "version": "0.1.0",
   "type": "module",
-  "description": "Reusable React canvas for loomcycle TeamDef workflows — author the agent-team graph, run it, monitor it, and interact with its agents.",
+  "description": "Reusable React canvas for loomcycle TeamDef workflows \u2014 author the agent-team graph, run it, monitor it, and interact with its agents.",
   "license": "Apache-2.0",
   "author": "Dennis Gubsky",
   "repository": {
@@ -10,8 +10,19 @@
     "url": "git+https://github.com/denn-gubsky/loomboard.git",
     "directory": "packages/workflow"
   },
-  "keywords": ["loomcycle", "loomboard", "teamdef", "workflow", "canvas", "react", "agent", "component"],
-  "sideEffects": ["**/*.css"],
+  "keywords": [
+    "loomcycle",
+    "loomboard",
+    "teamdef",
+    "workflow",
+    "canvas",
+    "react",
+    "agent",
+    "component"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -23,8 +34,13 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "testdata"],
-  "publishConfig": { "access": "public" },
+  "files": [
+    "dist",
+    "testdata"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "npm run build:lib",
     "build:lib": "vite build --config vite.config.lib.ts && tsc -p tsconfig.lib.json && cp src/styles.css dist/styles.css",
@@ -35,12 +51,14 @@
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0"
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "@loomcycle/def-fields": "^0.1.0"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.6"
   },
   "devDependencies": {
+    "@loomcycle/def-fields": "^0.1.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

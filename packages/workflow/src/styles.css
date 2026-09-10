@@ -1,0 +1,288 @@
+/* @loomboard/workflow — opt-in styles.
+ *
+ * Every rule is scoped under .loomboard-workflow (elements: lb-wf-*), matching
+ * @loomcycle/def-fields' .loomcycle-def-fields / lc-df-* stance. A host with
+ * its own palette must not have to fight ours, and two components on one page
+ * must not collide.
+ *
+ * @xyflow/react's own stylesheet is imported here rather than left to the
+ * consumer: the canvas is unusable without it (no pan, no zoom, no edge
+ * paths), so making it a second thing to remember would just produce bug
+ * reports. Bundlers resolve the bare specifier from the consumer's tree.
+ */
+@import "@xyflow/react/dist/style.css";
+
+.loomboard-workflow {
+  --lb-wf-bg: #ffffff;
+  --lb-wf-fg: #1a1a1a;
+  --lb-wf-muted: #6b7280;
+  --lb-wf-border: #d4d4d8;
+  --lb-wf-surface: #f7f7f8;
+  --lb-wf-accent: #2563eb;
+  --lb-wf-success: #16a34a;
+  --lb-wf-pushback: #dc2626;
+  --lb-wf-conditional: #d97706;
+  --lb-wf-error-bg: #fef2f2;
+  --lb-wf-info-bg: #f0f9ff;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 420px;
+  color: var(--lb-wf-fg);
+  background: var(--lb-wf-bg);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Dark is opt-in via an explicit data-theme, or inherited from an ancestor
+ * that set one. We deliberately do NOT follow prefers-color-scheme on our own:
+ * the host owns the theme, and guessing would put a dark canvas inside a light
+ * console. */
+.loomboard-workflow[data-theme="dark"],
+[data-theme="dark"] .loomboard-workflow:not([data-theme="light"]) {
+  --lb-wf-bg: #0f1115;
+  --lb-wf-fg: #e5e7eb;
+  --lb-wf-muted: #9ca3af;
+  --lb-wf-border: #2f3540;
+  --lb-wf-surface: #171a21;
+  --lb-wf-accent: #60a5fa;
+  --lb-wf-error-bg: #2a1416;
+  --lb-wf-info-bg: #0d1f2b;
+}
+
+/* ---- toolbar ---- */
+.loomboard-workflow .lb-wf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--lb-wf-border);
+  background: var(--lb-wf-surface);
+}
+.loomboard-workflow .lb-wf-toolbar__name {
+  font-size: 13px;
+}
+.loomboard-workflow .lb-wf-toolbar__spacer {
+  flex: 1;
+}
+.loomboard-workflow .lb-wf-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--lb-wf-border);
+  border-radius: 5px;
+  background: var(--lb-wf-bg);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.loomboard-workflow .lb-wf-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.loomboard-workflow .lb-wf-btn--primary {
+  border-color: var(--lb-wf-accent);
+  color: var(--lb-wf-accent);
+}
+.loomboard-workflow .lb-wf-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.loomboard-workflow .lb-wf-badge--error {
+  background: var(--lb-wf-error-bg);
+  color: var(--lb-wf-pushback);
+}
+.loomboard-workflow .lb-wf-badge--ok {
+  color: var(--lb-wf-success);
+}
+.loomboard-workflow .lb-wf-error {
+  padding: 8px 10px;
+  background: var(--lb-wf-error-bg);
+  color: var(--lb-wf-pushback);
+  border-bottom: 1px solid var(--lb-wf-border);
+}
+
+/* ---- layout ---- */
+.loomboard-workflow .lb-wf-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.loomboard-workflow .lb-wf-graph {
+  flex: 1;
+  min-width: 0;
+}
+.loomboard-workflow .lb-wf-inspector {
+  width: 320px;
+  flex: none;
+  padding: 10px;
+  border-left: 1px solid var(--lb-wf-border);
+  background: var(--lb-wf-surface);
+  overflow: auto;
+}
+.loomboard-workflow .lb-wf-inspector--empty {
+  color: var(--lb-wf-muted);
+}
+.loomboard-workflow .lb-wf-field {
+  display: block;
+  margin-bottom: 10px;
+}
+.loomboard-workflow .lb-wf-field__label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--lb-wf-muted);
+  font-size: 12px;
+}
+.loomboard-workflow .lb-wf-input {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--lb-wf-border);
+  border-radius: 4px;
+  background: var(--lb-wf-bg);
+  color: inherit;
+  font: inherit;
+}
+.loomboard-workflow .lb-wf-json {
+  margin: 6px 0 0;
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--lb-wf-bg);
+  border: 1px solid var(--lb-wf-border);
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre;
+}
+
+/* ---- nodes ---- */
+.loomboard-workflow .lb-wf-node {
+  min-width: 170px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--lb-wf-border);
+  border-radius: 7px;
+  background: var(--lb-wf-bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+.loomboard-workflow .lb-wf-node.is-selected {
+  border-color: var(--lb-wf-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--lb-wf-accent) 30%, transparent);
+}
+.loomboard-workflow .lb-wf-node.has-error {
+  border-color: var(--lb-wf-pushback);
+}
+.loomboard-workflow .lb-wf-node--terminal {
+  border-radius: 18px;
+  background: var(--lb-wf-surface);
+}
+/* An opaque node is visibly provisional — dashed, muted — so nobody mistakes
+ * "this canvas cannot edit it" for "this node is broken". */
+.loomboard-workflow .lb-wf-node--opaque {
+  border-style: dashed;
+  background: var(--lb-wf-surface);
+}
+.loomboard-workflow .lb-wf-node__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.loomboard-workflow .lb-wf-node__title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.loomboard-workflow .lb-wf-node__entry {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--lb-wf-accent);
+  color: #fff;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.loomboard-workflow .lb-wf-node__kind {
+  margin-left: auto;
+  color: var(--lb-wf-muted);
+  font-size: 11px;
+}
+.loomboard-workflow .lb-wf-node__body,
+.loomboard-workflow .lb-wf-node__opaque {
+  margin-top: 6px;
+}
+.loomboard-workflow .lb-wf-node__opaque {
+  color: var(--lb-wf-muted);
+  font-size: 11px;
+}
+.loomboard-workflow .lb-wf-node__agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.loomboard-workflow .lb-wf-node__agent {
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--lb-wf-surface);
+  border: 1px solid var(--lb-wf-border);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.loomboard-workflow .lb-wf-node__meta {
+  margin-top: 4px;
+  color: var(--lb-wf-muted);
+  font-size: 11px;
+}
+.loomboard-workflow .lb-wf-node__findings {
+  margin-top: 6px;
+}
+.loomboard-workflow .lb-wf-handle {
+  width: 8px;
+  height: 8px;
+  background: var(--lb-wf-accent);
+  border: none;
+}
+
+/* ---- findings ---- */
+.loomboard-workflow .lb-wf-finding {
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.loomboard-workflow .lb-wf-finding--error {
+  background: var(--lb-wf-error-bg);
+  color: var(--lb-wf-pushback);
+}
+.loomboard-workflow .lb-wf-finding--info {
+  background: var(--lb-wf-info-bg);
+  color: var(--lb-wf-muted);
+}
+.loomboard-workflow .lb-wf-findings {
+  max-height: 120px;
+  margin: 0;
+  padding: 6px 10px;
+  border-top: 1px solid var(--lb-wf-border);
+  background: var(--lb-wf-surface);
+  list-style: none;
+  overflow: auto;
+}
+.loomboard-workflow .lb-wf-findings li + li {
+  margin-top: 3px;
+}
+
+/* ---- edges ---- */
+.loomboard-workflow .lb-wf-edge--success .react-flow__edge-path {
+  stroke: var(--lb-wf-success);
+}
+.loomboard-workflow .lb-wf-edge--pushback .react-flow__edge-path {
+  stroke: var(--lb-wf-pushback);
+  stroke-dasharray: 5 3;
+}
+.loomboard-workflow .lb-wf-edge--conditional .react-flow__edge-path {
+  stroke: var(--lb-wf-conditional);
+}
+.loomboard-workflow .react-flow__edge-text {
+  fill: var(--lb-wf-fg);
+  font-size: 11px;
+}
