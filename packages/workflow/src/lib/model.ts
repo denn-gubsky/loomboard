@@ -27,9 +27,21 @@ export interface XY {
 
 /** Handler kinds this canvas version renders natively. Anything else becomes an
  *  opaque node — drawn, positionable, connectable, and written back untouched.
- *  P0 covers the four kinds RFC AP already ships; RFC CY's `starter` / `channel`
- *  / `input` / `vars` join this list as their substrate phases land. */
-export const KNOWN_KINDS = ["agent", "parallel", "consolidator", "terminal"] as const;
+ *
+ *  P0 covered the four kinds RFC AP ships. `starter` and `channel` join here at
+ *  P4, now that RFC CY L4 has landed (#1192/#1194/#1195). `vars` and `input`
+ *  are deliberately still absent: the runtime knows them, this canvas does not
+ *  render them yet, and an opaque node is the honest way to say so — it draws,
+ *  it round-trips byte-identically, and the mirror reports it at `info` rather
+ *  than red. They join at P2. */
+export const KNOWN_KINDS = [
+  "agent",
+  "parallel",
+  "consolidator",
+  "terminal",
+  "starter",
+  "channel",
+] as const;
 export type KnownKind = (typeof KNOWN_KINDS)[number];
 
 export function isKnownKind(kind: string): kind is KnownKind {
@@ -228,9 +240,23 @@ export function allowedTargets(model: CanvasModel, from: string): string[] {
   return model.edges.filter((e) => e.from === from).map((e) => e.to);
 }
 
-/** The agent name(s) a node's handler runs, for the node face. */
+/** The agent name(s) a node's handler runs, for the node face.
+ *
+ *  A Starter names its agents in `fanout`, not in `agent`/`agents` — the
+ *  runtime refuses the latter on a starter outright. So the lookup is by kind
+ *  rather than by trying both shapes on every node: a starter with a stray
+ *  top-level `agent` is invalid, and drawing it as if it ran that agent would
+ *  hide the error the inspector is about to show. */
 export function handlerAgents(n: CanvasNode): string[] {
   const h = handlerOf(n);
+  if (n.kind === "starter") {
+    const f = isObj(h.fanout) ? h.fanout : {};
+    const one = str(f.agent);
+    if (one) return [one];
+    return Array.isArray(f.agents)
+      ? f.agents.filter((a): a is string => typeof a === "string" && !!a)
+      : [];
+  }
   const one = str(h.agent);
   if (one) return [one];
   if (Array.isArray(h.agents)) {

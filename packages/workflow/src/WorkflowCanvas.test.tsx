@@ -21,8 +21,8 @@ const definition = {
       state: "review",
       handler: { kind: "parallel", agents: ["sec", "qa"], wait: "at_least:2", consolidator: "judge" },
     },
-    // A kind from a later RFC CY phase — this build has never heard of it.
-    { state: "ship", handler: { kind: "starter", source: { channel: "pr-events" } } },
+    // A kind this build has never heard of (fictional on purpose — see model.test.ts).
+    { state: "ship", handler: { kind: "from-a-newer-runtime", source: { channel: "pr-events" } } },
     { state: "done", handler: { kind: "terminal" } },
   ],
   transitions: [
@@ -66,7 +66,7 @@ describe("WorkflowCanvas", () => {
     const ship = await screen.findByTestId("node-ship");
     // The kind is shown verbatim — an operator has to be able to tell WHICH
     // kind this build does not know.
-    expect(ship.textContent).toContain("starter");
+    expect(ship.textContent).toContain("from-a-newer-runtime");
     expect(ship.className).toContain("lb-wf-node--opaque");
     expect(ship.textContent).toMatch(/not known to this canvas version/i);
   });

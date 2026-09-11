@@ -11,7 +11,7 @@ const model = fromDefinition({
       state: "review",
       handler: { kind: "parallel", agents: ["sec", "qa"], wait: "at_least:2", consolidator: "judge" },
     },
-    { state: "ship", handler: { kind: "starter", source: { channel: "x" } } },
+    { state: "ship", handler: { kind: "from-a-newer-runtime", source: { channel: "x" } } },
     { state: "done", handler: { kind: "terminal" } },
   ],
   transitions: [

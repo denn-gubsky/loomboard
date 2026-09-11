@@ -22,9 +22,17 @@
 
 import type { DefRegistry, FieldSpec } from "@loomcycle/def-fields";
 
-/** Handler kinds P0 renders. Mirrors model.KNOWN_KINDS; kept as a literal here
- *  because def-fields wants a readonly string[] for an enum's options. */
-const KIND_OPTIONS = ["agent", "parallel", "consolidator", "terminal"] as const;
+/** Handler kinds this build renders. Mirrors model.KNOWN_KINDS; kept as a
+ *  literal here because def-fields wants a readonly string[] for an enum's
+ *  options. registry.test.ts asserts the two lists stay equal. */
+const KIND_OPTIONS = [
+  "agent",
+  "parallel",
+  "consolidator",
+  "terminal",
+  "starter",
+  "channel",
+] as const;
 
 const FIELDS: readonly FieldSpec[] = [
   {
@@ -90,6 +98,221 @@ const FIELDS: readonly FieldSpec[] = [
     unsetMeans: "no per-state timeout",
     advanced: true,
   },
+
+  // ---- the Starter (RFC CY L4) ----
+  //
+  // Six groups, one per handler sub-object, which is the decision C2 predicted
+  // and the reason the Starter is one node rather than a container: its whole
+  // configuration is six small forms, not a subgraph.
+  {
+    key: "source",
+    label: "Source",
+    group: "Source",
+    type: "object",
+    hint:
+      "The ONE channel this Starter reads. One channel per Starter is structural, " +
+      "not a limit: a channel cursor has no subscriber dimension, so two readers of " +
+      "one channel share a position and compete for messages.",
+    unsetMeans: "required — a starter reads exactly one channel",
+    fields: [
+      {
+        key: "channel",
+        label: "Channel",
+        group: "Source",
+        type: "text",
+        placeholder: "sdlc-intake",
+        hint: "The channel name this Starter subscribes to.",
+      },
+      {
+        key: "wait",
+        label: "Wait",
+        group: "Source",
+        type: "enum",
+        // `all` is deliberately absent: it counts CHANNELS, and a Starter reads
+        // one, so it returns after the first message. The runtime refuses it;
+        // not offering it is how the canvas keeps an operator from authoring a
+        // silent wrong answer in the first place.
+        options: ["any", "at_least"],
+        hint:
+          "any dispatches on the first message; at_least holds until `n` have arrived. " +
+          "(all is not offered — over a single channel it is identical to any.)",
+        unsetMeans: "any — dispatch as soon as a message arrives",
+      },
+      {
+        key: "n",
+        label: "Threshold (n)",
+        group: "Source",
+        type: "int",
+        min: 0,
+        hint: "How many messages wait=at_least holds for. A floor: a dynamic upstream wave may deliver more.",
+        unsetMeans: "required when wait is at_least",
+      },
+      {
+        key: "wait_ms",
+        label: "Wait timeout (ms)",
+        group: "Source",
+        type: "int",
+        min: 0,
+        hint: "How long to wait for the predicate before the walk errors.",
+        unsetMeans: "the operator's long-poll cap",
+        advanced: true,
+      },
+      {
+        key: "batch",
+        label: "Batch size",
+        group: "Source",
+        type: "int",
+        min: 0,
+        hint: "How many messages to read at once.",
+        unsetMeans: "the store default",
+        advanced: true,
+      },
+    ],
+  },
+  {
+    key: "fanout",
+    label: "Fan-out",
+    group: "Fan-out",
+    type: "object",
+    hint: "How wide the wave is, and what it runs. Exactly one of `agent` or `agents`.",
+    unsetMeans: "required on a starter",
+    fields: [
+      {
+        key: "agent",
+        label: "Agent",
+        group: "Fan-out",
+        type: "text",
+        placeholder: "reviewer",
+        hint: "One AgentDef, run once per message. The common case: N runs of ONE agent.",
+        unsetMeans: "set `agents` instead",
+      },
+      {
+        key: "agents",
+        label: "Agents",
+        group: "Fan-out",
+        type: "string-list",
+        placeholder: "agent name…",
+        hint: "Several AgentDefs, when a wave is heterogeneous. Mutually exclusive with `agent`.",
+        unsetMeans: "set `agent` instead",
+      },
+      {
+        key: "per",
+        label: "Per",
+        group: "Fan-out",
+        type: "enum",
+        options: ["message", "once"],
+        hint:
+          "message spawns one run per message read — the width is however deep the channel is. " +
+          "once spawns a single run holding the whole batch.",
+        unsetMeans: "message — one run per message",
+      },
+      {
+        key: "max",
+        label: "Max width",
+        group: "Fan-out",
+        type: "int",
+        min: 1,
+        hint:
+          "The hard ceiling on one wave. REQUIRED for per=message: dynamic fan-out is a spawn " +
+          "amplifier, and a channel that accumulated a thousand messages is otherwise a thousand runs.",
+        unsetMeans: "required for per=message; meaningless for per=once",
+      },
+      {
+        key: "wait",
+        label: "Wait",
+        group: "Fan-out",
+        type: "text",
+        placeholder: "all | any | at_least:2",
+        hint: "How the walk waits for the wave. Mirrors a parallel state's wait.",
+        unsetMeans: "all — every run in the wave must finish",
+      },
+    ],
+  },
+  {
+    key: "prompt",
+    label: "Prompt",
+    group: "Prompt",
+    type: "object",
+    hint:
+      "The wave's prompt. A Starter carries its own rather than using system_prompt / " +
+      "input_template, because the payload lands in the reserved {{starter.message}} / " +
+      "{{starter.messages}} slots and the node needs somewhere to put the text around them.",
+    unsetMeans: "the spawned agents run on their own prompts alone",
+    fields: [
+      {
+        key: "system",
+        label: "System",
+        group: "Prompt",
+        type: "textarea",
+        hint: "This node's role, appended to the agent's own system prompt rather than replacing it.",
+      },
+      {
+        key: "input",
+        label: "Input",
+        group: "Prompt",
+        type: "textarea",
+        placeholder: "Review this pull request:\n\n{{starter.message}}",
+        hint:
+          "The user prompt for each spawned run. {{starter.message}} is substituted AFTER " +
+          "expansion and is never scanned as template text — the payload is untrusted.",
+      },
+    ],
+  },
+  {
+    key: "sink",
+    label: "Sink",
+    group: "Sink",
+    type: "object",
+    hint:
+      "Where the runtime publishes each spawned run's result — one message per run. " +
+      "Declared, never instructed: an agent told in its prompt to publish may forget, and a " +
+      "forgotten publish leaves a downstream wait hanging forever.",
+    unsetMeans: "results go nowhere — nothing downstream can read them",
+    fields: [
+      {
+        key: "channel",
+        label: "Channel",
+        group: "Sink",
+        type: "text",
+        placeholder: "sdlc-plans",
+        hint: "The channel each result is published to.",
+      },
+    ],
+  },
+  {
+    key: "channel",
+    label: "Channel",
+    group: "Sink",
+    type: "text",
+    placeholder: "verdicts",
+    hint:
+      "The channel this node publishes to. A `channel` node publishes only — reading a " +
+      "channel is what a `starter` does.",
+    unsetMeans: "required on a channel state",
+  },
+  {
+    key: "binds",
+    label: "Binds",
+    group: "Data",
+    type: "kv",
+    hint:
+      "Variable name → a JSONPath over the SOURCE MESSAGE, bound into ${var.*}. " +
+      "Paths are the strict subset: $ , .key and [0] only. Values are UNTRUSTED — a channel " +
+      "message may be agent-written or webhook-relayed.",
+    unsetMeans: "nothing from the message is bound to a variable",
+  },
+  {
+    key: "ack",
+    label: "Ack",
+    group: "Delivery",
+    type: "enum",
+    options: ["after_results", "after_read"],
+    hint:
+      "When the source cursor advances. after_results is at-least-once: a crash mid-wave " +
+      "redelivers the batch. after_read is at-most-once and loses a batch to a crash.",
+    unsetMeans: "after_results — at-least-once",
+    advanced: true,
+  },
 ];
 
 export const teamHandlerRegistry: DefRegistry = {
@@ -101,6 +324,12 @@ export const teamHandlerRegistry: DefRegistry = {
       name: "Execution",
       hint: "How the state's run is bounded. Unset means the substrate default applies.",
     },
+    { name: "Source", hint: "The channel a Starter reads, and how long it waits." },
+    { name: "Fan-out", hint: "How wide the wave is, and what it runs." },
+    { name: "Prompt", hint: "What each spawned run is asked to do." },
+    { name: "Sink", hint: "Where results are published." },
+    { name: "Data", hint: "What this state pulls out of the message it read." },
+    { name: "Delivery", hint: "Cursor and redelivery semantics." },
   ],
   fields: FIELDS,
 };
@@ -121,6 +350,13 @@ export function fieldsForKind(kind: string): string[] {
       return ["agent", "timeout_ms"];
     case "parallel":
       return ["agents", "consolidator", "wait", "timeout_ms"];
+    case "starter":
+      // Deliberately NOT agent/agents: a starter names its agents inside
+      // `fanout`, and the runtime refuses them at the top level. Offering both
+      // places would invite exactly the definition that gets rejected on save.
+      return ["source", "fanout", "prompt", "sink", "binds", "ack", "timeout_ms"];
+    case "channel":
+      return ["channel"];
     case "terminal":
       return [];
     default:

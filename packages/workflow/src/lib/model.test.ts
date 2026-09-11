@@ -23,9 +23,12 @@ const FORWARD_COMPAT = {
   states: [
     {
       state: "intake",
-      // A kind from a later CY phase. Must render opaque and survive verbatim.
+      // A kind this canvas does not know. Deliberately FICTIONAL rather than a
+      // real not-yet-implemented kind: the invariant under test is "an unknown
+      // kind survives verbatim", and naming a real one means the test breaks —
+      // or worse, quietly changes meaning — the day that kind ships.
       handler: {
-        kind: "starter",
+        kind: "from-a-newer-runtime",
         source: { channel: "pr-events", wait: "any", wait_ms: 30000, batch: 8 },
         fanout: { agent: "reviewer", per: "message", max: 8 },
         prompt: { system: "You are a security reviewer.", input: "{{starter.message}}" },
@@ -68,7 +71,7 @@ describe("fromDefinition", () => {
   it("marks a handler kind this canvas version does not know as opaque", () => {
     const m = fromDefinition(FORWARD_COMPAT);
     const intake = m.nodes.find((n) => n.id === "intake")!;
-    expect(intake.kind).toBe("starter");
+    expect(intake.kind).toBe("from-a-newer-runtime");
     expect(intake.opaque).toBe(true);
   });
 
@@ -177,7 +180,7 @@ describe("patchHandler", () => {
   it("re-evaluates opacity when the kind itself is edited", () => {
     const m = fromDefinition(MINIMAL);
     const n = m.nodes[0];
-    expect(patchHandler(n, { kind: "starter" }).opaque).toBe(true);
+    expect(patchHandler(n, { kind: "from-a-newer-runtime" }).opaque).toBe(true);
     expect(patchHandler(n, { kind: "consolidator" }).opaque).toBe(false);
   });
 

@@ -54,28 +54,28 @@ describe("validateModel — shared fixtures", () => {
 });
 
 describe("unknown handler kinds", () => {
-  const withStarter = {
+  const withUnknown = {
     entry: "on-pr",
     states: [
-      { state: "on-pr", handler: { kind: "starter", source: { channel: "x" } } },
+      { state: "on-pr", handler: { kind: "from-a-newer-runtime", source: { channel: "x" } } },
       { state: "done", handler: { kind: "terminal" } },
     ],
     transitions: [{ from: "on-pr", to: "done", on: "success" }],
   };
 
   it("reports an unknown kind at info, never as an error", () => {
-    const findings = validateModel(fromDefinition(withStarter));
+    const findings = validateModel(fromDefinition(withUnknown));
     expect(canSave(findings)).toBe(true);
     const info = findings.filter((f) => f.level === "info");
     expect(info).toHaveLength(1);
     expect(info[0].nodeId).toBe("on-pr");
-    expect(info[0].message).toContain("starter");
+    expect(info[0].message).toContain("from-a-newer-runtime");
   });
 
   it("does not apply handler-shape rules it cannot know", () => {
-    // A `starter` sets neither `agent` nor `agents`; under the `agent` rules
+    // This kind sets neither `agent` nor `agents`; under the `agent` rules
     // that would be an error. It must not be.
-    const findings = validateModel(fromDefinition(withStarter));
+    const findings = validateModel(fromDefinition(withUnknown));
     expect(findings.filter((f) => f.level === "error")).toEqual([]);
   });
 
@@ -84,7 +84,7 @@ describe("unknown handler kinds", () => {
     // beats a false positive on a graph the runtime accepts.
     const model = fromDefinition({
       entry: "on-pr",
-      states: [{ state: "on-pr", handler: { kind: "starter" } }],
+      states: [{ state: "on-pr", handler: { kind: "from-a-newer-runtime" } }],
       transitions: [],
     });
     expect(validateModel(model).filter((f) => f.level === "error")).toEqual([]);

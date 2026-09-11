@@ -40,13 +40,13 @@ describe("fieldsForKind", () => {
   it("shows nothing for a kind this build does not know", () => {
     // An opaque node's fields belong to a runtime this canvas predates; the
     // inspector renders them read-only rather than guessing at an editor.
-    expect(fieldsForKind("starter")).toEqual([]);
+    expect(fieldsForKind("from-a-newer-runtime")).toEqual([]);
     expect(fieldsForKind("")).toEqual([]);
   });
 
   it("only ever names fields the registry declares", () => {
     const declared = new Set(teamHandlerRegistry.fields.map((f) => f.key));
-    for (const kind of [...KNOWN_KINDS, "starter"]) {
+    for (const kind of [...KNOWN_KINDS, "from-a-newer-runtime"]) {
       for (const key of fieldsForKind(kind)) {
         expect(declared, `kind ${kind} names ${key}`).toContain(key);
       }

@@ -734,6 +734,1577 @@
           }
         ]
       }
+    },
+    {
+      "name": "starter fans out one run per message under a ceiling",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter per=once spawns one run and needs no max",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "once"
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter binds the source message into vars",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "binds": {
+                "pr_number": "$.number",
+                "title": "$.pull_request.title"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter waits for at_least n messages",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake",
+                "wait": "at_least",
+                "n": 3
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter with no sink is valid \u2014 the wave just publishes nowhere",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter acks after read",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "ack": "after_read"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter names its agents outside fanout",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "agent": "reviewer"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter with a consolidator",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "consolidator": "judge"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter without a source channel",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {},
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter with no source at all",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter source wait=all is refused \u2014 it counts channels, not messages",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake",
+                "wait": "all"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter source wait=at_least without n",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake",
+                "wait": "at_least"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter source wait=at_least with n below 1",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake",
+                "wait": "at_least",
+                "n": 0
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter source with an invalid wait",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake",
+                "wait": "any_of"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter source with a negative batch",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake",
+                "batch": -1
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter without fanout",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter fanout with both agent and agents",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8,
+                "agents": [
+                  "a",
+                  "b"
+                ]
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter fanout with neither agent nor agents",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter fanout with an empty agent name",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "per": "message",
+                "max": 8,
+                "agents": [
+                  "a",
+                  " "
+                ]
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter fanout per=message without a ceiling",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message"
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter fanout per=once with a pointless max",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "once",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter fanout with an invalid per",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "batch",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter fanout with an invalid wait",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8,
+                "wait": "at_least:0"
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter binds with per=once \u2014 there is no ONE source message",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "once"
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "binds": {
+                "n": "$.number"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter sink present but naming no channel",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {}
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter with an invalid ack",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "ack": "after_publish"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter binds key outside the variable charset",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "binds": {
+                "bad key!": "$.a"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter binds path with a wildcard",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "binds": {
+                "all": "$.items[*]"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter binds path with recursive descent",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "binds": {
+                "deep": "$..title"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter binds path not rooted at $",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "binds": {
+                "n": "number"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel node publishes",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "channel",
+              "channel": "out"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel node without a channel",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "channel"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel node that tries to read \u2014 reading is a starter",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "channel",
+              "channel": "out",
+              "source": {
+                "channel": "in"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel node with an agent",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "channel",
+              "channel": "out",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "source on an agent handler",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "source": {
+                "channel": "in"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "fanout on an agent handler",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "fanout": {
+                "agent": "b",
+                "max": 2
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ack on an agent handler",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "ack": "after_read"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "prompt block on an agent handler \u2014 it uses system_prompt/input_template",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "prompt": {
+                "system": "hi"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel field on an agent handler",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "channel": "out"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter with no outbound transition is a dead end",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              }
+            }
+          }
+        ],
+        "transitions": []
+      }
+    },
+    {
+      "name": "starter with a whitespace-only agent at the top level",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "agent": " ",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
     }
   ]
 }
