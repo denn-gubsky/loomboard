@@ -33,6 +33,7 @@ export {
   handlerOf,
   handlerAgents,
   handlerChannels,
+  teamChannels,
   patchHandler,
   allowedTargets,
   isKnownKind,
@@ -45,6 +46,7 @@ export type {
   Json,
   JsonObject,
   KnownKind,
+  TeamChannels,
   XY,
 } from "./lib/model";
 

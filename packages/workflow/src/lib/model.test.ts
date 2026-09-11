@@ -4,6 +4,7 @@ import {
   handlerAgents,
   handlerOf,
   patchHandler,
+  teamChannels,
   toDefinition,
   type CanvasModel,
 } from "./model";
@@ -207,5 +208,59 @@ describe("handlerAgents", () => {
     expect(handlerAgents(mk({ kind: "parallel", agents: ["a", "b"] }))).toEqual(["a", "b"]);
     expect(handlerAgents(mk({ kind: "consolidator", consolidator: "j" }))).toEqual(["j"]);
     expect(handlerAgents(mk({ kind: "terminal" }))).toEqual([]);
+  });
+});
+
+describe("team channels", () => {
+  const withACL = {
+    entry: "s",
+    channels: { subscribe: ["inbox"], publish: ["done"] },
+    states: [{ state: "s", handler: { kind: "terminal" } }],
+    transitions: [],
+  };
+
+  it("reads the ACL the definition carries", () => {
+    expect(teamChannels(fromDefinition(withACL))).toEqual({
+      subscribe: ["inbox"],
+      publish: ["done"],
+    });
+  });
+
+  it("reports an empty ACL for a team that declares none", () => {
+    expect(teamChannels(fromDefinition(MINIMAL))).toEqual({});
+  });
+
+  it("leaves `channels` untouched until the operator edits it", () => {
+    // The same rule as `layout` (decision 5): merely OPENING a team must never
+    // change what a save would write.
+    const m = fromDefinition(withACL);
+    expect(toDefinition(m)).toEqual(withACL);
+    expect(JSON.stringify(toDefinition(m))).toBe(JSON.stringify(withACL));
+  });
+
+  it("writes an edited ACL back", () => {
+    const m = { ...fromDefinition(withACL), channelsPatch: { subscribe: ["a", "b"], publish: [] } };
+    expect(toDefinition(m).channels).toEqual({ subscribe: ["a", "b"] });
+  });
+
+  it("trims and drops blank entries rather than persisting them", () => {
+    const m = { ...fromDefinition(withACL), channelsPatch: { subscribe: [" a ", "", "b"] } };
+    expect(toDefinition(m).channels).toEqual({ subscribe: ["a", "b"] });
+  });
+
+  it("REMOVES the key when the ACL is emptied, rather than writing {}", () => {
+    // Go tags both lists omitempty, so {} and absent mean the same thing to the
+    // runtime — but only absent round-trips byte-identically against a team
+    // that never had the key, and the content hash sees the difference.
+    const m = { ...fromDefinition(withACL), channelsPatch: { subscribe: [], publish: [] } };
+    expect("channels" in toDefinition(m)).toBe(false);
+  });
+
+  it("an edited ACL survives alongside everything else the canvas preserves", () => {
+    const m = { ...fromDefinition(FORWARD_COMPAT), channelsPatch: { publish: ["x"] } };
+    const out = toDefinition(m);
+    expect(out.channels).toEqual({ publish: ["x"] });
+    expect(out.max_iterations).toBe(FORWARD_COMPAT.max_iterations);
+    expect(out.states).toEqual(FORWARD_COMPAT.states);
   });
 });

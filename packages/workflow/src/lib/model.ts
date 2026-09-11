@@ -88,6 +88,22 @@ export interface CanvasModel {
    *  `layout`, so merely OPENING a team that has none never forks it
    *  (RFC CZ decision 5). */
   layoutDirty: boolean;
+  /** The team's channel ACL, once the operator has edited it. Absent means
+   *  untouched, and `toDefinition` then leaves `channels` exactly as it found
+   *  it — same reason `layoutDirty` exists.
+   *
+   *  Unlike `layout` and `colors`, this IS content: teamContent hashes it, so
+   *  changing it forks the definition. That is deliberate on the runtime's
+   *  part — authority that can change without changing the definition's
+   *  identity is not auditable — and it means this panel is never a free edit. */
+  channelsPatch?: TeamChannels;
+}
+
+/** The workflow's own channel allowlist. The Starter is its single subject, so
+ *  the authority lives here rather than on each agent in a wave. */
+export interface TeamChannels {
+  publish?: string[];
+  subscribe?: string[];
 }
 
 // ---- parsing ----
@@ -201,6 +217,20 @@ export function toDefinition(model: CanvasModel): JsonObject {
     out.layout = { ...prev, nodes };
   }
 
+  if (model.channelsPatch) {
+    const next: JsonObject = {};
+    for (const key of ["publish", "subscribe"] as const) {
+      const list = model.channelsPatch[key]?.map((c) => c.trim()).filter(Boolean);
+      if (list?.length) next[key] = list;
+    }
+    // An ACL emptied all the way out is REMOVED rather than written as `{}`.
+    // Go tags both lists omitempty, so `{}` and absent mean the same thing to
+    // the runtime — but only one of them round-trips byte-identically against
+    // a definition that never had the key.
+    if (Object.keys(next).length) out.channels = next;
+    else delete out.channels;
+  }
+
   return out;
 }
 
@@ -264,6 +294,17 @@ export function handlerAgents(n: CanvasNode): string[] {
   }
   const cons = str(h.consolidator);
   return cons ? [cons] : [];
+}
+
+/** The team's channel ACL as it currently stands — the operator's edit if
+ *  there is one, otherwise whatever the definition carries. */
+export function teamChannels(model: CanvasModel): TeamChannels {
+  if (model.channelsPatch) return model.channelsPatch;
+  const raw = model.source.channels;
+  if (!isObj(raw)) return {};
+  const list = (v: Json | undefined): string[] | undefined =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined;
+  return { publish: list(raw.publish), subscribe: list(raw.subscribe) };
 }
 
 /** The channels a node reads and publishes, for the node face and for deriving

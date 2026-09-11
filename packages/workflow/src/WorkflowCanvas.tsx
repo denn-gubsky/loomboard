@@ -14,9 +14,11 @@ import { edgeId, toDataEdges, toFlowEdges, toFlowNodes } from "./lib/flow";
 import {
   fromDefinition,
   patchHandler,
+  teamChannels,
   toDefinition,
   type CanvasModel,
   type Json,
+  type TeamChannels,
 } from "./lib/model";
 import { canSave, validateModel } from "./lib/validate";
 import { StateNode } from "./nodes/StateNode";
@@ -204,6 +206,10 @@ function WorkflowCanvasInner({
     [selectedId],
   );
 
+  const onChannelsChange = useCallback((next: TeamChannels) => {
+    setModel((m) => (m ? { ...m, channelsPatch: next } : m));
+  }, []);
+
   const onRename = useCallback(
     (next: string) => {
       setModel((m) => {
@@ -387,6 +393,8 @@ function WorkflowCanvasInner({
             disabled={busy}
             onPatch={onPatch}
             onRename={onRename}
+            channels={model ? teamChannels(model) : undefined}
+            onChannelsChange={onChannelsChange}
           />
         )}
       </div>
