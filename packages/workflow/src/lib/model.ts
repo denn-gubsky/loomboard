@@ -265,3 +265,25 @@ export function handlerAgents(n: CanvasNode): string[] {
   const cons = str(h.consolidator);
   return cons ? [cons] : [];
 }
+
+/** The channels a node reads and publishes, for the node face and for deriving
+ *  data edges (RFC CZ decision C1).
+ *
+ *  A starter reads `source.channel` and publishes `sink.channel`; a `channel`
+ *  node publishes only, because reading a channel is what a starter is for.
+ *  Every other kind touches no channel at all — the Starter is the team's
+ *  single ACL subject, so an agent in a wave needs no grant in either
+ *  direction and has nothing to show here. */
+export function handlerChannels(n: CanvasNode): { source?: string; sink?: string } {
+  const h = handlerOf(n);
+  if (n.kind === "starter") {
+    const source = isObj(h.source) ? str(h.source.channel).trim() : "";
+    const sink = isObj(h.sink) ? str(h.sink.channel).trim() : "";
+    return { source: source || undefined, sink: sink || undefined };
+  }
+  if (n.kind === "channel") {
+    const sink = str(h.channel).trim();
+    return { sink: sink || undefined };
+  }
+  return {};
+}

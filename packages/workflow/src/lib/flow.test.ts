@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { HANDLE, edgeClass, edgeId, isBackward, toFlowEdges, toFlowNodes } from "./flow";
+import {
+  HANDLE,
+  edgeClass,
+  edgeId,
+  fanoutSummary,
+  isBackward,
+  toDataEdges,
+  toFlowEdges,
+  toFlowNodes,
+} from "./flow";
 import { fromDefinition } from "./model";
 import { validateModel } from "./validate";
 
@@ -200,5 +209,127 @@ describe("edge direction is visible", () => {
     for (const e of toFlowEdges(model, [])) {
       expect(e.markerEnd.color).toBe("context-stroke");
     }
+  });
+});
+
+describe("fanoutSummary", () => {
+  const starter = (fanout: unknown) =>
+    fromDefinition({
+      entry: "s",
+      states: [{ state: "s", handler: { kind: "starter", source: { channel: "in" }, fanout } }],
+      transitions: [],
+    }).nodes[0];
+
+  it("states the RULE and its ceiling, never a run count", () => {
+    // Width is a runtime property (decision C3): per=message means "as many
+    // runs as there are messages on the channel", which the canvas cannot know.
+    expect(fanoutSummary(starter({ agent: "a", per: "message", max: 8 }))).toBe(
+      "one run per message · max 8",
+    );
+  });
+
+  it("defaults to per=message when `per` is absent, matching the runtime", () => {
+    expect(fanoutSummary(starter({ agent: "a", max: 3 }))).toBe("one run per message · max 3");
+  });
+
+  it("describes per=once as the single run it is", () => {
+    expect(fanoutSummary(starter({ agent: "a", per: "once" }))).toBe("one run · whole batch");
+  });
+
+  it("says nothing for a kind that has no wave", () => {
+    const m = fromDefinition({
+      entry: "s",
+      states: [{ state: "s", handler: { kind: "agent", agent: "a" } }],
+      transitions: [],
+    });
+    expect(fanoutSummary(m.nodes[0])).toBeUndefined();
+  });
+});
+
+describe("toDataEdges", () => {
+  // intake ──(raw)──▶ triage ──(triaged)──▶ work
+  //                         also a CONTROL edge triage → work, so the two
+  //                         relations share a node pair — the case that matters.
+  const wired = fromDefinition({
+    entry: "intake",
+    states: [
+      {
+        state: "intake",
+        handler: { kind: "starter", source: { channel: "inbox" }, fanout: { agent: "a", max: 2 }, sink: { channel: "raw" } },
+      },
+      {
+        state: "triage",
+        handler: { kind: "starter", source: { channel: "raw" }, fanout: { agent: "b", max: 2 }, sink: { channel: "triaged" } },
+      },
+      {
+        state: "work",
+        handler: { kind: "starter", source: { channel: "triaged" }, fanout: { agent: "c", max: 2 } },
+      },
+      { state: "shout", handler: { kind: "channel", channel: "raw" } },
+      { state: "orphan", handler: { kind: "channel", channel: "nobody-reads-this" } },
+    ],
+    transitions: [{ from: "triage", to: "work", on: "success" }],
+  });
+
+  it("derives an edge wherever a sink channel meets a source channel", () => {
+    const pairs = toDataEdges(wired).map((e) => `${e.source}→${e.target}:${e.data.channel}`).sort();
+    expect(pairs).toEqual([
+      "intake→triage:raw",
+      "shout→triage:raw",
+      "triage→work:triaged",
+    ]);
+  });
+
+  it("derives nothing from a sink no state reads", () => {
+    // Publishing where nobody listens is legitimate — results parked for a
+    // human — so it is silently no edge, not a finding.
+    expect(toDataEdges(wired).some((e) => e.source === "orphan")).toBe(false);
+  });
+
+  it("routes data over the top handles so it cannot stack on a control edge", () => {
+    // triage → work exists in BOTH relations. If they shared handles they would
+    // render as one path and decision C1 would be violated in the only case
+    // where it is actually load-bearing.
+    const data = toDataEdges(wired).find((e) => e.source === "triage" && e.target === "work")!;
+    const control = toFlowEdges(wired, []).find((e) => e.source === "triage" && e.target === "work")!;
+    expect([data.sourceHandle, data.targetHandle]).toEqual([HANDLE.sourceTop, HANDLE.targetTop]);
+    expect([control.sourceHandle, control.targetHandle]).not.toEqual([
+      data.sourceHandle,
+      data.targetHandle,
+    ]);
+  });
+
+  it("gives a data edge an id that cannot collide with a transition's", () => {
+    const control = toFlowEdges(wired, []).map((e) => e.id);
+    for (const e of toDataEdges(wired)) expect(control).not.toContain(e.id);
+  });
+
+  it("labels a data edge with its channel", () => {
+    // Unlike `success` on a control edge, the channel is the whole content of
+    // the relation — an unlabelled data edge says only "connected somehow".
+    for (const e of toDataEdges(wired)) expect(e.label).toBe(e.data.channel);
+  });
+
+  it("marks derived edges undeletable", () => {
+    // The way to remove one is to change a channel name in the inspector.
+    for (const e of toDataEdges(wired)) expect(e.deletable).toBe(false);
+  });
+
+  it("draws a starter that republishes to the channel it reads", () => {
+    const loop = fromDefinition({
+      entry: "s",
+      states: [
+        {
+          state: "s",
+          handler: { kind: "starter", source: { channel: "q" }, fanout: { agent: "a", max: 1 }, sink: { channel: "q" } },
+        },
+      ],
+      transitions: [],
+    });
+    // Drawn rather than suppressed: it is a real and usually unintended loop,
+    // and seeing it is the point of having the relation on screen at all.
+    expect(toDataEdges(loop)).toHaveLength(1);
+    expect(toDataEdges(loop)[0].source).toBe("s");
+    expect(toDataEdges(loop)[0].target).toBe("s");
   });
 });

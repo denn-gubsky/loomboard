@@ -14,11 +14,17 @@ const KIND_LABEL: Record<string, string> = {
   parallel: "parallel",
   consolidator: "consolidator",
   terminal: "end",
+  starter: "starter",
+  // "publish" rather than "channel": the kind names the THING, the badge should
+  // name the ACTION, and this kind's whole job is that it publishes and cannot
+  // read. Calling it "channel" next to a Starter that also has channels is the
+  // confusion the L4 split exists to remove.
+  channel: "publish",
 };
 
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
-  const { node, agents, wait, consolidator, isEntry, findings } = d;
+  const { node, agents, wait, consolidator, channels, fanout, isEntry, findings } = d;
 
   const errors = findings.filter((f) => f.level === "error");
   const infos = findings.filter((f) => f.level === "info");
@@ -34,10 +40,12 @@ export function StateNode({ data, selected }: NodeProps) {
 
   return (
     <div className={classes} data-testid={`node-${node.id}`}>
-      {/* Four handles, not two. A forward edge runs right → left across the
-          row; a BACKWARD one (any pushback loop) runs through the bottom pair
-          instead, so it arcs below the row rather than curving back through
-          the nodes and stacking on top of the forward edge. See lib/flow.ts. */}
+      {/* Three handle pairs, one per relation. A forward CONTROL edge runs
+          right → left across the row; a BACKWARD one (any pushback loop) runs
+          through the bottom pair, so it arcs below the row rather than curving
+          back through the nodes it connects; a DATA edge runs over the top.
+          Separate sides are what keep a control and a data edge between the
+          same two nodes from stacking into one path. See lib/flow.ts. */}
       <Handle
         id={HANDLE.targetLeft}
         type="target"
@@ -50,6 +58,17 @@ export function StateNode({ data, selected }: NodeProps) {
         position={Position.Bottom}
         className="lb-wf-handle lb-wf-handle--loop"
       />
+      {/* The data-flow handles exist only on nodes that actually carry a
+          channel. An unconditional pair would put two dead dots on every agent
+          tile, implying a connection the kind cannot make. */}
+      {channels.source && (
+        <Handle
+          id={HANDLE.targetTop}
+          type="target"
+          position={Position.Top}
+          className="lb-wf-handle lb-wf-handle--data"
+        />
+      )}
 
       <div className="lb-wf-node__head">
         <span className="lb-wf-node__title" title={node.id}>
@@ -89,6 +108,21 @@ export function StateNode({ data, selected }: NodeProps) {
           {node.kind === "agent" && consolidator && (
             <div className="lb-wf-node__meta">judged by {consolidator}</div>
           )}
+          {/* The Starter's face is its dispatcher summary (decision C2): what
+              it reads, how wide the wave is, and where results go. One node,
+              not a container — the wave is a runtime fact, so the face states
+              the RULE rather than a run count it cannot know. */}
+          {channels.source && (
+            <div className="lb-wf-node__channel lb-wf-node__channel--in" title={`reads ${channels.source}`}>
+              ← {channels.source}
+            </div>
+          )}
+          {fanout && <div className="lb-wf-node__meta">{fanout}</div>}
+          {channels.sink && (
+            <div className="lb-wf-node__channel lb-wf-node__channel--out" title={`publishes to ${channels.sink}`}>
+              → {channels.sink}
+            </div>
+          )}
         </div>
       )}
 
@@ -105,6 +139,15 @@ export function StateNode({ data, selected }: NodeProps) {
             </div>
           ))}
         </div>
+      )}
+
+      {channels.sink && (
+        <Handle
+          id={HANDLE.sourceTop}
+          type="source"
+          position={Position.Top}
+          className="lb-wf-handle lb-wf-handle--data"
+        />
       )}
 
       {/* A terminal state accepts inbound edges only; teamgraph refuses an

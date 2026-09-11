@@ -10,7 +10,7 @@ import {
 } from "@xyflow/react";
 import { Inspector } from "./inspector/Inspector";
 import { autoLayout, needsAutoLayout } from "./lib/layout";
-import { edgeId, toFlowEdges, toFlowNodes } from "./lib/flow";
+import { edgeId, toDataEdges, toFlowEdges, toFlowNodes } from "./lib/flow";
 import {
   fromDefinition,
   patchHandler,
@@ -101,7 +101,14 @@ function WorkflowCanvasInner({
     () => (model ? toFlowNodes(model, findings, selectedId) : []),
     [model, findings, selectedId],
   );
-  const flowEdges = useMemo(() => (model ? toFlowEdges(model, findings) : []), [model, findings]);
+  // Control edges and the DERIVED data edges, in one array because xyflow takes
+  // one. Data edges come second so a control edge wins the z-order where they
+  // overlap: the walk's own graph is what an operator is editing, and the
+  // channel wiring is context for it (decision C1).
+  const flowEdges = useMemo(
+    () => (model ? [...toFlowEdges(model, findings), ...toDataEdges(model)] : []),
+    [model, findings],
+  );
 
   const selected = useMemo(
     () => model?.nodes.find((n) => n.id === selectedId) ?? null,

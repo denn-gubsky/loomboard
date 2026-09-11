@@ -333,3 +333,68 @@
 .loomboard-workflow .react-flow__minimap-node.is-opaque {
   fill: var(--lb-wf-conditional);
 }
+
+/* ---- the starter and channel kinds (RFC CY L4) ---- */
+
+/* A Starter is the dispatcher: it reads one channel, spawns a wave, and routes
+ * the results onward. The heavier left border is the whole visual claim — this
+ * node is where work ENTERS the graph, which is also where the debugger stops
+ * (decision C6). */
+.loomboard-workflow .lb-wf-node--starter {
+  border-left: 3px solid var(--lb-wf-accent);
+}
+/* A publish-only node is smaller on purpose: it performs one action and runs
+ * no agent, so giving it an agent tile's weight would overstate it. */
+.loomboard-workflow .lb-wf-node--channel {
+  min-width: 130px;
+  border-style: dashed;
+}
+
+.loomboard-workflow .lb-wf-node__channel {
+  margin-top: 4px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.loomboard-workflow .lb-wf-node__channel--in {
+  color: var(--lb-wf-accent);
+}
+.loomboard-workflow .lb-wf-node__channel--out {
+  color: var(--lb-wf-data);
+}
+
+/* ---- data edges ----
+ *
+ * Dashed and in their own colour so a data edge is never mistaken for a
+ * transition. They share a node pair with a control edge often enough that
+ * telling them apart at a glance is the requirement, not a nicety.
+ */
+.loomboard-workflow {
+  --lb-wf-data: #7c3aed;
+}
+.loomboard-workflow[data-theme="dark"],
+[data-theme="dark"] .loomboard-workflow:not([data-theme="light"]) {
+  --lb-wf-data: #a78bfa;
+}
+.loomboard-workflow .lb-wf-edge--data .react-flow__edge-path {
+  stroke: var(--lb-wf-data);
+  stroke-dasharray: 2 4;
+  stroke-width: 1.5;
+}
+/* Derived, so it must not look draggable or deletable. */
+.loomboard-workflow .lb-wf-edge--data {
+  pointer-events: none;
+}
+.loomboard-workflow .lb-wf-edge--data .react-flow__edge-text {
+  fill: var(--lb-wf-data);
+  font-size: 10px;
+}
+.loomboard-workflow .lb-wf-handle--data {
+  background: var(--lb-wf-data);
+  opacity: 0.5;
+}
+.loomboard-workflow .lb-wf-handle--data:hover {
+  opacity: 1;
+}

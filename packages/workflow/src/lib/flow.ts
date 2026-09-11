@@ -4,14 +4,21 @@
 // the React layer stays a renderer rather than a translator. Nothing here
 // imports React.
 //
-// P0 draws CONTROL edges only — `transitions[]`, the walk's own graph. RFC CZ
-// decision C1 adds a second, derived relation once the Starter lands (a sink
-// channel matching a downstream source), drawn dashed and non-draggable. The
-// edge type is already carried on each edge so that addition does not have to
-// reshape this contract.
+// TWO edge relations, which is RFC CZ decision C1 and the central visual
+// decision in this package. `transitions[]` is CONTROL flow — the walk's own
+// graph, drawn solid, drag-created, deletable. A sink channel matching some
+// other node's source channel is DATA flow — derived, drawn dashed over the
+// top handles, and neither draggable nor deletable, because it is a
+// consequence of the two nodes' channel config rather than a thing that
+// exists in the definition.
+//
+// They usually agree and are NOT required to: a Starter may publish to a
+// channel nothing reads, and two nodes wired by a transition may share no
+// channel at all. Conflating them would hide exactly the mistakes a canvas
+// exists to make visible, so both are drawn and never merged.
 
 import type { CanvasEdge, CanvasModel, CanvasNode } from "./model";
-import { handlerAgents, handlerOf } from "./model";
+import { handlerAgents, handlerChannels, handlerOf } from "./model";
 import type { Finding } from "./validate";
 
 /** Which relation an edge represents. `control` is a transition the operator
@@ -25,6 +32,10 @@ export interface FlowNodeData {
   /** e.g. "all", "at_least:2" — parallel only. */
   wait?: string;
   consolidator?: string;
+  /** Channels this node reads / publishes — starter and channel kinds only. */
+  channels: { source?: string; sink?: string };
+  /** Fan-out summary for a starter, e.g. "per message · max 8". */
+  fanout?: string;
   isEntry: boolean;
   /** Findings anchored to this state, worst level first. */
   findings: Finding[];
@@ -33,8 +44,11 @@ export interface FlowNodeData {
 
 export interface FlowEdgeData {
   kind: FlowEdgeKind;
-  /** The transition label — success | pushback:<reason> | conditional:<expr>. */
+  /** The transition label — success | pushback:<reason> | conditional:<expr>.
+   *  Empty on a data edge, which carries a channel rather than a label. */
   on: string;
+  /** data edges only: the channel that produced this edge. */
+  channel?: string;
   findings: Finding[];
   [k: string]: unknown;
 }
@@ -63,6 +77,9 @@ export interface FlowEdge {
   type?: "smoothstep";
   markerEnd: { type: "arrowclosed"; width: number; height: number; color: string };
   animated?: boolean;
+  /** Data edges are derived, so xyflow must not offer to remove them — the way
+   *  to "delete" one is to change a channel name in the inspector. */
+  deletable?: boolean;
 }
 
 // Handle ids, shared with StateNode so the two cannot drift.
@@ -76,11 +93,20 @@ export interface FlowEdge {
 //
 // Routing backward edges through the BOTTOM handles instead separates them
 // from the forward edge entirely and reads the way a loop-back should.
+//
+// The TOP pair carries DATA edges. They get their own side rather than
+// sharing the control handles because the two relations routinely connect the
+// SAME pair of nodes — a Starter publishing to the channel the next Starter
+// reads is also, usually, the next state in the walk. Sharing handles would
+// stack the two edges on one path, which is precisely the conflation C1 says
+// not to do.
 export const HANDLE = {
   targetLeft: "t-left",
   sourceRight: "s-right",
   sourceBottom: "s-bottom",
   targetBottom: "t-bottom",
+  sourceTop: "s-top",
+  targetTop: "t-top",
 } as const;
 
 /** `MarkerType.ArrowClosed`'s wire value. Inlined rather than imported so this
@@ -113,6 +139,23 @@ export function edgeId(e: CanvasEdge): string {
   return `${e.from} ${e.on} ${e.to}`;
 }
 
+/** The one-line fan-out summary on a Starter's face: how wide the wave is and
+ *  what bounds it. Returns undefined for every other kind.
+ *
+ *  Width is a RUNTIME property (decision C3) — `per: message` means "as many
+ *  runs as there are messages", which nothing on the canvas can know. So the
+ *  face states the RULE and its ceiling rather than a number that would be a
+ *  guess. */
+export function fanoutSummary(n: CanvasNode): string | undefined {
+  if (n.kind !== "starter") return undefined;
+  const raw = handlerOf(n).fanout;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+  const per = str(raw.per) || "message";
+  if (per === "once") return "one run · whole batch";
+  const max = typeof raw.max === "number" ? raw.max : undefined;
+  return max ? `one run per message · max ${max}` : "one run per message";
+}
+
 export function toFlowNodes(
   model: CanvasModel,
   findings: Finding[],
@@ -130,6 +173,8 @@ export function toFlowNodes(
         agents: handlerAgents(n),
         wait: str(h.wait) || undefined,
         consolidator: str(h.consolidator) || undefined,
+        channels: handlerChannels(n),
+        fanout: fanoutSummary(n),
         isEntry: !!model.entry && n.id === model.entry,
         findings: findings
           .filter((f) => f.nodeId === n.id)
@@ -172,4 +217,58 @@ export function toFlowEdges(model: CanvasModel, findings: Finding[]): FlowEdge[]
       },
     };
   });
+}
+
+/** A data edge's id. Distinct in shape from `edgeId`'s `from on to` so the two
+ *  namespaces cannot collide — a transition labelled with a channel name would
+ *  otherwise be able to produce the same string. */
+export function dataEdgeId(from: string, channel: string, to: string): string {
+  return `data:${from} ${channel} ${to}`;
+}
+
+/** Derive the DATA edges: one per (publisher, channel, reader) triple.
+ *
+ *  Not stored anywhere — recomputed from the nodes' channel config every time,
+ *  because that config is the only truth. A definition where these disagree
+ *  with `transitions[]` is not malformed: publishing to a channel nothing
+ *  reads is how you park results for a human, and a transition between two
+ *  states that share no channel is the ordinary case for non-Starter kinds.
+ *
+ *  A node whose sink is its own source produces a self-edge, which is drawn
+ *  rather than suppressed — a Starter that republishes to the channel it reads
+ *  is a real (and usually unintended) loop, and seeing it is the point. */
+export function toDataEdges(model: CanvasModel): FlowEdge[] {
+  // Readers indexed by channel, so the derivation stays linear rather than
+  // quadratic on graphs with many Starters.
+  const readers = new Map<string, string[]>();
+  for (const n of model.nodes) {
+    const { source } = handlerChannels(n);
+    if (!source) continue;
+    readers.set(source, [...(readers.get(source) ?? []), n.id]);
+  }
+
+  const out: FlowEdge[] = [];
+  for (const n of model.nodes) {
+    const { sink } = handlerChannels(n);
+    if (!sink) continue;
+    for (const to of readers.get(sink) ?? []) {
+      out.push({
+        id: dataEdgeId(n.id, sink, to),
+        source: n.id,
+        target: to,
+        sourceHandle: HANDLE.sourceTop,
+        targetHandle: HANDLE.targetTop,
+        type: "smoothstep" as const,
+        // The channel name IS the label. Unlike a control edge, where
+        // `success` is noise, a data edge without its channel says only "these
+        // are connected somehow" — which is the question, not the answer.
+        label: sink,
+        className: "lb-wf-edge lb-wf-edge--data",
+        markerEnd: { type: ARROW, width: 14, height: 14, color: ARROW_COLOR },
+        deletable: false,
+        data: { kind: "data" as const, on: "", channel: sink, findings: [] },
+      });
+    }
+  }
+  return out;
 }
