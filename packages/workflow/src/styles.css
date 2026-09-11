@@ -241,6 +241,23 @@
   background: var(--lb-wf-accent);
   border: none;
 }
+/* The loop handles carry BACKWARD edges (pushback routes). Both sit on the
+ * bottom edge, so they are nudged apart — stacked they would be one dot that
+ * accepts two different connections. Muted because they are structural: an
+ * operator drags between the side handles, and these mostly just receive the
+ * loop the layout puts there. */
+.loomboard-workflow .lb-wf-handle--loop {
+  opacity: 0.4;
+}
+.loomboard-workflow .lb-wf-handle--loop:hover {
+  opacity: 1;
+}
+.loomboard-workflow .react-flow__handle-bottom[data-handleid="t-bottom"] {
+  left: 35%;
+}
+.loomboard-workflow .react-flow__handle-bottom[data-handleid="s-bottom"] {
+  left: 65%;
+}
 
 /* ---- findings ---- */
 .loomboard-workflow .lb-wf-finding {
@@ -285,4 +302,34 @@
 .loomboard-workflow .react-flow__edge-text {
   fill: var(--lb-wf-fg);
   font-size: 11px;
+}
+
+/* ---- minimap ----
+ *
+ * xyflow's default node fill is a near-white grey which, against the default
+ * white mask, renders the whole minimap as an empty box. Colours are set here
+ * rather than through MiniMap's nodeColor prop so they follow the theme
+ * tokens like everything else.
+ */
+.loomboard-workflow .react-flow__minimap {
+  width: 168px;
+  height: 116px;
+  background: var(--lb-wf-surface);
+  border: 1px solid var(--lb-wf-border);
+  border-radius: 6px;
+}
+.loomboard-workflow .react-flow__minimap-mask {
+  fill: color-mix(in srgb, var(--lb-wf-bg) 65%, transparent);
+}
+.loomboard-workflow .react-flow__minimap-node {
+  fill: var(--lb-wf-accent);
+  stroke: none;
+}
+/* An end state and a node this build cannot render read differently at a
+ * glance in the graph; the overview should not flatten that away. */
+.loomboard-workflow .react-flow__minimap-node.is-terminal {
+  fill: var(--lb-wf-muted);
+}
+.loomboard-workflow .react-flow__minimap-node.is-opaque {
+  fill: var(--lb-wf-conditional);
 }

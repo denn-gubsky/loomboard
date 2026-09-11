@@ -51,11 +51,47 @@ export interface FlowEdge {
   id: string;
   source: string;
   target: string;
+  /** Which handle the edge leaves from / arrives at. Derived from geometry —
+   *  see BACKWARD routing below. */
+  sourceHandle: string;
+  targetHandle: string;
   label: string;
   data: FlowEdgeData;
   className: string;
+  /** `smoothstep` for a backward edge so it arcs cleanly below the row;
+   *  the default bezier for a forward one. */
+  type?: "smoothstep";
+  markerEnd: { type: "arrowclosed"; width: number; height: number; color: string };
   animated?: boolean;
 }
+
+// Handle ids, shared with StateNode so the two cannot drift.
+//
+// A left-to-right layout needs FOUR handles, not two. With only
+// target-left / source-right, a backward edge (every pushback loop — the
+// characteristic shape of a team graph) has to leave the source's RIGHT side
+// and re-enter the target's LEFT side, which sends it curving back through
+// the nodes it connects, and stacks it on top of the forward edge running
+// between the same pair so only one label is legible.
+//
+// Routing backward edges through the BOTTOM handles instead separates them
+// from the forward edge entirely and reads the way a loop-back should.
+export const HANDLE = {
+  targetLeft: "t-left",
+  sourceRight: "s-right",
+  sourceBottom: "s-bottom",
+  targetBottom: "t-bottom",
+} as const;
+
+/** `MarkerType.ArrowClosed`'s wire value. Inlined rather than imported so this
+ *  module stays free of runtime dependencies and unit-testable in node. */
+const ARROW = "arrowclosed" as const;
+
+// `context-stroke` makes the arrowhead take the edge path's own stroke, so the
+// marker follows the success / pushback / conditional colours from CSS and
+// both themes, instead of hardcoding a palette here that would drift from
+// styles.css.
+const ARROW_COLOR = "context-stroke";
 
 function str(v: unknown): string {
   return typeof v === "string" ? v : "";
@@ -103,20 +139,37 @@ export function toFlowNodes(
   });
 }
 
+/** True when the edge runs right-to-left (or onto itself) in the current
+ *  layout, and so must be routed as a loop rather than as a forward hop. */
+export function isBackward(model: CanvasModel, from: string, to: string): boolean {
+  if (from === to) return true;
+  const a = model.nodes.find((n) => n.id === from);
+  const b = model.nodes.find((n) => n.id === to);
+  if (!a || !b) return false;
+  return b.position.x < a.position.x;
+}
+
 export function toFlowEdges(model: CanvasModel, findings: Finding[]): FlowEdge[] {
-  return model.edges.map((e, i) => ({
-    id: edgeId(e),
-    source: e.from,
-    target: e.to,
-    // `success` is the overwhelmingly common label and drawing it on every
-    // edge is noise; the arrow already says "and then". Named routes DO carry
-    // meaning and are always labelled.
-    label: e.on === "success" ? "" : e.on,
-    className: edgeClass(e.on),
-    data: {
-      kind: "control" as const,
-      on: e.on,
-      findings: findings.filter((f) => f.edgeIndex === i),
-    },
-  }));
+  return model.edges.map((e, i) => {
+    const backward = isBackward(model, e.from, e.to);
+    return {
+      id: edgeId(e),
+      source: e.from,
+      target: e.to,
+      sourceHandle: backward ? HANDLE.sourceBottom : HANDLE.sourceRight,
+      targetHandle: backward ? HANDLE.targetBottom : HANDLE.targetLeft,
+      ...(backward ? { type: "smoothstep" as const } : {}),
+      // `success` is the overwhelmingly common label and drawing it on every
+      // edge is noise; the arrowhead now says "and then". Named routes DO
+      // carry meaning and are always labelled.
+      label: e.on === "success" ? "" : e.on,
+      className: edgeClass(e.on),
+      markerEnd: { type: ARROW, width: 18, height: 18, color: ARROW_COLOR },
+      data: {
+        kind: "control" as const,
+        on: e.on,
+        findings: findings.filter((f) => f.edgeIndex === i),
+      },
+    };
+  });
 }

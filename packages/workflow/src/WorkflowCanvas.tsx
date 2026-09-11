@@ -353,7 +353,22 @@ function WorkflowCanvasInner({
           >
             <Background />
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable />
+            <MiniMap
+              pannable
+              zoomable
+              ariaLabel="Workflow overview"
+              // nodeClassName rather than nodeColor: the minimap's node fills
+              // then live in styles.css alongside every other colour, so they
+              // follow the theme instead of needing a palette hardcoded here
+              // that would drift. Without ANY of this the default fill is a
+              // near-white grey on a white mask — the minimap renders as an
+              // empty box, which is how it shipped.
+              nodeClassName={(n) => {
+                const d = n.data as unknown as { node?: { kind?: string; opaque?: boolean } };
+                if (d?.node?.opaque) return "is-opaque";
+                return `is-${d?.node?.kind || "unset"}`;
+              }}
+            />
           </ReactFlow>
         </div>
 
