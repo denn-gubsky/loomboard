@@ -21,8 +21,8 @@ const definition = {
       state: "review",
       handler: { kind: "parallel", agents: ["sec", "qa"], wait: "at_least:2", consolidator: "judge" },
     },
-    // A kind from a later RFC CY phase — this build has never heard of it.
-    { state: "ship", handler: { kind: "starter", source: { channel: "pr-events" } } },
+    // A kind this build has never heard of (fictional on purpose — see model.test.ts).
+    { state: "ship", handler: { kind: "from-a-newer-runtime", source: { channel: "pr-events" } } },
     { state: "done", handler: { kind: "terminal" } },
   ],
   transitions: [
@@ -66,7 +66,7 @@ describe("WorkflowCanvas", () => {
     const ship = await screen.findByTestId("node-ship");
     // The kind is shown verbatim — an operator has to be able to tell WHICH
     // kind this build does not know.
-    expect(ship.textContent).toContain("starter");
+    expect(ship.textContent).toContain("from-a-newer-runtime");
     expect(ship.className).toContain("lb-wf-node--opaque");
     expect(ship.textContent).toMatch(/not known to this canvas version/i);
   });
@@ -140,5 +140,101 @@ describe("WorkflowCanvas", () => {
     await screen.findByTestId("node-code");
     expect(screen.queryByText("Save new version")).toBeNull();
     expect(screen.queryByText("Add state")).toBeNull();
+  });
+});
+
+describe("WorkflowCanvas — the Starter (RFC CZ P4)", () => {
+  const starterDef = {
+    entry: "intake",
+    states: [
+      {
+        state: "intake",
+        handler: {
+          kind: "starter",
+          source: { channel: "sdlc-intake" },
+          fanout: { agent: "architect", per: "message", max: 8 },
+          sink: { channel: "sdlc-plans" },
+        },
+      },
+      {
+        state: "plan",
+        handler: {
+          kind: "starter",
+          source: { channel: "sdlc-plans" },
+          fanout: { agent: "coder", per: "once" },
+        },
+      },
+      { state: "announce", handler: { kind: "channel", channel: "sdlc-done" } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [
+      { from: "intake", to: "plan", on: "success" },
+      { from: "plan", to: "announce", on: "success" },
+      { from: "announce", to: "done", on: "success" },
+    ],
+  };
+
+  const layer = () =>
+    stubLayer({
+      getActiveTeamDef: async () => ({
+        def_id: "def-s",
+        name: "sdlc",
+        version: 1,
+        definition: starterDef,
+      }),
+    });
+
+  it("draws a Starter as a dispatcher: what it reads, how wide, where results go", async () => {
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    const intake = await screen.findByTestId("node-intake");
+    expect(intake.className).toContain("lb-wf-node--starter");
+    expect(intake.className).not.toContain("lb-wf-node--opaque");
+    expect(intake.textContent).toContain("sdlc-intake");
+    expect(intake.textContent).toContain("architect");
+    expect(intake.textContent).toContain("one run per message · max 8");
+    expect(intake.textContent).toContain("sdlc-plans");
+  });
+
+  it("reads a Starter's agents from fanout, not from the handler's top level", async () => {
+    // The runtime refuses a top-level `agent` on a starter, so `fanout.agent`
+    // is the only place the name can legitimately live.
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    expect((await screen.findByTestId("node-plan")).textContent).toContain("coder");
+  });
+
+  it("renders a publish-only channel node as an action, not an agent", async () => {
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    const announce = await screen.findByTestId("node-announce");
+    expect(announce.className).toContain("lb-wf-node--channel");
+    expect(announce.textContent).toContain("sdlc-done");
+    // "publish" names the action; the kind name alone would read as though this
+    // node and a Starter were the same sort of thing.
+    expect(announce.textContent).toContain("publish");
+  });
+
+  it("does not flag a valid Starter graph as a problem", async () => {
+    // The whole point of teaching the mirror validateStarter: a definition the
+    // runtime accepts must not come up red.
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    await screen.findByTestId("node-intake");
+    expect(screen.queryByText(/\d+ problems?/)).toBeNull();
+  });
+
+  it("flags a Starter the runtime would refuse", async () => {
+    // per=message with no ceiling — the spawn-amplifier rule. Caught while
+    // drawing rather than at op=create.
+    const bad = structuredClone(starterDef);
+    delete (bad.states[0].handler as { fanout: { max?: number } }).fanout.max;
+    render(
+      <WorkflowCanvas
+        dataLayer={stubLayer({
+          getActiveTeamDef: async () => ({ def_id: "d", name: "sdlc", version: 1, definition: bad }),
+        })}
+        teamName="sdlc"
+      />,
+    );
+    const intake = await screen.findByTestId("node-intake");
+    await waitFor(() => expect(intake.className).toContain("has-error"));
+    expect(intake.textContent).toMatch(/ceiling is not optional/);
   });
 });

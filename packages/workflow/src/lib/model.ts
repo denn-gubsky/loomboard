@@ -27,9 +27,21 @@ export interface XY {
 
 /** Handler kinds this canvas version renders natively. Anything else becomes an
  *  opaque node — drawn, positionable, connectable, and written back untouched.
- *  P0 covers the four kinds RFC AP already ships; RFC CY's `starter` / `channel`
- *  / `input` / `vars` join this list as their substrate phases land. */
-export const KNOWN_KINDS = ["agent", "parallel", "consolidator", "terminal"] as const;
+ *
+ *  P0 covered the four kinds RFC AP ships. `starter` and `channel` join here at
+ *  P4, now that RFC CY L4 has landed (#1192/#1194/#1195). `vars` and `input`
+ *  are deliberately still absent: the runtime knows them, this canvas does not
+ *  render them yet, and an opaque node is the honest way to say so — it draws,
+ *  it round-trips byte-identically, and the mirror reports it at `info` rather
+ *  than red. They join at P2. */
+export const KNOWN_KINDS = [
+  "agent",
+  "parallel",
+  "consolidator",
+  "terminal",
+  "starter",
+  "channel",
+] as const;
 export type KnownKind = (typeof KNOWN_KINDS)[number];
 
 export function isKnownKind(kind: string): kind is KnownKind {
@@ -76,6 +88,22 @@ export interface CanvasModel {
    *  `layout`, so merely OPENING a team that has none never forks it
    *  (RFC CZ decision 5). */
   layoutDirty: boolean;
+  /** The team's channel ACL, once the operator has edited it. Absent means
+   *  untouched, and `toDefinition` then leaves `channels` exactly as it found
+   *  it — same reason `layoutDirty` exists.
+   *
+   *  Unlike `layout` and `colors`, this IS content: teamContent hashes it, so
+   *  changing it forks the definition. That is deliberate on the runtime's
+   *  part — authority that can change without changing the definition's
+   *  identity is not auditable — and it means this panel is never a free edit. */
+  channelsPatch?: TeamChannels;
+}
+
+/** The workflow's own channel allowlist. The Starter is its single subject, so
+ *  the authority lives here rather than on each agent in a wave. */
+export interface TeamChannels {
+  publish?: string[];
+  subscribe?: string[];
 }
 
 // ---- parsing ----
@@ -189,6 +217,20 @@ export function toDefinition(model: CanvasModel): JsonObject {
     out.layout = { ...prev, nodes };
   }
 
+  if (model.channelsPatch) {
+    const next: JsonObject = {};
+    for (const key of ["publish", "subscribe"] as const) {
+      const list = model.channelsPatch[key]?.map((c) => c.trim()).filter(Boolean);
+      if (list?.length) next[key] = list;
+    }
+    // An ACL emptied all the way out is REMOVED rather than written as `{}`.
+    // Go tags both lists omitempty, so `{}` and absent mean the same thing to
+    // the runtime — but only one of them round-trips byte-identically against
+    // a definition that never had the key.
+    if (Object.keys(next).length) out.channels = next;
+    else delete out.channels;
+  }
+
   return out;
 }
 
@@ -228,9 +270,23 @@ export function allowedTargets(model: CanvasModel, from: string): string[] {
   return model.edges.filter((e) => e.from === from).map((e) => e.to);
 }
 
-/** The agent name(s) a node's handler runs, for the node face. */
+/** The agent name(s) a node's handler runs, for the node face.
+ *
+ *  A Starter names its agents in `fanout`, not in `agent`/`agents` — the
+ *  runtime refuses the latter on a starter outright. So the lookup is by kind
+ *  rather than by trying both shapes on every node: a starter with a stray
+ *  top-level `agent` is invalid, and drawing it as if it ran that agent would
+ *  hide the error the inspector is about to show. */
 export function handlerAgents(n: CanvasNode): string[] {
   const h = handlerOf(n);
+  if (n.kind === "starter") {
+    const f = isObj(h.fanout) ? h.fanout : {};
+    const one = str(f.agent);
+    if (one) return [one];
+    return Array.isArray(f.agents)
+      ? f.agents.filter((a): a is string => typeof a === "string" && !!a)
+      : [];
+  }
   const one = str(h.agent);
   if (one) return [one];
   if (Array.isArray(h.agents)) {
@@ -238,4 +294,37 @@ export function handlerAgents(n: CanvasNode): string[] {
   }
   const cons = str(h.consolidator);
   return cons ? [cons] : [];
+}
+
+/** The team's channel ACL as it currently stands — the operator's edit if
+ *  there is one, otherwise whatever the definition carries. */
+export function teamChannels(model: CanvasModel): TeamChannels {
+  if (model.channelsPatch) return model.channelsPatch;
+  const raw = model.source.channels;
+  if (!isObj(raw)) return {};
+  const list = (v: Json | undefined): string[] | undefined =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined;
+  return { publish: list(raw.publish), subscribe: list(raw.subscribe) };
+}
+
+/** The channels a node reads and publishes, for the node face and for deriving
+ *  data edges (RFC CZ decision C1).
+ *
+ *  A starter reads `source.channel` and publishes `sink.channel`; a `channel`
+ *  node publishes only, because reading a channel is what a starter is for.
+ *  Every other kind touches no channel at all — the Starter is the team's
+ *  single ACL subject, so an agent in a wave needs no grant in either
+ *  direction and has nothing to show here. */
+export function handlerChannels(n: CanvasNode): { source?: string; sink?: string } {
+  const h = handlerOf(n);
+  if (n.kind === "starter") {
+    const source = isObj(h.source) ? str(h.source.channel).trim() : "";
+    const sink = isObj(h.sink) ? str(h.sink.channel).trim() : "";
+    return { source: source || undefined, sink: sink || undefined };
+  }
+  if (n.kind === "channel") {
+    const sink = str(h.channel).trim();
+    return { sink: sink || undefined };
+  }
+  return {};
 }

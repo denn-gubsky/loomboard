@@ -17,11 +17,15 @@
 // Drift between this file and validate.go is the likeliest silent bug in the
 // package, which is why validate.test.ts drives BOTH from one fixture set.
 
-import type { CanvasModel, CanvasNode } from "./model";
+import type { CanvasModel, CanvasNode, JsonObject } from "./model";
 import { handlerOf } from "./model";
+import { parseJsonPath } from "./jsonpath";
 
 /** Mirrors teamgraph.MaxAllowedIterations. */
 export const MAX_ALLOWED_ITERATIONS = 1000;
+
+/** Mirrors teamgraph's varNameRe. */
+const VAR_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
 export type FindingLevel = "error" | "info";
 
@@ -43,6 +47,141 @@ function str(v: unknown): string {
 function agentsOf(n: CanvasNode): string[] {
   const raw = handlerOf(n).agents;
   return Array.isArray(raw) ? raw.map((a) => (typeof a === "string" ? a : "")) : [];
+}
+
+function obj(v: unknown): JsonObject | undefined {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as JsonObject) : undefined;
+}
+
+/** A JSON number read as Go would read an int field: anything non-numeric is
+ *  the zero value, which is also what `omitempty` writes for "absent". */
+function num(v: unknown): number {
+  return typeof v === "number" ? v : 0;
+}
+
+function strList(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((a) => (typeof a === "string" ? a : "")) : [];
+}
+
+/** Mirrors validateCapture. Used for a Starter's `binds`, which is the same
+ *  name→JSONPath shape and goes through the same Go function — which is why the
+ *  message says "capture" even when the operator edited `binds`. Kept verbatim:
+ *  a mirror that improves the wording is a mirror that cannot be diffed. */
+function validateCaptureMap(m: JsonObject): string[] {
+  const out: string[] = [];
+  for (const name of Object.keys(m).sort()) {
+    if (!VAR_NAME_RE.test(name)) {
+      out.push(`capture key ${JSON.stringify(name)} must match [a-zA-Z0-9_-]{1,64}`);
+      continue;
+    }
+    const path = m[name];
+    const err = parseJsonPath(typeof path === "string" ? path : "");
+    if (err) out.push(`capture ${JSON.stringify(name)}: ${err}`);
+  }
+  return out;
+}
+
+/** Mirrors validateStarter.
+ *
+ *  Go returns on the FIRST problem; this collects, because an inspector showing
+ *  one error at a time turns fixing a Starter into six round trips. The pass/
+ *  fail verdict the shared fixtures assert is identical either way — but where a
+ *  later check would read a field an earlier one just rejected, this returns
+ *  early too, so it never reports a consequence as a second cause. */
+function validateStarter(h: JsonObject): string[] {
+  const out: string[] = [];
+
+  // NOT trimmed, deliberately: Go compares these two against "" directly here
+  // (unlike `fanout.agent` just below, which it does trim). A handler carrying
+  // `agent: " "` is refused by the runtime, so the mirror must refuse it too —
+  // trimming first would let a definition through that then fails on save.
+  if (str(h.agent) || strList(h.agents).length || str(h.consolidator)) {
+    return ["starter handler names its agents in `fanout`, not in agent/agents/consolidator"];
+  }
+
+  const source = obj(h.source);
+  if (!source || !str(source.channel).trim()) {
+    return ["starter handler requires `source.channel` — a starter reads exactly one channel"];
+  }
+  const wait = str(source.wait);
+  switch (wait) {
+    case "":
+    case "any":
+      break;
+    case "at_least":
+      if (num(source.n) < 1) out.push("starter source wait=at_least requires `n` >= 1");
+      break;
+    case "all":
+      // `all` counts CHANNELS, and a starter reads one — so it returns after the
+      // first message. A silent wrong answer, which is why it is refused rather
+      // than normalised to `any`.
+      out.push(
+        'starter source wait="all" counts CHANNELS, and a starter reads ONE — ' +
+          "over one channel it returns after the first message. Use at_least with `n`, or any",
+      );
+      break;
+    default:
+      out.push(`starter source has invalid wait ${JSON.stringify(wait)} (want any|at_least)`);
+  }
+  if (num(source.wait_ms) < 0 || num(source.batch) < 0 || num(source.n) < 0) {
+    out.push("starter source wait_ms/batch/n must be >= 0");
+  }
+
+  const fanout = obj(h.fanout);
+  if (!fanout) {
+    out.push("starter handler requires `fanout`");
+    return out;
+  }
+  const fanAgents = strList(fanout.agents);
+  const hasOne = !!str(fanout.agent).trim();
+  const hasMany = fanAgents.length > 0;
+  if (hasOne === hasMany) out.push("starter fanout needs exactly one of `agent` or `agents`");
+  if (fanAgents.some((a) => !a.trim())) out.push("starter fanout has an empty agent name");
+
+  const per = str(fanout.per);
+  switch (per) {
+    case "":
+    case "message":
+      if (num(fanout.max) < 1) {
+        out.push(
+          "starter fanout per=message requires `max` >= 1 — " +
+            "the wave is as wide as the channel is deep, so the ceiling is not optional",
+        );
+      }
+      break;
+    case "once":
+      if (num(fanout.max) !== 0) {
+        out.push("starter fanout per=once spawns one run, so `max` means nothing");
+      }
+      break;
+    default:
+      out.push(`starter fanout has invalid per ${JSON.stringify(per)} (want message|once)`);
+  }
+  const fanWait = validateWait(str(fanout.wait));
+  if (fanWait) out.push(fanWait);
+
+  const binds = obj(h.binds);
+  // binds project THE source message; per=once hands the agent the whole batch,
+  // so there is no "the" message to project from.
+  if (per === "once" && binds && Object.keys(binds).length) {
+    out.push(
+      "starter has `binds` with per=once — " +
+        "binds project ONE source message, and per=once hands the agent the whole batch",
+    );
+  }
+
+  const sink = obj(h.sink);
+  if (sink && !str(sink.channel).trim()) {
+    out.push("starter `sink` is present but names no channel");
+  }
+
+  const ack = str(h.ack);
+  if (ack !== "" && ack !== "after_results" && ack !== "after_read") {
+    out.push(`starter has invalid ack ${JSON.stringify(ack)} (want after_results|after_read)`);
+  }
+
+  if (binds) out.push(...validateCaptureMap(binds));
+  return out;
 }
 
 /** Mirrors validateWait: "" | all | any | at_least:<positive int>. */
@@ -106,12 +245,66 @@ function validateHandler(n: CanvasNode): string[] {
         out.push("terminal handler must not set agent/agents/consolidator");
       }
       break;
-    case "":
-      out.push("handler is missing a `kind`");
+    case "starter":
+      out.push(...validateStarter(h));
       break;
+    case "channel":
+      // Publish-only. Reading a channel is what a `starter` is for, and the
+      // two were one kind before RFC CY L4 split them — so a definition written
+      // against the old shape lands here rather than silently half-working.
+      if (!str(h.channel).trim()) out.push("channel handler requires `channel`");
+      if (agent || agents.length || consolidator) {
+        out.push("channel handler must not set agent/agents/consolidator — it publishes, it does not run");
+      }
+      if (obj(h.source)) {
+        out.push("channel handler must not set `source` — reading a channel is a `starter`, not a `channel`");
+      }
+      break;
+    case "":
+      // Go returns here, so none of the cross-kind guards below run for a
+      // kindless handler. Mirrored, or a missing `kind` would also be reported
+      // as five stray-field errors.
+      return ["handler is missing a `kind`"];
     default:
       // Unknown kind: defer to the server. Deliberately no shape rules.
       return [];
+  }
+
+  // ---- fields that belong to exactly one kind ----
+  //
+  // Left on another kind they read as configured and do nothing. That is the
+  // failure this whole block exists to prevent, and it is why the runtime
+  // refuses rather than ignores them.
+  if (n.kind !== "starter") {
+    if (obj(h.source)) out.push(`sets \`source\` but is kind ${JSON.stringify(n.kind)} (starter only)`);
+    else if (obj(h.fanout)) out.push(`sets \`fanout\` but is kind ${JSON.stringify(n.kind)} (starter only)`);
+    else if (obj(h.sink)) out.push(`sets \`sink\` but is kind ${JSON.stringify(n.kind)} (starter only)`);
+    else if (Object.keys(obj(h.binds) ?? {}).length) {
+      out.push(`sets \`binds\` but is kind ${JSON.stringify(n.kind)} (starter only)`);
+    } else if (str(h.ack)) out.push(`sets \`ack\` but is kind ${JSON.stringify(n.kind)} (starter only)`);
+    else if (obj(h.prompt)) {
+      out.push(
+        `sets \`prompt\` but is kind ${JSON.stringify(n.kind)} — ` +
+          "another kind's prompts are `system_prompt` + `input_template`",
+      );
+    }
+  }
+  if (n.kind !== "channel" && str(h.channel).trim()) {
+    out.push(
+      `sets \`channel\` but is kind ${JSON.stringify(n.kind)} — ` +
+        "a starter names its channels in `source`/`sink`",
+    );
+  }
+  // `vars` and `input` are opaque to this canvas version and returned above, so
+  // these two only ever fire on a kind that should not carry the field at all.
+  if (Object.keys(obj(h.set) ?? {}).length) {
+    out.push(
+      `sets \`set\` but is kind ${JSON.stringify(n.kind)} — ` +
+        "assignment belongs on a `vars` state, where it is visible",
+    );
+  }
+  if (h.schema !== undefined) {
+    out.push(`sets \`schema\` but is kind ${JSON.stringify(n.kind)} (input only)`);
   }
 
   const timeout = h.timeout_ms;

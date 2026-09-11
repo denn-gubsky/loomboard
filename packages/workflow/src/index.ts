@@ -32,6 +32,8 @@ export {
   toDefinition,
   handlerOf,
   handlerAgents,
+  handlerChannels,
+  teamChannels,
   patchHandler,
   allowedTargets,
   isKnownKind,
@@ -44,6 +46,7 @@ export type {
   Json,
   JsonObject,
   KnownKind,
+  TeamChannels,
   XY,
 } from "./lib/model";
 
@@ -52,7 +55,15 @@ export type { Finding, FindingLevel } from "./lib/validate";
 
 export { autoLayout, needsAutoLayout, COLUMN_WIDTH, ROW_HEIGHT } from "./lib/layout";
 
-export { toFlowNodes, toFlowEdges, edgeClass, edgeId } from "./lib/flow";
+export {
+  toFlowNodes,
+  toFlowEdges,
+  toDataEdges,
+  fanoutSummary,
+  edgeClass,
+  edgeId,
+  dataEdgeId,
+} from "./lib/flow";
 export type { FlowEdge, FlowEdgeData, FlowEdgeKind, FlowNode, FlowNodeData } from "./lib/flow";
 
 export type {
