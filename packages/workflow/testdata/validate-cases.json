@@ -19,9 +19,21 @@
     "error to the runtime and merely UNKNOWN to a canvas that may simply be older",
     "than the runtime. Any case where they differ must say why in why_divergent.",
     "",
-    "NOTE: until the loomcycle integration lands, go_valid is an UNVERIFIED claim",
-    "about the Go validator. It was checked by hand against internal/teamgraph at",
-    "loomcycle 61de2cbb; the integration test is what makes it self-enforcing."
+    "VERIFIED: every go_valid below was checked by RUNNING these cases through",
+    "teamgraph.Validate at loomcycle 0672100e \u2014 not by hand, and not by reading",
+    "the validator. All 64 agree.",
+    "",
+    "That check earned its keep immediately. The `unknown handler kind from a",
+    "newer runtime` case used `starter` as its example of a kind the runtime does",
+    "not implement. RFC CY L4 then implemented it, and the definition happened to",
+    "be a VALID starter \u2014 so go_valid silently became wrong, and the divergence",
+    "the case exists to document evaporated while the case kept passing. Its kind",
+    "is now fictional, which is the only form that cannot decay.",
+    "",
+    "Re-run it after any teamgraph change. The permanent version of this is the",
+    "integration test in loomcycle reading this file out of",
+    "node_modules/@loomboard/workflow/testdata/, which is what makes the coupling",
+    "self-enforcing rather than a thing someone has to remember."
   ],
   "cases": [
     {
@@ -697,14 +709,14 @@
       "name": "unknown handler kind from a newer runtime",
       "go_valid": false,
       "ts_valid": true,
-      "why_divergent": "RFC CZ decision 3. The runtime rejects a kind it does not implement, and must. The canvas must NOT: it may be an older build talking to a newer runtime, and refusing to render a `starter` would push the operator back to hand-editing JSON. The canvas renders it opaque, preserves it byte-for-byte, reports it at info, and lets the server be the authority.",
+      "why_divergent": "RFC CZ decision 3. The runtime rejects a kind it does not implement, and must. The canvas must NOT: it may be an older build talking to a newer runtime, and refusing to render the kind would push the operator back to hand-editing JSON. The canvas renders it opaque, preserves it byte-for-byte, reports it at info, and lets the server be the authority. The kind here is FICTIONAL on purpose \u2014 this case previously used `starter`, which RFC CY L4 then implemented, at which point go_valid became wrong and the divergence this case exists to document silently evaporated. Caught by running the fixtures against teamgraph.Validate.",
       "definition": {
         "entry": "on-pr",
         "states": [
           {
             "state": "on-pr",
             "handler": {
-              "kind": "starter",
+              "kind": "from-a-newer-runtime",
               "source": {
                 "channel": "pr-events",
                 "wait": "any"
