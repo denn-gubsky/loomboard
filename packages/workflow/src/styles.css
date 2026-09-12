@@ -426,3 +426,27 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   resize: vertical;
 }
+
+/* ---- session phase (RFC CZ C5) ---- */
+.loomboard-workflow .lb-wf-phase {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--lb-wf-muted);
+}
+.loomboard-workflow .lb-wf-phase--running {
+  background: var(--lb-wf-info-bg);
+  color: var(--lb-wf-accent);
+}
+.loomboard-workflow .lb-wf-phase--parked {
+  background: var(--lb-wf-error-bg);
+  color: var(--lb-wf-conditional);
+}
+.loomboard-workflow .lb-wf-phase--ended {
+  color: var(--lb-wf-fg);
+}
+/* A read-only graph should LOOK read-only, or the first failed drag is the
+ * only feedback that the mode changed. */
+.loomboard-workflow .lb-wf-graph.is-locked .react-flow__node {
+  cursor: default;
+}

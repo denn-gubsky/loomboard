@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import type { TeamDefDetail, WorkflowDataLayer } from "./types";
@@ -236,5 +236,102 @@ describe("WorkflowCanvas — the Starter (RFC CZ P4)", () => {
     const intake = await screen.findByTestId("node-intake");
     await waitFor(() => expect(intake.className).toContain("has-error"));
     expect(intake.textContent).toMatch(/ceiling is not optional/);
+  });
+});
+
+describe("WorkflowCanvas — the mode scaffold (RFC CZ P2 / C5)", () => {
+  const runTeamDetached = vi.fn(async () => ({ run_id: "r_abc", status: "running" }));
+
+  const layer = (o: Partial<WorkflowDataLayer> = {}) =>
+    stubLayer({ runTeamDetached, ...o });
+
+  it("hides Run when the host wires no detached-run member", async () => {
+    // Degrade, don't break: a host on an older runtime keeps a working editor.
+    render(<WorkflowCanvas dataLayer={stubLayer()} teamName="sdlc" />);
+    await screen.findByTestId("node-code");
+    expect(screen.queryByRole("button", { name: "Run" })).toBeNull();
+  });
+
+  it("starts the walk by def_id, never by name", async () => {
+    // Save-then-Run would otherwise execute the PREVIOUS version, and nothing
+    // on screen would show the difference.
+    runTeamDetached.mockClear();
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(runTeamDetached).toHaveBeenCalled());
+    const arg = runTeamDetached.mock.calls[0][0] as { defId?: string; name?: string };
+    expect(arg.defId).toBe("def-1");
+    expect(arg.name).toBeUndefined();
+  });
+
+  it("locks the graph for the life of the walk", async () => {
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    // The editing affordances go, because the walk pins one def_id and the
+    // canvas must keep describing what is actually running.
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Add state" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Save new version" })).toBeNull();
+    expect(screen.getByText("Running")).toBeTruthy();
+  });
+
+  it("offers Abort but disabled, with the reason the runtime cannot stop a walk", async () => {
+    // Verified against loomcycle f08068b7: run-cancel is interactive-only
+    // (409) and the agents route rejects the walk's `team:<name>` agent id
+    // (400). A live button would simply error, so it is shown-and-disabled
+    // with the explanation — "why can't I stop this" is the real question.
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    const abortBtn = await screen.findByRole("button", { name: "Abort" });
+    expect((abortBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(abortBtn.getAttribute("title")).toMatch(/not paused/i);
+  });
+
+  it("does not offer Back to Edit while the walk is live", async () => {
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await screen.findByText("Running");
+    expect(screen.queryByRole("button", { name: "Back to Edit" })).toBeNull();
+  });
+
+  it("refuses to start a definition the runtime would reject", async () => {
+    // The validation mirror already says it is broken; starting anyway would
+    // just move the error to the server and lose the node highlighting.
+    const broken = {
+      entry: "a",
+      states: [{ state: "a", handler: { kind: "agent" } }],
+      transitions: [],
+    };
+    render(
+      <WorkflowCanvas
+        dataLayer={layer({
+          getActiveTeamDef: async () => ({
+            def_id: "d",
+            name: "sdlc",
+            version: 1,
+            definition: broken,
+          }),
+        })}
+        teamName="sdlc"
+      />,
+    );
+    const btn = await screen.findByRole("button", { name: "Run" });
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(true));
+    expect(btn.getAttribute("title")).toMatch(/validation problems/i);
+  });
+
+  it("explains a host that started the walk without a run id", async () => {
+    // A host that swallowed the old-runtime refusal and fell back to a
+    // blocking run returns a trace with no handle — nothing in Run mode can
+    // address that, so it is reported rather than silently half-working.
+    render(
+      <WorkflowCanvas
+        dataLayer={layer({ runTeamDetached: async () => ({ run_id: "" }) })}
+        teamName="sdlc"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    expect(await screen.findByText(/cannot be monitored or stopped/i)).toBeTruthy();
+    // And it stays in Edit — a failed start is not a run.
+    expect(screen.getByRole("button", { name: "Add state" })).toBeTruthy();
   });
 });

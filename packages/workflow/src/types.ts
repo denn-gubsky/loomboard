@@ -52,6 +52,21 @@ export interface TeamRunStep {
   [extra: string]: unknown;
 }
 
+/** What a DETACHED start returns — immediately, while the walk runs on.
+ *
+ *  RFC CZ decision C8: the canvas always detaches. A synchronous `op=run`
+ *  reports nothing until the walk is over, which leaves no moment at which an
+ *  operator can abort it, watch a wave, answer a pause or arm a breakpoint —
+ *  and only the last of those is Debug. `run_id` is the handle all of them
+ *  address. */
+export interface DetachedRun {
+  run_id: string;
+  /** Always "running" — the walk has been started, not awaited. */
+  status?: string;
+  name?: string;
+  def_id?: string;
+}
+
 /** The result of a walk. `status` is "completed" or "iteration_cap"; the
  *  capped case names the state that tripped, which the canvas draws as the
  *  stall point rather than as a success path. */
@@ -70,7 +85,7 @@ export interface TeamRunResult {
 
 /** Everything the canvas needs from its host. Optional members degrade the UI
  *  rather than breaking it: no `listAgents` means the agent field is free text
- *  instead of a picker; no `runTeam` hides the Run affordance. */
+ *  instead of a picker; no `runTeamDetached` hides the Run affordance. */
 export interface WorkflowDataLayer {
   listTeams(): Promise<TeamSummary[]>;
   /** Resolve a team's ACTIVE version. Hosts that only have get-by-def_id can
@@ -84,7 +99,20 @@ export interface WorkflowDataLayer {
   forkTeam(name: string, definition: unknown): Promise<SavedTeam>;
   /** Agent names for the inspector's picker. */
   listAgents?(): Promise<string[]>;
-  runTeam?(target: { name?: string; defId?: string; input?: string }): Promise<TeamRunResult>;
+  /** Start a walk DETACHED and return its handle at once (decision C8).
+   *
+   *  Deliberately the ONLY run entry point: a synchronous variant would be a
+   *  second way to do the same thing whose result the canvas cannot act on.
+   *
+   *  A runtime older than loomcycle #1206 REFUSES `mode: "detach"` rather than
+   *  running inline, which is what lets the canvas detect it without sniffing
+   *  a version — the rejection is the signal, so hosts must let it through
+   *  rather than falling back to a blocking run. */
+  runTeamDetached?(target: {
+    name?: string;
+    defId?: string;
+    input?: string;
+  }): Promise<DetachedRun>;
 }
 
 export type CanvasMode = "edit" | "readonly";
