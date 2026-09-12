@@ -81,6 +81,41 @@ function validateCaptureMap(m: JsonObject): string[] {
   return out;
 }
 
+/** The `${…}` namespaces a `vars` state may never bind from — mirrors
+ *  teamgraph's secretNamespaces.
+ *
+ *  This is a SECURITY rule, not a style one, and the reason is worth keeping
+ *  next to it: `${run.credentials.*}` and `${run.user_bearer}` are fail-CLOSED
+ *  — unresolved, they drop the whole header rather than emit a placeholder. A
+ *  vars state that copied one into `${var.x}` would convert a fail-closed
+ *  secret into a fail-open plaintext string, and that string is then a
+ *  legitimate Memory key, a prompt fragment, and a value in every transcript,
+ *  snapshot and prompt-cache entry downstream. */
+const SECRET_NAMESPACES = ["${run.credentials.", "${run.user_bearer"];
+
+/** Mirrors validateSet — the assignment on a `vars` state. */
+function validateSetMap(m: JsonObject): string[] {
+  const out: string[] = [];
+  for (const name of Object.keys(m).sort()) {
+    if (!VAR_NAME_RE.test(name)) {
+      out.push(`set key ${JSON.stringify(name)} must match [a-zA-Z0-9_-]{1,64}`);
+      continue;
+    }
+    const value = str(m[name]);
+    for (const ns of SECRET_NAMESPACES) {
+      if (value.includes(ns)) {
+        out.push(
+          `set ${JSON.stringify(name)} reads the credentials namespace — ` +
+            "variables are non-secret by construction; a secret copied into one becomes a plaintext " +
+            "value in every transcript, snapshot and prompt-cache entry downstream",
+        );
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 /** Mirrors validateStarter.
  *
  *  Go returns on the FIRST problem; this collects, because an inspector showing
@@ -248,6 +283,27 @@ function validateHandler(n: CanvasNode): string[] {
     case "starter":
       out.push(...validateStarter(h));
       break;
+    case "vars": {
+      // The one place a workflow assigns a variable, and its OWN kind rather
+      // than a block on an agent handler — an invisible assignment riding
+      // something that looks like an agent is exactly what a canvas exists to
+      // prevent.
+      const set = obj(h.set);
+      if (!set || !Object.keys(set).length) out.push("vars handler requires a non-empty `set`");
+      if (agent || agents.length || consolidator) {
+        out.push("vars handler must not set agent/agents/consolidator");
+      }
+      if (set) out.push(...validateSetMap(set));
+      break;
+    }
+    case "input":
+      // `schema` needs no JSON-validity check here the way teamgraph does: it
+      // reached this model through JSON.parse, so if it is present at all it
+      // already parsed. The runtime guards a RawMessage; we guard nothing.
+      if (agent || agents.length || consolidator) {
+        out.push("input handler must not set agent/agents/consolidator");
+      }
+      break;
     case "channel":
       // Publish-only. Reading a channel is what a `starter` is for, and the
       // two were one kind before RFC CY L4 split them — so a definition written
@@ -295,15 +351,13 @@ function validateHandler(n: CanvasNode): string[] {
         "a starter names its channels in `source`/`sink`",
     );
   }
-  // `vars` and `input` are opaque to this canvas version and returned above, so
-  // these two only ever fire on a kind that should not carry the field at all.
-  if (Object.keys(obj(h.set) ?? {}).length) {
+  if (n.kind !== "vars" && Object.keys(obj(h.set) ?? {}).length) {
     out.push(
       `sets \`set\` but is kind ${JSON.stringify(n.kind)} — ` +
         "assignment belongs on a `vars` state, where it is visible",
     );
   }
-  if (h.schema !== undefined) {
+  if (n.kind !== "input" && h.schema !== undefined) {
     out.push(`sets \`schema\` but is kind ${JSON.stringify(n.kind)} (input only)`);
   }
 

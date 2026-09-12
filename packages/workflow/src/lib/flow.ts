@@ -36,6 +36,10 @@ export interface FlowNodeData {
   channels: { source?: string; sink?: string };
   /** Fan-out summary for a starter, e.g. "per message · max 8". */
   fanout?: string;
+  /** Variable names a `vars` state assigns, for its face. */
+  assigns: string[];
+  /** Field names the `input` start form declares. */
+  formFields: string[];
   isEntry: boolean;
   /** Findings anchored to this state, worst level first. */
   findings: Finding[];
@@ -156,6 +160,29 @@ export function fanoutSummary(n: CanvasNode): string | undefined {
   return max ? `one run per message · max ${max}` : "one run per message";
 }
 
+/** The variable names a `vars` state assigns. Sorted, because object key order
+ *  is the author's typing order and a node that reshuffles on every edit is
+ *  harder to read than one that does not. */
+export function assignedVars(n: CanvasNode): string[] {
+  if (n.kind !== "vars") return [];
+  const set = handlerOf(n).set;
+  if (typeof set !== "object" || set === null || Array.isArray(set)) return [];
+  return Object.keys(set).sort();
+}
+
+/** The top-level field names an `input` state's JSON Schema declares.
+ *
+ *  Deliberately shallow: the canvas is naming the form's inputs on a node
+ *  face, not validating the schema. The runtime does not interpret it either. */
+export function formFields(n: CanvasNode): string[] {
+  if (n.kind !== "input") return [];
+  const schema = handlerOf(n).schema;
+  if (typeof schema !== "object" || schema === null || Array.isArray(schema)) return [];
+  const props = schema.properties;
+  if (typeof props !== "object" || props === null || Array.isArray(props)) return [];
+  return Object.keys(props);
+}
+
 export function toFlowNodes(
   model: CanvasModel,
   findings: Finding[],
@@ -175,6 +202,8 @@ export function toFlowNodes(
         consolidator: str(h.consolidator) || undefined,
         channels: handlerChannels(n),
         fanout: fanoutSummary(n),
+        assigns: assignedVars(n),
+        formFields: formFields(n),
         isEntry: !!model.entry && n.id === model.entry,
         findings: findings
           .filter((f) => f.nodeId === n.id)
