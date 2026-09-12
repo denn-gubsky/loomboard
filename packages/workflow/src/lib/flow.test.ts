@@ -5,6 +5,7 @@ import {
   edgeId,
   fanoutSummary,
   isBackward,
+  mergeMeasured,
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
@@ -331,5 +332,52 @@ describe("toDataEdges", () => {
     expect(toDataEdges(loop)).toHaveLength(1);
     expect(toDataEdges(loop)[0].source).toBe("s");
     expect(toDataEdges(loop)[0].target).toBe("s");
+  });
+});
+
+describe("measured dimensions — what the MiniMap needs", () => {
+  // The bug this covers shipped in P0 and was invisible for weeks: a node
+  // sizes itself from CSS, so the GRAPH renders correctly with no dimensions
+  // at all. The minimap does not — xyflow's nodeHasDimensions reads
+  // `measured.width ?? width ?? initialWidth` and renders NOTHING without one,
+  // so the overview was an empty box while every node drew fine.
+  //
+  // This adapter rebuilds every FlowNode from the model on each render, so
+  // anything xyflow measured is discarded unless it is handed back.
+  const m = fromDefinition({
+    entry: "a",
+    states: [
+      { state: "a", handler: { kind: "agent", agent: "x" } },
+      { state: "b", handler: { kind: "terminal" } },
+    ],
+    transitions: [{ from: "a", to: "b", on: "success" }],
+  });
+
+  it("omits `measured` when nothing has been measured yet", () => {
+    expect(toFlowNodes(m, [])[0].measured).toBeUndefined();
+  });
+
+  it("hands measured dimensions back to xyflow", () => {
+    const nodes = toFlowNodes(m, [], null, { a: { width: 170, height: 80 } });
+    expect(nodes.find((n) => n.id === "a")!.measured).toEqual({ width: 170, height: 80 });
+    // Only the node that was measured — a guessed default for the rest would
+    // put wrongly-sized rectangles in the overview.
+    expect(nodes.find((n) => n.id === "b")!.measured).toBeUndefined();
+  });
+
+  it("returns the SAME map when dimensions are unchanged", () => {
+    // Identity, not equality: the map feeds the node array, which xyflow
+    // measures, which emits changes. A fresh object each time loops.
+    const prev = { a: { width: 170, height: 80 } };
+    expect(mergeMeasured(prev, { a: { width: 170, height: 80 } })).toBe(prev);
+  });
+
+  it("returns a NEW map when a node resized or a new one appeared", () => {
+    const prev = { a: { width: 170, height: 80 } };
+    expect(mergeMeasured(prev, { a: { width: 171, height: 80 } })).not.toBe(prev);
+    expect(mergeMeasured(prev, { b: { width: 10, height: 10 } })).toEqual({
+      a: { width: 170, height: 80 },
+      b: { width: 10, height: 10 },
+    });
   });
 });

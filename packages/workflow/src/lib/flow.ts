@@ -63,6 +63,15 @@ export interface FlowNode {
   position: { x: number; y: number };
   data: FlowNodeData;
   selected?: boolean;
+  /** What xyflow measured for this node, fed back in.
+   *
+   *  REQUIRED for the MiniMap, and easy to miss: a node sizes itself from CSS,
+   *  so the graph renders correctly without this. The minimap does not — it
+   *  reads dimensions from the store (`nodeHasDimensions` → `measured.width ??
+   *  width ?? initialWidth`) and silently renders NOTHING for a node that has
+   *  none. Because this adapter rebuilds every FlowNode from the model on each
+   *  render, anything xyflow measured is discarded unless it is handed back. */
+  measured?: { width: number; height: number };
 }
 
 export interface FlowEdge {
@@ -187,6 +196,9 @@ export function toFlowNodes(
   model: CanvasModel,
   findings: Finding[],
   selectedId?: string | null,
+  /** Dimensions xyflow reported, by node id. Presentation-only — it never
+   *  reaches the definition, the way `layout` does. */
+  measured?: Record<string, { width: number; height: number }>,
 ): FlowNode[] {
   return model.nodes.map((n) => {
     const h = handlerOf(n);
@@ -195,6 +207,7 @@ export function toFlowNodes(
       type: "state" as const,
       position: n.position,
       selected: n.id === selectedId,
+      ...(measured?.[n.id] ? { measured: measured[n.id] } : {}),
       data: {
         node: n,
         agents: handlerAgents(n),
@@ -211,6 +224,21 @@ export function toFlowNodes(
       },
     };
   });
+}
+
+export type Measured = Record<string, { width: number; height: number }>;
+
+/** Merge freshly measured dimensions, returning the SAME object when nothing
+ *  changed.
+ *
+ *  The identity check is the point, not an optimisation: the measured map feeds
+ *  the node array, which xyflow measures, which emits dimension changes. A new
+ *  object every time would loop. */
+export function mergeMeasured(prev: Measured, sized: Measured): Measured {
+  const changed = Object.entries(sized).some(
+    ([id, d]) => prev[id]?.width !== d.width || prev[id]?.height !== d.height,
+  );
+  return changed ? { ...prev, ...sized } : prev;
 }
 
 /** True when the edge runs right-to-left (or onto itself) in the current
