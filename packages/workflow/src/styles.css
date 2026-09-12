@@ -426,3 +426,18 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   resize: vertical;
 }
+
+/* ---- vars / input (RFC CY L2) ---- */
+.loomboard-workflow .lb-wf-node--vars,
+.loomboard-workflow .lb-wf-node--input {
+  min-width: 140px;
+}
+.loomboard-workflow .lb-wf-node__var {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--lb-wf-surface);
+  border: 1px solid var(--lb-wf-border);
+  color: var(--lb-wf-conditional);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}

@@ -14,6 +14,8 @@ const KIND_LABEL: Record<string, string> = {
   parallel: "parallel",
   consolidator: "consolidator",
   terminal: "end",
+  vars: "vars",
+  input: "start form",
   starter: "starter",
   // "publish" rather than "channel": the kind names the THING, the badge should
   // name the ACTION, and this kind's whole job is that it publishes and cannot
@@ -24,7 +26,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
-  const { node, agents, wait, consolidator, channels, fanout, isEntry, findings } = d;
+  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, isEntry, findings } = d;
 
   const errors = findings.filter((f) => f.level === "error");
   const infos = findings.filter((f) => f.level === "info");
@@ -121,6 +123,25 @@ export function StateNode({ data, selected }: NodeProps) {
           {channels.sink && (
             <div className="lb-wf-node__channel lb-wf-node__channel--out" title={`publishes to ${channels.sink}`}>
               → {channels.sink}
+            </div>
+          )}
+          {/* A `vars` state exists so an assignment is VISIBLE rather than
+              riding something that looks like an agent — so the face names
+              what it binds, not merely that it binds something. */}
+          {assigns.length > 0 && (
+            <div className="lb-wf-node__agents">
+              {assigns.map((v) => (
+                <span key={v} className="lb-wf-node__var" title={`\${var.${v}}`}>
+                  ${v}
+                </span>
+              ))}
+            </div>
+          )}
+          {node.kind === "input" && (
+            <div className="lb-wf-node__meta">
+              {formFields.length
+                ? `${formFields.length} field${formFields.length === 1 ? "" : "s"}: ${formFields.join(", ")}`
+                : "plain text input"}
             </div>
           )}
         </div>

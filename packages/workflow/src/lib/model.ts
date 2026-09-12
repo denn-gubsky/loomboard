@@ -28,12 +28,10 @@ export interface XY {
 /** Handler kinds this canvas version renders natively. Anything else becomes an
  *  opaque node — drawn, positionable, connectable, and written back untouched.
  *
- *  P0 covered the four kinds RFC AP ships. `starter` and `channel` join here at
- *  P4, now that RFC CY L4 has landed (#1192/#1194/#1195). `vars` and `input`
- *  are deliberately still absent: the runtime knows them, this canvas does not
- *  render them yet, and an opaque node is the honest way to say so — it draws,
- *  it round-trips byte-identically, and the mirror reports it at `info` rather
- *  than red. They join at P2. */
+ *  P0 covered the four kinds RFC AP ships; `starter` and `channel` joined at
+ *  P4 (CY L4); `vars` and `input` at P2, which completes the set the runtime
+ *  implements. Anything beyond this list is a kind from a newer runtime, and
+ *  the opaque node is how the canvas says so honestly rather than guessing. */
 export const KNOWN_KINDS = [
   "agent",
   "parallel",
@@ -41,6 +39,8 @@ export const KNOWN_KINDS = [
   "terminal",
   "starter",
   "channel",
+  "vars",
+  "input",
 ] as const;
 export type KnownKind = (typeof KNOWN_KINDS)[number];
 

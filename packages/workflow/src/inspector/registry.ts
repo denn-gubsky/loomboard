@@ -32,6 +32,8 @@ const KIND_OPTIONS = [
   "terminal",
   "starter",
   "channel",
+  "vars",
+  "input",
 ] as const;
 
 const FIELDS: readonly FieldSpec[] = [
@@ -97,6 +99,60 @@ const FIELDS: readonly FieldSpec[] = [
     hint: "Wall-clock budget for this state's handler.",
     unsetMeans: "no per-state timeout",
     advanced: true,
+  },
+
+  // ---- per-node prompts (RFC CY L1) ----
+  //
+  // The reason a fan-out of N reviewers is ONE AgentDef and N states rather
+  // than N cloned defs: the node says what the agent is DOING here, the
+  // AgentDef says what it IS. Cloning per role would also lose prompt caching,
+  // because the agent's base prompt is sent with cache_control and N nodes
+  // sharing one agent still hit one cached prefix.
+  {
+    key: "system_prompt",
+    label: "System prompt",
+    group: "Prompt",
+    type: "textarea",
+    hint:
+      "This node's role, APPENDED to the agent's own system prompt as a second segment " +
+      "rather than replacing it. Editing it forks the definition — it rides States, which " +
+      "the content hash covers.",
+    unsetMeans: "the agent's own system prompt alone",
+  },
+  {
+    key: "input_template",
+    label: "Input template",
+    group: "Prompt",
+    type: "textarea",
+    hint:
+      "This node's user prompt. When set it REPLACES the input threaded from the previous " +
+      "state; leave it unset to pass that input through.",
+    unsetMeans: "the previous state's output is threaded through",
+  },
+
+  // ---- vars and input (RFC CY L2) ----
+  {
+    key: "set",
+    label: "Set",
+    group: "Variables",
+    type: "kv",
+    hint:
+      "Variable name → a value that may itself contain ${…} tokens, resolved when the state " +
+      "runs. This is the ONE place a workflow assigns a variable, and it is its own node kind " +
+      "so the assignment is visible on the canvas rather than hidden on something that looks " +
+      "like an agent. Names match [a-zA-Z0-9_-]{1,64}.",
+    unsetMeans: "required on a vars state",
+  },
+  {
+    key: "schema",
+    label: "JSON Schema",
+    group: "Form",
+    type: "json",
+    hint:
+      "The schema a client renders as this workflow's start form. The runtime does not " +
+      "interpret it — it rides the definition so a team is self-describing and a headless " +
+      "caller sees the same contract the canvas does.",
+    unsetMeans: "the run takes a plain text input",
   },
 
   // ---- the Starter (RFC CY L4) ----
@@ -329,6 +385,8 @@ export const teamHandlerRegistry: DefRegistry = {
     { name: "Prompt", hint: "What each spawned run is asked to do." },
     { name: "Sink", hint: "Where results are published." },
     { name: "Data", hint: "What this state pulls out of the message it read." },
+    { name: "Variables", hint: "What this state assigns into ${var.*}." },
+    { name: "Form", hint: "The start form a client renders for this workflow." },
     { name: "Delivery", hint: "Cursor and redelivery semantics." },
   ],
   fields: FIELDS,
@@ -344,12 +402,20 @@ export const HANDLER_OMIT_IN_LIST: readonly string[] = ["kind"];
  *  showing `agents` on a terminal state. */
 export function fieldsForKind(kind: string): string[] {
   switch (kind) {
+    // system_prompt / input_template are offered on every kind that RUNS an
+    // agent, and on no other. teamgraph does not refuse them elsewhere, but a
+    // prompt on a state that runs nothing is a setting with no effect — which
+    // is the failure the starter-only guards exist to prevent, just unenforced.
     case "agent":
-      return ["agent", "consolidator", "timeout_ms"];
+      return ["agent", "consolidator", "system_prompt", "input_template", "timeout_ms"];
     case "consolidator":
-      return ["agent", "timeout_ms"];
+      return ["agent", "system_prompt", "input_template", "timeout_ms"];
     case "parallel":
-      return ["agents", "consolidator", "wait", "timeout_ms"];
+      return ["agents", "consolidator", "wait", "system_prompt", "input_template", "timeout_ms"];
+    case "vars":
+      return ["set"];
+    case "input":
+      return ["schema"];
     case "starter":
       // Deliberately NOT agent/agents: a starter names its agents inside
       // `fanout`, and the runtime refuses them at the top level. Offering both

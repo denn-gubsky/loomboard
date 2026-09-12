@@ -26,9 +26,49 @@ describe("teamHandlerRegistry", () => {
 
 describe("fieldsForKind", () => {
   it("shows only what the kind actually uses", () => {
-    expect(fieldsForKind("agent")).toEqual(["agent", "consolidator", "timeout_ms"]);
-    expect(fieldsForKind("consolidator")).toEqual(["agent", "timeout_ms"]);
-    expect(fieldsForKind("parallel")).toEqual(["agents", "consolidator", "wait", "timeout_ms"]);
+    expect(fieldsForKind("agent")).toEqual([
+      "agent",
+      "consolidator",
+      "system_prompt",
+      "input_template",
+      "timeout_ms",
+    ]);
+    expect(fieldsForKind("consolidator")).toEqual([
+      "agent",
+      "system_prompt",
+      "input_template",
+      "timeout_ms",
+    ]);
+    expect(fieldsForKind("parallel")).toEqual([
+      "agents",
+      "consolidator",
+      "wait",
+      "system_prompt",
+      "input_template",
+      "timeout_ms",
+    ]);
+    expect(fieldsForKind("vars")).toEqual(["set"]);
+    expect(fieldsForKind("input")).toEqual(["schema"]);
+  });
+
+  it("offers per-node prompts only on kinds that RUN an agent", () => {
+    // teamgraph does not refuse system_prompt on a terminal or a vars state,
+    // so this is the canvas declining to offer a setting that would have no
+    // effect — the same failure the starter-only guards exist to prevent,
+    // just one the runtime does not police.
+    for (const kind of ["terminal", "channel", "vars", "input", "starter"]) {
+      expect(fieldsForKind(kind), kind).not.toContain("system_prompt");
+      expect(fieldsForKind(kind), kind).not.toContain("input_template");
+    }
+  });
+
+  it("keeps `set` and `schema` on the one kind each belongs to", () => {
+    // Both are refused elsewhere by teamgraph — an assignment riding an agent
+    // handler is invisible, which is what the vars kind exists to fix.
+    for (const kind of KNOWN_KINDS) {
+      if (kind !== "vars") expect(fieldsForKind(kind), kind).not.toContain("set");
+      if (kind !== "input") expect(fieldsForKind(kind), kind).not.toContain("schema");
+    }
   });
 
   it("shows nothing for a terminal state", () => {
