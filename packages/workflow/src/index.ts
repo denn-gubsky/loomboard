@@ -55,6 +55,28 @@ export type { Finding, FindingLevel } from "./lib/validate";
 
 export { autoLayout, needsAutoLayout, COLUMN_WIDTH, ROW_HEIGHT } from "./lib/layout";
 
+// The session machine (RFC CZ C5). Exported because the rules — when the graph
+// is editable, when abort is possible — are the same questions a host's own
+// chrome has to answer, and two implementations of them would disagree.
+export {
+  INITIAL as SESSION_INITIAL,
+  reduce as reduceSession,
+  isLive,
+  canEditGraph,
+  canReturnToEdit,
+  canStart,
+  abortAvailability,
+  statusLabel,
+} from "./lib/session";
+export type {
+  Availability,
+  EndStatus,
+  SessionEvent,
+  SessionMode,
+  SessionState,
+  WalkPhase,
+} from "./lib/session";
+
 export {
   toFlowNodes,
   toFlowEdges,
@@ -68,6 +90,7 @@ export type { FlowEdge, FlowEdgeData, FlowEdgeKind, FlowNode, FlowNodeData } fro
 
 export type {
   CanvasMode,
+  DetachedRun,
   SavedTeam,
   TeamDefDetail,
   TeamRunResult,
