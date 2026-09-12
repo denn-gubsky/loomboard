@@ -139,7 +139,9 @@ describe("WorkflowCanvas", () => {
     render(<WorkflowCanvas dataLayer={stubLayer()} teamName="sdlc" mode="readonly" />);
     await screen.findByTestId("node-code");
     expect(screen.queryByText("Save new version")).toBeNull();
-    expect(screen.queryByText("Add state")).toBeNull();
+    // The palette, not "Add state" — asserting the absence of a control that
+    // no longer exists anywhere would pass for the wrong reason.
+    expect(screen.queryByLabelText("Node palette")).toBeNull();
   });
 });
 
@@ -277,7 +279,7 @@ describe("WorkflowCanvas — the mode scaffold (RFC CZ P2 / C5)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Run" }));
     // The editing affordances go, because the walk pins one def_id and the
     // canvas must keep describing what is actually running.
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Add state" })).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText("Node palette")).toBeNull());
     expect(screen.queryByRole("button", { name: "Save new version" })).toBeNull();
     expect(screen.getByText("Running")).toBeTruthy();
   });
@@ -339,7 +341,40 @@ describe("WorkflowCanvas — the mode scaffold (RFC CZ P2 / C5)", () => {
     );
     fireEvent.click(await screen.findByRole("button", { name: "Run" }));
     expect(await screen.findByText(/cannot be monitored or stopped/i)).toBeTruthy();
-    // And it stays in Edit — a failed start is not a run.
-    expect(screen.getByRole("button", { name: "Add state" })).toBeTruthy();
+    // And it stays in Edit — a failed start is not a run. The palette is the
+    // Edit-only affordance now that "Add state" is gone.
+    expect(screen.getByLabelText("Node palette")).toBeTruthy();
+  });
+});
+
+describe("WorkflowCanvas — the node palette (RFC CZ C11/C12)", () => {
+  it("offers nodes by ROLE, with no mention of states", async () => {
+    render(<WorkflowCanvas dataLayer={stubLayer()} teamName="sdlc" />);
+    await screen.findByTestId("node-code");
+    const palette = screen.getByLabelText("Node palette");
+    for (const group of ["Sources", "Work", "Data", "End"]) {
+      expect(palette.textContent, group).toContain(group);
+    }
+    // The vocabulary change is the point: "state" leaves the canvas.
+    expect(palette.textContent).not.toMatch(/\bstate\b/i);
+  });
+
+  it("places a node named after its role and selects it for configuring", async () => {
+    render(<WorkflowCanvas dataLayer={stubLayer()} teamName="sdlc" />);
+    await screen.findByTestId("node-code");
+    fireEvent.click(screen.getByRole("button", { name: "Starter" }));
+    // `starter-1`, not `state-5` — the id is the first thing read on a node.
+    expect(await screen.findByTestId("node-starter-1")).toBeTruthy();
+  });
+
+  it("lists schedules and webhooks but will not place them", async () => {
+    // C11: they live outside the definition, so the canvas names them as
+    // context and refuses to own them. Listing beats hiding — a Starter reads
+    // a channel something must publish to.
+    render(<WorkflowCanvas dataLayer={stubLayer()} teamName="sdlc" />);
+    await screen.findByTestId("node-code");
+    const trigger = screen.getByTitle(/ScheduleDef or WebhookDef/);
+    expect(trigger.tagName).not.toBe("BUTTON");
+    expect(trigger.textContent).toMatch(/referenced/);
   });
 });

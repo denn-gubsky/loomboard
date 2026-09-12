@@ -88,6 +88,23 @@ export {
 } from "./lib/flow";
 export type { FlowEdge, FlowEdgeData, FlowEdgeKind, FlowNode, FlowNodeData } from "./lib/flow";
 
+export { Palette } from "./Palette";
+export type { PaletteProps } from "./Palette";
+
+// The palette model (C11/C12). Exported because a host embedding its own
+// chrome needs the same grouping and the same "external, not placeable" rule —
+// two copies of that would disagree about what the canvas owns.
+export {
+  PALETTE,
+  PALETTE_GROUPS,
+  entriesInGroup,
+  placeableEntries,
+  newHandler,
+  newStateRaw,
+  nextNodeId,
+} from "./lib/palette";
+export type { PaletteEntry, PaletteGroup } from "./lib/palette";
+
 export { PublishComposer } from "./PublishComposer";
 export type { PublishComposerProps } from "./PublishComposer";
 

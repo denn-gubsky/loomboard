@@ -10,6 +10,8 @@ import {
 } from "@xyflow/react";
 import { Inspector } from "./inspector/Inspector";
 import { PublishComposer } from "./PublishComposer";
+import { Palette } from "./Palette";
+import { newStateRaw, type PaletteEntry } from "./lib/palette";
 import { autoLayout, needsAutoLayout } from "./lib/layout";
 import { edgeId, toDataEdges, toFlowEdges, toFlowNodes } from "./lib/flow";
 import {
@@ -299,24 +301,44 @@ function WorkflowCanvasInner({
     [selectedId],
   );
 
-  const addState = useCallback(() => {
-    if (!editable) return;
-    setModel((m) => {
-      if (!m) return m;
-      let i = m.nodes.length + 1;
-      while (m.nodes.some((n) => n.id === `state-${i}`)) i++;
-      const id = `state-${i}`;
-      const raw = { state: id, handler: { kind: "agent", agent: "" } };
-      return {
-        ...m,
-        layoutDirty: true,
-        nodes: [
-          ...m.nodes,
-          { id, kind: "agent", opaque: false, position: { x: 40, y: 40 }, raw },
-        ],
-      };
-    });
-  }, [editable]);
+  // Placing a node from the palette (C12). Replaces "Add state": the operator
+  // picks a ROLE, and which `states[]` kind that compiles to is the wire
+  // format's business, not theirs.
+  const placeNode = useCallback(
+    (entry: PaletteEntry) => {
+      if (!editable || !model) return;
+      const raw = newStateRaw(model, entry);
+      const id = String(raw.state);
+      setModel((m) => {
+        if (!m) return m;
+        // Stagger below the existing nodes rather than stacking every new one
+        // at the same point, which made placing three in a row look like one.
+        const y = 40 + m.nodes.length * 30;
+        return {
+          ...m,
+          layoutDirty: true,
+          nodes: [
+            ...m.nodes,
+            {
+              id,
+              kind: entry.kind ?? "",
+              opaque: false,
+              position: { x: 40, y },
+              raw,
+            },
+          ],
+          // The FIRST node placed into an empty graph becomes the entry, or the
+          // definition is invalid the moment it is created and the operator has
+          // to discover a field that is not on any node.
+          entry: m.entry || id,
+        };
+      });
+      // Select it: a freshly placed node is invalid until configured, and the
+      // inspector is where that gets fixed.
+      setSelectedId(id);
+    },
+    [editable, model],
+  );
 
   const relayout = useCallback(() => {
     if (!editable) return;
@@ -422,9 +444,6 @@ function WorkflowCanvasInner({
         <strong className="lb-wf-toolbar__name">{loadedName.current ?? "—"}</strong>
         {!readonly && editable && (
           <>
-            <button className="lb-wf-btn" onClick={addState} disabled={!model}>
-              Add state
-            </button>
             <button className="lb-wf-btn" onClick={relayout} disabled={!model}>
               Auto-layout
             </button>
@@ -511,6 +530,8 @@ function WorkflowCanvasInner({
       )}
 
       <div className="lb-wf-body">
+        {editable && <Palette onPlace={placeNode} disabled={!model || busy} />}
+
         <div className={`lb-wf-graph${editable ? "" : " is-locked"}`}>
           <ReactFlow
             nodes={flowNodes}
