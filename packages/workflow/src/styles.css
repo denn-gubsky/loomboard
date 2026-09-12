@@ -494,3 +494,59 @@
 .loomboard-workflow .lb-wf-publish__issues li + li {
   margin-top: 4px;
 }
+
+/* ---- the node palette (RFC CZ C12) ---- */
+.loomboard-workflow .lb-wf-palette {
+  width: 150px;
+  flex: none;
+  padding: 8px;
+  border-right: 1px solid var(--lb-wf-border);
+  background: var(--lb-wf-surface);
+  overflow: auto;
+}
+.loomboard-workflow .lb-wf-palette__group + .lb-wf-palette__group {
+  margin-top: 12px;
+}
+.loomboard-workflow .lb-wf-palette__title {
+  margin: 0 0 5px;
+  color: var(--lb-wf-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.loomboard-workflow .lb-wf-palette__item {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 5px 8px;
+  border: 1px solid var(--lb-wf-border);
+  border-radius: 5px;
+  background: var(--lb-wf-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.loomboard-workflow button.lb-wf-palette__item:hover:not(:disabled) {
+  border-color: var(--lb-wf-accent);
+  color: var(--lb-wf-accent);
+}
+.loomboard-workflow .lb-wf-palette__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* Referenced, not created here (C11) — dashed like an opaque node, because
+ * both mean "this canvas draws it but does not own it". */
+.loomboard-workflow .lb-wf-palette__item--external {
+  border-style: dashed;
+  background: transparent;
+  color: var(--lb-wf-muted);
+  cursor: default;
+}
+.loomboard-workflow .lb-wf-palette__tag {
+  display: block;
+  font-size: 10px;
+  font-style: italic;
+}

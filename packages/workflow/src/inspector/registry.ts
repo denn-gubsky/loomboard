@@ -44,9 +44,9 @@ const FIELDS: readonly FieldSpec[] = [
     type: "enum",
     options: KIND_OPTIONS,
     hint:
-      "What this state does when the walk enters it. agent runs one; parallel fans out; " +
+      "What this node does when the walk enters it. agent runs one; parallel fans out; " +
       "consolidator judges the previous output and picks the outgoing edge; terminal ends the walk.",
-    unsetMeans: "invalid — every state needs a kind",
+    unsetMeans: "invalid — every node needs a kind",
   },
 
   {
@@ -55,7 +55,7 @@ const FIELDS: readonly FieldSpec[] = [
     group: "Agents",
     type: "text",
     placeholder: "reviewer",
-    hint: "The AgentDef this state runs. Required for kind=agent and kind=consolidator.",
+    hint: "The AgentDef this node runs. Required for kind=agent and kind=consolidator.",
     unsetMeans: "required for agent / consolidator",
   },
   {
@@ -64,7 +64,7 @@ const FIELDS: readonly FieldSpec[] = [
     group: "Agents",
     type: "string-list",
     placeholder: "agent name…",
-    hint: "The AgentDefs a parallel state fans out to, run concurrently. Required for kind=parallel.",
+    hint: "The AgentDefs a parallel node fans out to, run concurrently. Required for kind=parallel.",
     unsetMeans: "required for parallel",
   },
   {
@@ -76,7 +76,7 @@ const FIELDS: readonly FieldSpec[] = [
     hint:
       "An agent that reads the results and names the outgoing edge on a `signal:` line. " +
       "Required after a parallel fan-out; optional on a single agent, where it enables pushback.",
-    unsetMeans: "a single-agent state advances on success",
+    unsetMeans: "a single-agent node advances on success",
   },
 
   {
@@ -86,7 +86,7 @@ const FIELDS: readonly FieldSpec[] = [
     type: "text",
     placeholder: "all | any | at_least:2",
     hint:
-      "How many of a parallel state's agents must succeed before it continues. " +
+      "How many of a parallel node's agents must succeed before it continues. " +
       "all waits for every one; any takes the first; at_least:N takes N.",
     unsetMeans: "all — every agent must succeed",
   },
@@ -96,8 +96,8 @@ const FIELDS: readonly FieldSpec[] = [
     group: "Execution",
     type: "int",
     min: 0,
-    hint: "Wall-clock budget for this state's handler.",
-    unsetMeans: "no per-state timeout",
+    hint: "Wall-clock budget for this node's handler.",
+    unsetMeans: "no per-node timeout",
     advanced: true,
   },
 
@@ -126,8 +126,8 @@ const FIELDS: readonly FieldSpec[] = [
     type: "textarea",
     hint:
       "This node's user prompt. When set it REPLACES the input threaded from the previous " +
-      "state; leave it unset to pass that input through.",
-    unsetMeans: "the previous state's output is threaded through",
+      "node; leave it unset to pass that input through.",
+    unsetMeans: "the previous node's output is threaded through",
   },
 
   // ---- vars and input (RFC CY L2) ----
@@ -137,11 +137,11 @@ const FIELDS: readonly FieldSpec[] = [
     group: "Variables",
     type: "kv",
     hint:
-      "Variable name → a value that may itself contain ${…} tokens, resolved when the state " +
+      "Variable name → a value that may itself contain ${…} tokens, resolved when the node " +
       "runs. This is the ONE place a workflow assigns a variable, and it is its own node kind " +
       "so the assignment is visible on the canvas rather than hidden on something that looks " +
       "like an agent. Names match [a-zA-Z0-9_-]{1,64}.",
-    unsetMeans: "required on a vars state",
+    unsetMeans: "required on a vars node",
   },
   {
     key: "schema",
@@ -279,7 +279,7 @@ const FIELDS: readonly FieldSpec[] = [
         group: "Fan-out",
         type: "text",
         placeholder: "all | any | at_least:2",
-        hint: "How the walk waits for the wave. Mirrors a parallel state's wait.",
+        hint: "How the walk waits for the wave. Mirrors a parallel node's wait.",
         unsetMeans: "all — every run in the wave must finish",
       },
     ],
@@ -344,7 +344,7 @@ const FIELDS: readonly FieldSpec[] = [
     hint:
       "The channel this node publishes to. A `channel` node publishes only — reading a " +
       "channel is what a `starter` does.",
-    unsetMeans: "required on a channel state",
+    unsetMeans: "required on a channel node",
   },
   {
     key: "binds",
@@ -375,17 +375,17 @@ export const teamHandlerRegistry: DefRegistry = {
   kind: "teamhandler",
   groups: [
     { name: "Handler" },
-    { name: "Agents", hint: "Which AgentDefs this state runs." },
+    { name: "Agents", hint: "Which AgentDefs this node runs." },
     {
       name: "Execution",
-      hint: "How the state's run is bounded. Unset means the substrate default applies.",
+      hint: "How the node's run is bounded. Unset means the substrate default applies.",
     },
     { name: "Source", hint: "The channel a Starter reads, and how long it waits." },
     { name: "Fan-out", hint: "How wide the wave is, and what it runs." },
     { name: "Prompt", hint: "What each spawned run is asked to do." },
     { name: "Sink", hint: "Where results are published." },
-    { name: "Data", hint: "What this state pulls out of the message it read." },
-    { name: "Variables", hint: "What this state assigns into ${var.*}." },
+    { name: "Data", hint: "What this node pulls out of the message it read." },
+    { name: "Variables", hint: "What this node assigns into ${var.*}." },
     { name: "Form", hint: "The start form a client renders for this workflow." },
     { name: "Delivery", hint: "Cursor and redelivery semantics." },
   ],
