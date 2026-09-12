@@ -20,7 +20,18 @@ This is the chain for every non-trivial change. The discipline is what keeps the
 4. **Code** — small focused commits. Each commit reviewable in isolation. No "and also fixed this" omnibus commits.
 5. **Tests** — `vitest` unit tests for new logic; a regression test for each fix. A regression test *fails on the unfixed code* — verify by reverting the fix and seeing it go red before you commit. Pure modules (the event reducer, metrics math) are the highest-value test targets; keep logic in pure functions so it stays testable without a DOM.
 6. **Self-review** — read your own diff cold. Look for accidentally-committed secrets, dead code, stray `console.log`, TODOs without a follow-up.
-7. **Typecheck + tests** — `npm run typecheck` and `npm run test` from the repo root. Must pass clean. Don't commit "with one known failure."
+7. **Typecheck + tests** — the repo is an npm **workspace**, so the root scripts are not the whole story. Run what CI runs:
+
+   ```
+   npm run typecheck                          # app
+   npm run test
+   npm run build:lib && npm run build:standalone
+   npm -w @loomboard/workflow run typecheck   # the package — SEPARATE tsconfig
+   npm -w @loomboard/workflow run test
+   npm -w @loomboard/workflow run build:lib
+   ```
+
+   The package's typecheck compiles its **test files** and the root one does not, so a type error in `packages/*/src/**/*.test.tsx` passes locally at the root and fails in CI. Must pass clean. Don't commit "with one known failure."
 8. **Manual test** — `npm run dev`, point the connection settings at a local loomcycle (`../loomcycle`, default `http://127.0.0.1:8787`), and exercise the affected surface in the browser. For a production check, `npm run build` (runs `tsc --noEmit && vite build`) then `npm run preview`. Plain `tsc --noEmit` is only a typecheck — it produces no deployable bundle.
 9. **PR** — one branch, one PR. Title says what the change does in one line. Body explains *why* (the user-visible problem), *what* (the technical change), and *what was tested* (test names + manual steps).
 10. **Human review** — wait for the user. Do not self-merge. Address comments in additional commits on the same branch (don't force-push unless asked).
