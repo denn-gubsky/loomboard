@@ -148,6 +148,14 @@ describe("WorkflowCanvas", () => {
 describe("WorkflowCanvas — the Starter (RFC CZ P4)", () => {
   const starterDef = {
     entry: "intake",
+    // The team ACL, without which create/fork refuses this definition outright
+    // — a Starter resolves its channels under the TEAM's authority. The fixture
+    // lacked it until aclFindings started checking, which means it described a
+    // graph the runtime would never have accepted.
+    channels: {
+      subscribe: ["sdlc-intake", "sdlc-plans"],
+      publish: ["sdlc-plans", "sdlc-done"],
+    },
     states: [
       {
         state: "intake",

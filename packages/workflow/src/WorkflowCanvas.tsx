@@ -24,6 +24,7 @@ import {
   type TeamChannels,
 } from "./lib/model";
 import { canSave, validateModel } from "./lib/validate";
+import { aclFindings } from "./lib/channels";
 import {
   INITIAL as SESSION_INITIAL,
   abortAvailability,
@@ -157,7 +158,14 @@ function WorkflowCanvasInner({
     };
   }, [dataLayer, entryChannel]);
 
-  const findings = useMemo(() => (model ? validateModel(model) : []), [model]);
+  // The graph's own rules PLUS the team ACL. They come from different places
+  // on the runtime — validateModel mirrors teamgraph.Validate, while the ACL
+  // check lives in the TeamDef tool's create/fork preflight — but both refuse a
+  // save, so the operator sees one list.
+  const findings = useMemo(
+    () => (model ? [...validateModel(model), ...aclFindings(model)] : []),
+    [model],
+  );
   const flowNodes = useMemo(
     () => (model ? toFlowNodes(model, findings, selectedId, measured) : []),
     [model, findings, selectedId, measured],
