@@ -9,6 +9,7 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import { Inspector } from "./inspector/Inspector";
+import { PublishComposer } from "./PublishComposer";
 import { autoLayout, needsAutoLayout } from "./lib/layout";
 import { edgeId, toDataEdges, toFlowEdges, toFlowNodes } from "./lib/flow";
 import {
@@ -32,7 +33,8 @@ import {
   statusLabel,
 } from "./lib/session";
 import { StateNode } from "./nodes/StateNode";
-import type { SavedTeam, WorkflowCanvasProps } from "./types";
+import { handlerChannels } from "./lib/model";
+import type { ChannelInfo, SavedTeam, WorkflowCanvasProps } from "./types";
 
 const NODE_TYPES = { state: StateNode };
 
@@ -91,6 +93,15 @@ function WorkflowCanvasInner({
         }
         parentDefId.current = detail.def_id;
         loadedName.current = detail.name;
+        // The promoted pointer, for C7's "a publish runs the PROMOTED version"
+        // warning. Best-effort: a host without listTeams simply loses the
+        // warning rather than the composer.
+        dataLayer
+          .listTeams()
+          .then((list) => {
+            if (!cancelled) setActiveDefId(list.find((t) => t.name === detail.name)?.active_def_id);
+          })
+          .catch(() => undefined);
         setModel(next);
         setSelectedId(null);
       } catch (e) {
@@ -114,6 +125,32 @@ function WorkflowCanvasInner({
       cancelled = true;
     };
   }, [dataLayer]);
+
+  const [channels, setChannels] = useState<ChannelInfo[]>();
+  const [activeDefId, setActiveDefId] = useState<string>();
+  const [composing, setComposing] = useState(false);
+
+  // The channel the ENTRY state reads — the workflow's front door (C7). Only a
+  // Starter has one; every other entry kind is run through the Run button.
+  const entryChannel = useMemo(() => {
+    if (!model?.entry) return "";
+    const entry = model.nodes.find((n) => n.id === model.entry);
+    return entry ? (handlerChannels(entry).source ?? "") : "";
+  }, [model]);
+
+  useEffect(() => {
+    if (!entryChannel || !dataLayer.listChannels) return;
+    let cancelled = false;
+    dataLayer
+      .listChannels()
+      .then((list) => !cancelled && setChannels(list))
+      // A channel list we cannot fetch must not block publishing — the
+      // pre-flight treats "not loaded" differently from "not declared".
+      .catch(() => !cancelled && setChannels(undefined));
+    return () => {
+      cancelled = true;
+    };
+  }, [dataLayer, entryChannel]);
 
   const findings = useMemo(() => (model ? validateModel(model) : []), [model]);
   const flowNodes = useMemo(
@@ -426,6 +463,16 @@ function WorkflowCanvasInner({
             </button>
           ))}
 
+        {entryChannel && dataLayer.publishChannel && (
+          <button
+            className="lb-wf-btn"
+            onClick={() => setComposing((c) => !c)}
+            title={`Publish a message to ${entryChannel} — the entry Starter reads it`}
+          >
+            {composing ? "Hide publish" : "Publish\u2026"}
+          </button>
+        )}
+
         {canReturnToEdit(session) && (
           <button
             className="lb-wf-btn"
@@ -447,6 +494,21 @@ function WorkflowCanvasInner({
       </div>
 
       {error && <div className="lb-wf-error">{error}</div>}
+
+      {composing && entryChannel && dataLayer.publishChannel && (
+        <PublishComposer
+          channel={entryChannel}
+          info={channels?.find((c) => c.name === entryChannel)}
+          channelsLoaded={channels !== undefined}
+          loadedDefId={parentDefId.current ?? undefined}
+          activeDefId={activeDefId}
+          disabled={busy}
+          onPublish={async (payload, scope) => {
+            await dataLayer.publishChannel!(entryChannel, payload, { scope });
+          }}
+          onClose={() => setComposing(false)}
+        />
+      )}
 
       <div className="lb-wf-body">
         <div className={`lb-wf-graph${editable ? "" : " is-locked"}`}>

@@ -465,3 +465,32 @@
 .loomboard-workflow .lb-wf-graph.is-locked .react-flow__node {
   cursor: default;
 }
+
+/* ---- the publish composer (RFC CZ C7) ---- */
+.loomboard-workflow .lb-wf-publish {
+  padding: 10px;
+  border-bottom: 1px solid var(--lb-wf-border);
+  background: var(--lb-wf-surface);
+}
+.loomboard-workflow .lb-wf-publish__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.loomboard-workflow .lb-wf-publish__scope {
+  color: var(--lb-wf-muted);
+  font-size: 11px;
+}
+.loomboard-workflow .lb-wf-publish__payload {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+.loomboard-workflow .lb-wf-publish__issues {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.loomboard-workflow .lb-wf-publish__issues li + li {
+  margin-top: 4px;
+}

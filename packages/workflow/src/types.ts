@@ -83,6 +83,24 @@ export interface TeamRunResult {
   [extra: string]: unknown;
 }
 
+/** One declared channel, as the canvas needs to reason about it before
+ *  publishing. Mirrors the fields of `/v1/channels` this surface uses.
+ *
+ *  `scope` matters more than it looks: a team walk resolves a channel at the
+ *  scope the CHANNEL declares, not the caller's, and the runtime refuses an
+ *  `agent`-scoped channel to a workflow outright — "a starter reads on the
+ *  WALK's behalf, not as one agent". So the composer can tell an operator that
+ *  a publish will never arrive, before they send it. */
+export interface ChannelInfo {
+  name: string;
+  /** global | tenant | user | agent. */
+  scope?: string;
+  /** Publishes are stored but never delivered until released (ChannelDef.Hold). */
+  hold?: boolean;
+  message_count?: number;
+  source?: string;
+}
+
 /** Everything the canvas needs from its host. Optional members degrade the UI
  *  rather than breaking it: no `listAgents` means the agent field is free text
  *  instead of a picker; no `runTeamDetached` hides the Run affordance. */
@@ -113,6 +131,17 @@ export interface WorkflowDataLayer {
     defId?: string;
     input?: string;
   }): Promise<DetachedRun>;
+
+  /** Declared channels, for the publish composer's pre-flight (C7). */
+  listChannels?(): Promise<ChannelInfo[]>;
+
+  /** Publish one message to a channel — how an SDLC run actually starts.
+   *
+   *  `scope` is resolved by the CANVAS from the channel's own declaration and
+   *  passed through, rather than left to the host to guess: publishing at the
+   *  wrong scope succeeds and then never arrives, which is the worst failure
+   *  shape available here. */
+  publishChannel?(channel: string, payload: unknown, opts: { scope: string }): Promise<unknown>;
 }
 
 export type CanvasMode = "edit" | "readonly";
