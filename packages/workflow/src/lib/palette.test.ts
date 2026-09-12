@@ -25,6 +25,15 @@ describe("the palette — what it offers", () => {
     for (const e of PALETTE) expect(PALETTE_GROUPS).toContain(e.group);
   });
 
+  it("says node, not state, in every label AND hint (C12)", () => {
+    // Hints render as `title` tooltips, so a textContent-only assertion misses
+    // them — which is how "An end state" survived the rename.
+    for (const e of PALETTE) {
+      expect(e.label, e.id).not.toMatch(/\bstate\b/i);
+      expect(e.hint, e.id).not.toMatch(/\bstate\b/i);
+    }
+  });
+
   it("groups by what a node DOES, not by what it compiles to", () => {
     // C12. A Starter and an Input form share a group because both are where
     // work ENTERS — not because they share a shape.

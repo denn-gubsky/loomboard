@@ -116,7 +116,7 @@ export const PALETTE: readonly PaletteEntry[] = [
     label: "End",
     group: "End",
     kind: "terminal",
-    hint: "An end state. The walk stops here.",
+    hint: "An end node. The walk stops here.",
   },
 ];
 

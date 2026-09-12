@@ -40,7 +40,7 @@ describe("Inspector — the kind picker", () => {
 describe("Inspector — the team channel ACL", () => {
   const channels = { subscribe: ["inbox"], publish: ["done"] };
 
-  it("shows the team's ACL when no state is selected", () => {
+  it("shows the team's ACL when no node is selected", () => {
     // The ACL belongs to the workflow, not to any one state, so the otherwise
     // empty pane is the only place it can live.
     render(
@@ -98,6 +98,43 @@ describe("Inspector — the team channel ACL", () => {
   it("stays out of the way when the host wires no ACL handler", () => {
     render(<Inspector node={null} findings={[]} onPatch={noop} onRename={noop} />);
     expect(screen.queryByText(/Team channels/)).toBeNull();
-    expect(screen.getByText(/Select a state/)).toBeTruthy();
+    expect(screen.getByText(/Select a node/)).toBeTruthy();
+  });
+});
+
+describe("Inspector — vocabulary (RFC CZ C12)", () => {
+  // The word "state" left the canvas when construction became role-based. It
+  // survived here in two labels after the palette shipped, which is exactly the
+  // kind of half-done rename a guard is for.
+  //
+  // SCOPE, stated because it is deliberate: this covers the canvas's OWN
+  // chrome. Validation findings are exempt — they mirror teamgraph's wording
+  // verbatim so the fixture set can drive both validators, and because the
+  // server says "state" when it refuses a save. A canvas that said "node"
+  // while the runtime said "state" about the same problem would be worse than
+  // one that quotes it.
+  it("says node, not state, in its own chrome", () => {
+    const { container } = render(
+      <Inspector node={nodeOf({ kind: "agent", agent: "a" })} findings={[]} onPatch={noop} onRename={noop} />,
+    );
+    expect(container.textContent).not.toMatch(/\bstate\b/i);
+  });
+
+  it("says node in the empty pane too", () => {
+    const { container } = render(<Inspector node={null} findings={[]} onPatch={noop} onRename={noop} />);
+    expect(container.textContent).not.toMatch(/\bstate\b/i);
+  });
+
+  it("still quotes the runtime verbatim in findings", () => {
+    // The exemption, asserted so nobody "fixes" it later.
+    const { container } = render(
+      <Inspector
+        node={nodeOf({ kind: "agent", agent: "a" })}
+        findings={[{ level: "error", message: 'state "s" handler is missing a `kind`', nodeId: "s" }]}
+        onPatch={noop}
+        onRename={noop}
+      />,
+    );
+    expect(container.textContent).toContain('state "s"');
   });
 });

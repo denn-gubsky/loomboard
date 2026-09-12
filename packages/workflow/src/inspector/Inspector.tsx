@@ -63,7 +63,7 @@ export function Inspector({
     // and it has nowhere else to live: it is not a property of any one state.
     return (
       <aside className="lb-wf-inspector lb-wf-inspector--team">
-        <p className="lb-wf-inspector__hint">Select a state to edit it.</p>
+        <p className="lb-wf-inspector__hint">Select a node to edit it.</p>
         {channels && onChannelsChange && (
           <TeamChannelPanel value={channels} disabled={disabled} onChange={onChannelsChange} />
         )}
@@ -76,7 +76,7 @@ export function Inspector({
   return (
     <aside className="lb-wf-inspector">
       <label className="lb-wf-field">
-        <span className="lb-wf-field__label">State id</span>
+        <span className="lb-wf-field__label">Node id</span>
         <input
           className="lb-wf-input"
           value={node.id}
