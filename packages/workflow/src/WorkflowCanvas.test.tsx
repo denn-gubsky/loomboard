@@ -240,7 +240,15 @@ describe("WorkflowCanvas — the Starter (RFC CZ P4)", () => {
 });
 
 describe("WorkflowCanvas — the mode scaffold (RFC CZ P2 / C5)", () => {
-  const runTeamDetached = vi.fn(async () => ({ run_id: "r_abc", status: "running" }));
+  // Typed parameters, not inferred: `vi.fn(async () => …)` infers a ZERO-arg
+  // function, which makes mock.calls a tuple of length 0 and the assertion
+  // below uncheckable. Declaring the target is what lets the test verify WHAT
+  // was passed rather than merely that something was.
+  type RunTarget = { name?: string; defId?: string; input?: string };
+  const runTeamDetached = vi.fn(async (_target: RunTarget) => ({
+    run_id: "r_abc",
+    status: "running",
+  }));
 
   const layer = (o: Partial<WorkflowDataLayer> = {}) =>
     stubLayer({ runTeamDetached, ...o });
@@ -259,7 +267,7 @@ describe("WorkflowCanvas — the mode scaffold (RFC CZ P2 / C5)", () => {
     render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
     fireEvent.click(await screen.findByRole("button", { name: "Run" }));
     await waitFor(() => expect(runTeamDetached).toHaveBeenCalled());
-    const arg = runTeamDetached.mock.calls[0][0] as { defId?: string; name?: string };
+    const arg = runTeamDetached.mock.calls[0][0];
     expect(arg.defId).toBe("def-1");
     expect(arg.name).toBeUndefined();
   });
