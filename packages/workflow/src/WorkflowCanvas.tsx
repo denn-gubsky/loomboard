@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -21,6 +21,16 @@ import {
   type TeamChannels,
 } from "./lib/model";
 import { canSave, validateModel } from "./lib/validate";
+import {
+  INITIAL as SESSION_INITIAL,
+  abortAvailability,
+  canEditGraph,
+  canReturnToEdit,
+  canStart,
+  isLive,
+  reduce as reduceSession,
+  statusLabel,
+} from "./lib/session";
 import { StateNode } from "./nodes/StateNode";
 import type { SavedTeam, WorkflowCanvasProps } from "./types";
 
@@ -51,6 +61,13 @@ function WorkflowCanvasInner({
   const loadedName = useRef<string | null>(null);
 
   const readonly = mode === "readonly";
+
+  // The session machine (C5) owns which mode the surface is in; `readonly` is
+  // the HOST's separate say in whether this embed edits at all. Both must
+  // allow it, so every edit path below gates on `editable` rather than on
+  // either one alone.
+  const [session, dispatchSession] = useReducer(reduceSession, SESSION_INITIAL);
+  const editable = !readonly && canEditGraph(session);
 
   // ---- load ----
   useEffect(() => {
@@ -120,7 +137,7 @@ function WorkflowCanvasInner({
   // ---- graph edits ----
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      if (readonly) return;
+      if (!editable) return;
       setModel((m) => {
         if (!m) return m;
         let dirty = m.layoutDirty;
@@ -139,12 +156,12 @@ function WorkflowCanvasInner({
         return nodes === m.nodes && dirty === m.layoutDirty ? m : { ...m, nodes, layoutDirty: dirty };
       });
     },
-    [readonly],
+    [editable],
   );
 
   const onConnect = useCallback(
     (c: Connection) => {
-      if (readonly || !c.source || !c.target) return;
+      if (!editable || !c.source || !c.target) return;
       setModel((m) => {
         if (!m) return m;
         // A state's outbound labels must be unique, so a second edge from the
@@ -162,23 +179,23 @@ function WorkflowCanvasInner({
         };
       });
     },
-    [readonly],
+    [editable],
   );
 
   const onEdgesDelete = useCallback(
     (deleted: { id: string }[]) => {
-      if (readonly) return;
+      if (!editable) return;
       const gone = new Set(deleted.map((e) => e.id));
       setModel((m) =>
         m ? { ...m, edges: m.edges.filter((e) => !gone.has(edgeId(e))) } : m,
       );
     },
-    [readonly],
+    [editable],
   );
 
   const onNodesDelete = useCallback(
     (deleted: { id: string }[]) => {
-      if (readonly) return;
+      if (!editable) return;
       const gone = new Set(deleted.map((n) => n.id));
       setModel((m) =>
         m
@@ -192,7 +209,7 @@ function WorkflowCanvasInner({
       );
       setSelectedId(null);
     },
-    [readonly],
+    [editable],
   );
 
   const onPatch = useCallback(
@@ -246,7 +263,7 @@ function WorkflowCanvasInner({
   );
 
   const addState = useCallback(() => {
-    if (readonly) return;
+    if (!editable) return;
     setModel((m) => {
       if (!m) return m;
       let i = m.nodes.length + 1;
@@ -262,10 +279,10 @@ function WorkflowCanvasInner({
         ],
       };
     });
-  }, [readonly]);
+  }, [editable]);
 
   const relayout = useCallback(() => {
-    if (readonly) return;
+    if (!editable) return;
     setModel((m) => {
       if (!m) return m;
       const pos = autoLayout(m);
@@ -275,11 +292,11 @@ function WorkflowCanvasInner({
         nodes: m.nodes.map((n) => ({ ...n, position: pos[n.id] ?? n.position })),
       };
     });
-  }, [readonly]);
+  }, [editable]);
 
   // ---- save ----
   const save = useCallback(async () => {
-    if (!model || readonly) return;
+    if (!model || !editable) return;
     const name = loadedName.current;
     if (!name) {
       setError("No team loaded.");
@@ -311,7 +328,50 @@ function WorkflowCanvasInner({
     } finally {
       setBusy(false);
     }
-  }, [dataLayer, model, onSaved, readonly]);
+  }, [dataLayer, model, onSaved, editable]);
+
+  // ---- running ----
+  const startRun = useCallback(async () => {
+    if (!model || !dataLayer.runTeamDetached || !canStart(session)) return;
+    const name = loadedName.current;
+    if (!name) {
+      setError("No team loaded.");
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    setStatus(undefined);
+    try {
+      // By def_id, never by name: Save-then-Run would otherwise execute the
+      // PREVIOUS version, and the difference is invisible on screen.
+      const started = await dataLayer.runTeamDetached({ defId: parentDefId.current ?? undefined });
+      if (!started?.run_id) {
+        // A host that quietly fell back to a blocking run returns a trace with
+        // no handle. Refusing is the honest outcome: every live surface in Run
+        // mode addresses that run id, so without one there is nothing to show.
+        setError(
+          "This runtime started the walk without returning a run id, so it cannot be " +
+            "monitored or stopped. It needs loomcycle #1206 or newer.",
+        );
+        return;
+      }
+      dispatchSession({ t: "start", runId: started.run_id, debug: false });
+      setStatus(`Running (${started.run_id}).`);
+    } catch (e) {
+      setError(`Could not start the run: ${msg(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [dataLayer, model, session]);
+
+  const backToEdit = useCallback(() => {
+    // Explicit, and it DISCARDS the trace — never automatic on finish, because
+    // the most useful moment to read a failed run is right after it fails.
+    dispatchSession({ t: "toEdit" });
+    setStatus(undefined);
+  }, []);
+
+  const abort = abortAvailability(session);
 
   const errorCount = findings.filter((f) => f.level === "error").length;
   const saveable = !!model && canSave(findings) && !busy;
@@ -323,7 +383,7 @@ function WorkflowCanvasInner({
     >
       <div className="lb-wf-toolbar">
         <strong className="lb-wf-toolbar__name">{loadedName.current ?? "—"}</strong>
-        {!readonly && (
+        {!readonly && editable && (
           <>
             <button className="lb-wf-btn" onClick={addState} disabled={!model}>
               Add state
@@ -336,7 +396,48 @@ function WorkflowCanvasInner({
             </button>
           </>
         )}
+
+        {!readonly && dataLayer.runTeamDetached && canStart(session) && (
+          <button
+            className="lb-wf-btn"
+            onClick={startRun}
+            disabled={!model || busy || errorCount > 0}
+            title={
+              errorCount > 0
+                ? "Fix the validation problems first — the runtime would refuse this definition."
+                : "Start this version, detached"
+            }
+          >
+            Run
+          </button>
+        )}
+
+        {isLive(session) &&
+          (abort.available ? (
+            <button className="lb-wf-btn" onClick={() => dispatchSession({ t: "ended", status: "aborted" })}>
+              Abort
+            </button>
+          ) : (
+            // Shown-and-disabled rather than hidden: "why can I not stop this"
+            // is the question an operator will actually have, and the tooltip
+            // is the answer. See abortAvailability for the verified reason.
+            <button className="lb-wf-btn" disabled title={abort.reason}>
+              Abort
+            </button>
+          ))}
+
+        {canReturnToEdit(session) && (
+          <button
+            className="lb-wf-btn"
+            onClick={backToEdit}
+            title="Discards the run trace and reloads the active version."
+          >
+            Back to Edit
+          </button>
+        )}
+
         <span className="lb-wf-toolbar__spacer" />
+        <span className={`lb-wf-phase lb-wf-phase--${session.phase}`}>{statusLabel(session)}</span>
         {errorCount > 0 && (
           <span className="lb-wf-badge lb-wf-badge--error">
             {errorCount} {errorCount === 1 ? "problem" : "problems"}
@@ -348,7 +449,7 @@ function WorkflowCanvasInner({
       {error && <div className="lb-wf-error">{error}</div>}
 
       <div className="lb-wf-body">
-        <div className="lb-wf-graph">
+        <div className={`lb-wf-graph${editable ? "" : " is-locked"}`}>
           <ReactFlow
             nodes={flowNodes}
             edges={flowEdges}
@@ -358,8 +459,8 @@ function WorkflowCanvasInner({
             onNodesDelete={onNodesDelete}
             onEdgesDelete={onEdgesDelete}
             onPaneClick={() => setSelectedId(null)}
-            nodesDraggable={!readonly}
-            nodesConnectable={!readonly}
+            nodesDraggable={editable}
+            nodesConnectable={editable}
             elementsSelectable
             fitView
             proOptions={{ hideAttribution: false }}
@@ -390,7 +491,7 @@ function WorkflowCanvasInner({
             node={selected}
             findings={findings}
             agentNames={agentNames}
-            disabled={busy}
+            disabled={busy || !editable}
             onPatch={onPatch}
             onRename={onRename}
             channels={model ? teamChannels(model) : undefined}

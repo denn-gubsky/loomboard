@@ -1,8 +1,8 @@
 import type { LoomcycleClient } from "@loomcycle/client";
 import type {
+  DetachedRun,
   SavedTeam,
   TeamDefDetail,
-  TeamRunResult,
   TeamSummary,
   WorkflowDataLayer,
 } from "@loomboard/workflow";
@@ -60,6 +60,12 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
         .sort();
     },
 
-    runTeam: (target) => client.runTeam(target) as Promise<TeamRunResult>,
+    // Always detached (RFC CZ decision C8). A runtime older than loomcycle
+    // #1206 REJECTS mode:"detach" rather than running inline — that rejection
+    // is how the canvas detects it, so it is deliberately NOT caught here.
+    // Swallowing it and falling back to a blocking run would hand the canvas a
+    // finished trace with no run id and no way to say why.
+    runTeamDetached: async (target): Promise<DetachedRun> =>
+      client.runTeam({ ...target, mode: "detach" }),
   };
 }
