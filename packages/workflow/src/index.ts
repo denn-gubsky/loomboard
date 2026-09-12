@@ -51,6 +51,20 @@ export type {
 } from "./lib/model";
 
 export { validateModel, canSave, validateOn, validateWait, MAX_ALLOWED_ITERATIONS } from "./lib/validate";
+
+// The channel half of what a definition REFERENCES. Separate from the
+// validation mirror on purpose: the ACL check lives in the TeamDef tool's
+// create/fork preflight, not in teamgraph.Validate, so a definition can fail
+// one and pass the other.
+export {
+  channelRefs,
+  channelsInUse,
+  channelAllowed,
+  grantList,
+  requiredACL,
+  aclFindings,
+} from "./lib/channels";
+export type { ChannelRef, ChannelSide } from "./lib/channels";
 export type { Finding, FindingLevel } from "./lib/validate";
 
 export { autoLayout, needsAutoLayout, COLUMN_WIDTH, ROW_HEIGHT } from "./lib/layout";
