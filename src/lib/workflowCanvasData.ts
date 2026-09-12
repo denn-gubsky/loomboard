@@ -1,5 +1,6 @@
 import type { LoomcycleClient } from "@loomcycle/client";
 import type {
+  ChannelInfo,
   DetachedRun,
   SavedTeam,
   TeamDefDetail,
@@ -34,6 +35,16 @@ async function getActiveTeamDef(client: LoomcycleClient, name: string): Promise<
 }
 
 export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
+  // Resolved once per adapter, and only when a user-scoped publish needs it.
+  // `subject` IS the user id: loomcycle's own self-access check is
+  // `pathUserID == p.Subject`, and a session's UserID is compared to it the
+  // same way — so this is the id the walk will read that channel at.
+  let userId: string | undefined;
+  const selfUserId = async () => {
+    if (userId === undefined) userId = (await client.whoami()).subject;
+    return userId;
+  };
+
   return {
     async listTeams(): Promise<TeamSummary[]> {
       // The server encodes "no teams" as a nil slice, so `names` is null
@@ -67,5 +78,27 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
     // finished trace with no run id and no way to say why.
     runTeamDetached: async (target): Promise<DetachedRun> =>
       client.runTeam({ ...target, mode: "detach" }),
+
+    async listChannels(): Promise<ChannelInfo[]> {
+      const { channels } = await client.listChannels();
+      return (channels ?? []).map((c) => ({
+        name: c.name,
+        scope: c.scope,
+        hold: c.hold,
+        message_count: c.message_count,
+        source: c.source,
+      }));
+    },
+
+    // The canvas resolves `scope` from the channel's own declaration and hands
+    // it here; this adapter only supplies what that scope requires. A
+    // user-scoped channel is addressed per user on the wire
+    // (/v1/users/{id}/channels/{name}/publish), so it needs the id too.
+    publishChannel: async (channel, payload, { scope }) =>
+      client.publishChannel(channel, {
+        scope: scope as Parameters<typeof client.publishChannel>[1]["scope"],
+        payload,
+        ...(scope === "user" ? { userId: await selfUserId() } : {}),
+      }),
   };
 }
