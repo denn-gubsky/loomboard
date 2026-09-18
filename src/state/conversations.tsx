@@ -10,7 +10,7 @@ import type { ChatConversation, ConversationConfig } from "../chat/types";
 
 // Config shape + helpers live with the chat component (its config panel and
 // fork logic own them); re-exported so existing app imports keep working.
-export type { ConversationConfig } from "../chat/types";
+export type { ConversationOverrides, ConversationConfig } from "../chat/types";
 export { configIsCustom, sameConfig } from "../chat/types";
 
 // The app's conversation record extends the chat's controlled shape with local
@@ -22,12 +22,28 @@ export interface Conversation extends ChatConversation {
 
 const KEY = "loomboard.conversations";
 
+// Normalise a stored record onto the sparse-overlay contract. There is no value
+// migration to do — provider/model/tier/effort have no underscores, so a record
+// written by the fork-era build is already valid snake_case — but those builds
+// wrote `""` for a cleared box, and the editor's "clear" now DELETES a key. Left
+// alone, an old `{effort: ""}` would render as set-to-empty and ride along on
+// every run. Idempotent, so it needs no version stamp.
+export function migrateConversation(c: Conversation): Conversation {
+  const config = c.config;
+  if (!config || typeof config !== "object") return { ...c, config: {} };
+  const cleaned: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(config)) {
+    if (v !== "" && v !== null && v !== undefined) cleaned[k] = v;
+  }
+  return { ...c, config: cleaned };
+}
+
 function load(): Conversation[] {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
     const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? (arr as Conversation[]) : [];
+    return Array.isArray(arr) ? (arr as Conversation[]).map(migrateConversation) : [];
   } catch {
     return [];
   }
