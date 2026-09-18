@@ -344,3 +344,46 @@ describe("chatReducer — reset", () => {
     expect(s.runId).toBe("run_x");
   });
 });
+
+describe("chatReducer — per-run overrides (RFC DC)", () => {
+  // THE REGRESSION. A retune usually lands while nothing is streaming — the run
+  // is parked, waiting. Routed through updateOpenAssistant (what `limit` and
+  // `provider_fallback` do) the note would FABRICATE a streaming assistant
+  // bubble that nothing ever closes, leaving the chat looking permanently busy.
+  it("posts a standalone note when nothing is streaming, and opens no bubble", () => {
+    const s = run([
+      ev("override", { override: { source: "operator", fields: ["max_tokens"] } }),
+    ]);
+    expect(s.messages).toHaveLength(1);
+    const m = assistant(s, 0);
+    expect(m.status).toBe("done");
+    expect(m.parts).toEqual([
+      { type: "notice", level: "info", text: "Run settings changed: max_tokens" },
+    ]);
+    expect(s.messages.some((x) => x.role === "assistant" && x.status === "streaming")).toBe(
+      false,
+    );
+  });
+
+  // The other half: mid-turn it must JOIN the open message rather than close it,
+  // which is why the `compacted` pattern's unconditional closeOpen is also wrong.
+  it("joins the open turn when one is streaming, without ending it", () => {
+    const s = run([
+      ev("text", { text: "thinking about it" }),
+      ev("override", { override: { source: "operator", from_model: "a/m1", to_model: "b/m2" } }),
+    ]);
+    expect(s.messages).toHaveLength(1);
+    const m = assistant(s, 0);
+    expect(m.status).toBe("streaming");
+    const notice = m.parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toBe(
+      "Model changed: a/m1 → b/m2",
+    );
+  });
+
+  it("ignores an override frame with no payload", () => {
+    const before = run([ev("text", { text: "hi" })]);
+    const after = run([ev("text", { text: "hi" }), ev("override", {})]);
+    expect(after.messages).toEqual(before.messages);
+  });
+});

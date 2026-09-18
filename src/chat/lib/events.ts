@@ -42,6 +42,32 @@ export interface LimitInfo {
   message?: string;
 }
 
+/** Payload on an `override` event (loomcycle RFC DC per-run overrides) — a run's
+ *  own configuration changed mid-run because an operator retuned it.
+ *
+ *  It names what MOVED rather than what the settings now are, which is the
+ *  useful half: "the configuration changed" answers nothing for someone trying
+ *  to work out why the answers got different after turn 12. Declared here rather
+ *  than imported because the SDK does not re-export it from the package entry
+ *  (checked at 1.82.0), and declared with every field optional so it is
+ *  assignable FROM the SDK's stricter shape. ChatEvent does NOT redeclare the
+ *  `override` field: AgentEvent already carries it, and a second declaration
+ *  intersects rather than replaces — which is what made `source` required. */
+export interface OverrideInfo {
+  /** Who changed it. "operator" today; present so a later automatic retune is
+   *  distinguishable rather than indistinguishable. Optional here where the SDK
+   *  makes it required, so this stays assignable FROM the SDK's shape and also
+   *  accepts an older runtime that omits it. */
+  source?: string;
+  /** "provider/model" before the change. Absent when routing did not move. */
+  from_model?: string;
+  /** "provider/model" after the change. */
+  to_model?: string;
+  /** The override keys the request actually set, so a budget or tuning change
+   *  that moved no model is still legible. */
+  fields?: string[];
+}
+
 export type ChatEvent = Omit<AgentEvent, "type"> & {
   type: string;
   /** Payload on `interruption_pending`. */
@@ -74,6 +100,28 @@ export function describeLimit(info: LimitInfo): string {
     return `${scope} ${sev} token budget reached: ${info.used} of ${info.limit} tokens this month`;
   }
   return `${scope} ${sev} token budget reached`;
+}
+
+/** Note for a mid-run retune. Says what MOVED, in that order of usefulness:
+ *  a routing change first, since it is what a reader is trying to explain;
+ *  otherwise the keys that were set.
+ *
+ *  Field names are shown raw (`max_tokens`, not "Output cap") — they match what
+ *  the server logs and what the panel's own key chips show, and pulling the
+ *  registry's labels in here would drag @loomcycle/def-fields into the core
+ *  render path for a cosmetic gain. The source is named only when it is NOT the
+ *  operator, because operator is the unremarkable case. */
+export function describeOverride(info: OverrideInfo): string {
+  const head =
+    info.from_model && info.to_model
+      ? `Model changed: ${info.from_model} → ${info.to_model}`
+      : info.to_model
+        ? `Model set to ${info.to_model}`
+        : info.fields?.length
+          ? `Run settings changed: ${info.fields.join(", ")}`
+          : "Run settings changed";
+  const by = info.source && info.source !== "operator" ? ` (by ${info.source})` : "";
+  return `${head}${by}`;
 }
 
 // Extract only the role:"user" text from a persisted user_input row. loomcycle
