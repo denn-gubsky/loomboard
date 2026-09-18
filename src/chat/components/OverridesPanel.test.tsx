@@ -86,6 +86,27 @@ describe("OverridesPanel", () => {
     expect(screen.queryByText(/private agent copy/i)).toBeNull();
   });
 
+  // interruption is the only object-valued override, so it is the only field
+  // that renders NESTED rows rather than a single control. It is also the one
+  // that lets a chat ask questions on an agent whose definition leaves them off
+  // — the capability the deleted AgentDef fork used to force on.
+  it("renders the interruption ACL as nested rows", () => {
+    panel({ interruption: { enabled: true } });
+    const keys = [...document.querySelectorAll("code.lc-df-key")].map((c) => c.textContent);
+    expect(keys).toContain("interruption");
+    expect(keys).toContain("enabled");
+  });
+
+  it("emits the ACL as an object, not a flattened key", () => {
+    const onChange = panel({ interruption: { enabled: false } });
+    const row = [...document.querySelectorAll("code.lc-df-key")]
+      .find((c) => c.textContent === "enabled")!
+      .closest(".lc-df-row")!;
+    fireEvent.click(row.querySelector("input[type=checkbox]")!);
+    const next = onChange.mock.calls.at(-1)![0] as ConversationOverrides;
+    expect(next.interruption).toEqual({ enabled: true });
+  });
+
   it("renders the two lifetimes as separate groups", () => {
     panel({});
     expect(screen.getByText("This chat")).toBeTruthy();

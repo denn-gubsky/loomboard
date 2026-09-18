@@ -63,14 +63,30 @@ describe("toRunOverrides", () => {
     ).toEqual({});
   });
 
-  it("copies an object value through untouched, for the overrides still to come", () => {
-    // interruption is already accepted by the runtime and is an OBJECT; the
-    // mapper must not assume scalars.
+  it("copies an object value through untouched", () => {
+    // interruption is the only object-valued override; the mapper must not
+    // assume scalars, and must not reshape what it forwards.
     const acl = { enabled: true, kinds: ["ask"], max_pending: 2 };
+    expect(toRunOverrides({ interruption: acl })).toEqual({ interruption: acl });
     expect(toStartOnlyOptions({ sampling: { temperature: 0 } })).toEqual({
       sampling: { temperature: 0 },
     });
-    expect(toRunOverrides({ interruption: acl })).toEqual({}); // not in the table yet
+  });
+
+  // The capability the deleted AgentDef fork used to force on (it always set
+  // interruption.enabled) and that per-run overrides could not express before
+  // 1.83.0. A chat can now turn questions on for an agent whose definition
+  // leaves them off.
+  it("carries an interruption ACL that turns questions on for one chat", () => {
+    expect(toRunOverrides({ interruption: { enabled: true } })).toEqual({
+      interruption: { enabled: true },
+    });
+  });
+
+  it("treats a disabled ACL as a real setting, not an absence", () => {
+    expect(toRunOverrides({ interruption: { enabled: false } })).toEqual({
+      interruption: { enabled: false },
+    });
   });
 });
 
@@ -99,10 +115,14 @@ describe("toStartOnlyOptions", () => {
 describe("the two vocabularies", () => {
   // The consumer-side twin of loomcycle's own override parity test. A key added
   // upstream is invisible here until this literal is updated on purpose.
-  it("retunable is exactly the twelve RFC DC keys", () => {
+  it("retunable is exactly the thirteen keys loomcycle accepts on a retune", () => {
+    // `interactive` is accepted per-run by 1.83.0 but deliberately absent: it is
+    // not an AgentDef field, so nothing describes it, and a chat already starts
+    // interactive. See the note in overrides.ts.
     expect([...RETUNABLE_KEYS].sort()).toEqual(
       [
         "effort",
+        "interruption",
         "inject_tool_guide",
         "max_concurrent_children",
         "max_iterations",
