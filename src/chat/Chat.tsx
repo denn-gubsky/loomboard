@@ -6,7 +6,7 @@ import type { UserMessage } from "./lib/eventReducer";
 import { useAgents } from "./hooks/useAgents";
 import { useChat } from "./hooks/useChat";
 import AgentPicker from "./components/AgentPicker";
-import AgentConfigPanel from "./components/AgentConfigPanel";
+import OverridesPanel from "./components/OverridesPanel";
 import MessageList from "./components/MessageList";
 import Composer from "./components/Composer";
 import MetricsHud from "./components/MetricsHud";
@@ -133,12 +133,7 @@ export default function Chat({
       <header className="chat-header">
         <AgentPicker
           value={conversation.baseAgent}
-          // Switching the base agent must drop any existing per-conversation
-          // fork, or resolveConversationAgent keeps running the stale fork (of
-          // the OLD agent) whenever the config is custom.
-          onChange={(name) =>
-            onConversationChange({ baseAgent: name, forkDefName: undefined })
-          }
+          onChange={(name) => onConversationChange({ baseAgent: name })}
           agents={agents}
           loading={loading}
           error={error}
@@ -172,9 +167,10 @@ export default function Chat({
       </header>
 
       {showConfig && (
-        <AgentConfigPanel
+        <OverridesPanel
           config={conversation.config}
           baseDef={baseDef}
+          legacyFork={conversation.forkDefName}
           onChange={(next) => onConversationChange({ config: next })}
         />
       )}
