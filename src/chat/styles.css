@@ -3,7 +3,15 @@
    lives on the root as CSS variables; light mode activates when the root (via
    the `theme` prop) OR any ancestor carries data-theme="light", so an app that
    themes <html> gets themed chat for free. Override any --var on `.loomchat`
-   to restyle. */
+   to restyle.
+
+   @loomcycle/def-fields' stylesheet is imported here rather than left to the
+   consumer: the overrides panel is unreadable without it, so making it a second
+   thing to remember would just produce bug reports. Same stance as
+   @loomboard/workflow takes with @xyflow/react. Bundlers resolve the bare
+   specifier from the consumer's tree, and `build:lib` copies this file verbatim
+   so the import survives into the published package. */
+@import "@loomcycle/def-fields/styles.css";
 
 .loomchat {
   /* dark palette (default) */
