@@ -5,6 +5,8 @@ import { configIsCustom, type ChatConversation } from "./types";
 import type { UserMessage } from "./lib/eventReducer";
 import { useAgents } from "./hooks/useAgents";
 import { useChat } from "./hooks/useChat";
+import { useEffectiveConfig } from "./hooks/useEffectiveConfig";
+import { effectiveFields } from "./lib/effective";
 import AgentPicker from "./components/AgentPicker";
 import OverridesPanel from "./components/OverridesPanel";
 import MessageList from "./components/MessageList";
@@ -82,6 +84,15 @@ export default function Chat({
     (a) => a.name === conversation.baseAgent,
   )?.static_definition;
   const chat = useChat(client, conversation, onConversationChange);
+  // What the live run actually uses, for the settings panel. Re-read whenever a
+  // turn ends or the run changes: the report is a snapshot, and a turn is when
+  // a retune or a fallback can have moved something.
+  const effectiveReport = useEffectiveConfig(
+    client,
+    chat.state.runId,
+    chat.state.messages.length,
+  );
+  const effective = useMemo(() => effectiveFields(effectiveReport), [effectiveReport]);
 
   // Esc stops the current operation, like Claude Code — a live turn or a run
   // parked on a question — via RFC BH turn-cancel: the chat stays alive to
@@ -170,6 +181,7 @@ export default function Chat({
         <OverridesPanel
           config={conversation.config}
           baseDef={baseDef}
+          effective={effective}
           legacyFork={conversation.forkDefName}
           onChange={(next) => onConversationChange({ config: next })}
         />

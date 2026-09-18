@@ -381,6 +381,39 @@ describe("chatReducer — per-run overrides (RFC DC)", () => {
     );
   });
 
+  // 1.83.0 emits TWO frames for a routing retune: the operator's request, then
+  // the routing the run adopted. Both carry OverrideInfo, so a reader that posts
+  // every frame writes the same change twice.
+  it("posts one line for a routing retune, not two", () => {
+    const s = run([
+      ev("override", { override: { source: "operator", fields: ["model"] } }),
+      ev("override", {
+        override: { source: "operator", from_model: "o/a", to_model: "o/b", fields: ["model"] },
+      }),
+    ]);
+    const notices = s.messages.flatMap((m) =>
+      m.role === "assistant" ? m.parts.filter((p) => p.type === "notice") : [],
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0].type === "notice" && notices[0].text).toBe(
+      "Model changed: o/a → o/b",
+    );
+  });
+
+  // The request frame is the ONLY frame a tuning-only retune produces — the
+  // runtime's frame speaks for routing alone — so dropping it would lose the
+  // change entirely.
+  it("posts a budget-only retune, which produces no second frame", () => {
+    const s = run([
+      ev("override", { override: { source: "operator", fields: ["max_tokens", "effort"] } }),
+    ]);
+    const m = assistant(s, 0);
+    const notice = m.parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toBe(
+      "Run settings changed: max_tokens, effort",
+    );
+  });
+
   it("ignores an override frame with no payload", () => {
     const before = run([ev("text", { text: "hi" })]);
     const after = run([ev("text", { text: "hi" }), ev("override", {})]);

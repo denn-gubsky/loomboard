@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { FoldedFieldList, type DefValue } from "@loomcycle/def-fields";
-import type { LibraryAgentDefinition } from "@loomcycle/client";
+import type { EffectiveValue, LibraryAgentDefinition } from "@loomcycle/client";
 import type { ConversationOverrides } from "../types";
 import { THIS_CHAT, buildOverrideRegistry } from "../lib/overrideRegistry";
 
@@ -19,6 +19,7 @@ import { THIS_CHAT, buildOverrideRegistry } from "../lib/overrideRegistry";
 export default function OverridesPanel({
   config,
   baseDef,
+  effective,
   legacyFork,
   disabled,
   onChange,
@@ -27,13 +28,20 @@ export default function OverridesPanel({
   /** The base agent's own definition, when the Library can be read — lets an
    *  unset field name the value it inherits. */
   baseDef?: LibraryAgentDefinition;
+  /** What the live run will actually use, per field, with the layer that decided
+   *  it. Empty for a chat with no run yet — the panel then speaks only for what
+   *  the agent's definition declares. */
+  effective?: Readonly<Record<string, EffectiveValue>>;
   /** Set when this conversation predates per-run overrides and still runs on a
    *  forked AgentDef. */
   legacyFork?: string;
   disabled?: boolean;
   onChange: (next: ConversationOverrides) => void;
 }) {
-  const registry = useMemo(() => buildOverrideRegistry(baseDef), [baseDef]);
+  const registry = useMemo(
+    () => buildOverrideRegistry(baseDef, effective),
+    [baseDef, effective],
+  );
 
   return (
     <div className="config-panel">

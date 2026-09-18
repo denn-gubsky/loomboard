@@ -102,15 +102,47 @@ export function describeLimit(info: LimitInfo): string {
   return `${scope} ${sev} token budget reached`;
 }
 
-/** Note for a mid-run retune. Says what MOVED, in that order of usefulness:
- *  a routing change first, since it is what a reader is trying to explain;
- *  otherwise the keys that were set.
+/** Note for a mid-run retune.
+ *
+ *  TWO EVENTS carry this payload and one retune can produce both, so a reader
+ *  has to tell them apart or the transcript gets the same change twice. The
+ *  server emits one when the OPERATOR ACTS — it names the keys the request set
+ *  and carries no from/to pair, because nothing has been re-resolved yet. The
+ *  runtime emits one when the run ADOPTS a routing change, and that one always
+ *  carries both halves of the pair. So a pair present means "the run is now
+ *  using this"; a pair absent means "an operator asked for these fields".
+ *
+ *  We keep the ADOPTED one whenever it exists — it is the outcome, and it is
+ *  what explains a change in the answers — and fall back to the request one,
+ *  which is the only event a tuning-only retune produces at all.
  *
  *  Field names are shown raw (`max_tokens`, not "Output cap") — they match what
  *  the server logs and what the panel's own key chips show, and pulling the
  *  registry's labels in here would drag @loomcycle/def-fields into the core
  *  render path for a cosmetic gain. The source is named only when it is NOT the
  *  operator, because operator is the unremarkable case. */
+/** Routing keys — the ones whose outcome the runtime reports separately once the
+ *  run adopts them. */
+const ROUTING_KEYS = new Set(["model", "provider", "tier", "effort"]);
+
+/** Whether this frame is worth a transcript note.
+ *
+ *  The REQUEST frame arrives first and names the keys the operator set; the
+ *  ADOPTED frame follows only if routing actually moved, and reports the pair.
+ *  Posting both for a routing retune says the same change twice, in increasing
+ *  order of usefulness — so a request frame that names ONLY routing keys is
+ *  left to its outcome. A request that touched a budget or a tuning knob is
+ *  posted, because nothing else will report it: the runtime's frame speaks for
+ *  routing alone.
+ *
+ *  A routing request whose model resolves to what was already serving produces
+ *  no adopted frame and so no note — which is correct: nothing changed. */
+export function shouldPostOverride(info: OverrideInfo): boolean {
+  if (info.from_model) return true; // adopted: the outcome, always worth saying
+  if (!info.fields?.length) return true; // says nothing; better than silence
+  return info.fields.some((f) => !ROUTING_KEYS.has(f));
+}
+
 export function describeOverride(info: OverrideInfo): string {
   const head =
     info.from_model && info.to_model

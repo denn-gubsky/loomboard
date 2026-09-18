@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptResponse } from "@loomcycle/client";
-import { describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
+import { shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
 
 describe("optionsToArray", () => {
   it("passes through a string array", () => {
@@ -125,5 +125,27 @@ describe("describeOverride", () => {
     expect(describeOverride({ fields: ["effort"], source: "autotuner" })).toContain(
       "(by autotuner)",
     );
+  });
+});
+
+describe("shouldPostOverride", () => {
+  it("always posts the adopted frame — it is the outcome", () => {
+    expect(shouldPostOverride({ source: "operator", from_model: "a/1", to_model: "a/2" })).toBe(true);
+  });
+
+  it("leaves a routing-only request to the frame that reports its outcome", () => {
+    expect(shouldPostOverride({ source: "operator", fields: ["model"] })).toBe(false);
+    expect(shouldPostOverride({ source: "operator", fields: ["tier", "effort"] })).toBe(false);
+  });
+
+  it("posts a request touching anything routing does not cover", () => {
+    // Nothing else will report it: the runtime's frame speaks for routing alone.
+    expect(shouldPostOverride({ source: "operator", fields: ["max_tokens"] })).toBe(true);
+    expect(shouldPostOverride({ source: "operator", fields: ["model", "retry_attempts"] })).toBe(true);
+  });
+
+  it("posts a frame that names nothing rather than staying silent", () => {
+    expect(shouldPostOverride({ source: "operator" })).toBe(true);
+    expect(shouldPostOverride({ source: "operator", fields: [] })).toBe(true);
   });
 });

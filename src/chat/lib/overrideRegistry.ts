@@ -1,6 +1,7 @@
 import { agentDefRegistry, type DefRegistry, type FieldSpec } from "@loomcycle/def-fields";
-import type { LibraryAgentDefinition } from "@loomcycle/client";
+import type { EffectiveValue, LibraryAgentDefinition } from "@loomcycle/client";
 import { RETUNABLE_KEYS, START_ONLY_KEYS } from "./overrides";
+import { describeEffective, placeholderFor } from "./effective";
 
 // The field registry behind the chat's overrides panel: the RFC DC vocabulary,
 // borrowed from @loomcycle/def-fields' agentDefRegistry rather than redeclared.
@@ -40,11 +41,24 @@ function inheritedValue(
   return String(v);
 }
 
-/** Build the panel's registry. `baseDef` is optional: a delegated user token
- *  can't read the agent library, and the free-text agent picker has no def at
- *  all — in which case every field falls back to the registry's own prose,
- *  which is still more useful than a bare "inherit". */
-export function buildOverrideRegistry(baseDef?: LibraryAgentDefinition): DefRegistry {
+/** Build the panel's registry.
+ *
+ *  Two optional sources of "what is in force", in descending order of truth:
+ *
+ *  `effective` is loomcycle's per-field report for the LIVE run — the value and
+ *  the layer that decided it, for every field. It is the real answer, and the
+ *  only one that can distinguish a deliberate setting from a default nobody
+ *  chose. It exists only while a run does.
+ *
+ *  `baseDef` is the agent's declared definition — a sparse overlay, so it speaks
+ *  for the handful of fields that agent happens to set. It is what a chat with
+ *  no run yet has, and it is absent entirely for a delegated user token, which
+ *  cannot read the agent library. Each field falls back to the registry's own
+ *  prose, which still beats a bare "inherit". */
+export function buildOverrideRegistry(
+  baseDef?: LibraryAgentDefinition,
+  effective: Readonly<Record<string, EffectiveValue>> = {},
+): DefRegistry {
   const byKey = new Map(agentDefRegistry.fields.map((f) => [f.key, f]));
 
   const take = (key: string, group: string, extraHint?: string): FieldSpec | null => {
@@ -54,12 +68,22 @@ export function buildOverrideRegistry(baseDef?: LibraryAgentDefinition): DefRegi
     // control bound to a key the runtime will not read. The drift test turns
     // this into a red build instead of a silent gap.
     if (!base) return null;
-    const inherited = inheritedValue(baseDef, key);
+
+    // The hint is the only slot def-fields renders for EVERY field in BOTH
+    // states — `unsetMeans` is a tooltip and `placeholder` is ignored by the
+    // bool, enum and object controls. So the value in force goes here, where it
+    // is actually read.
+    const inForce = describeEffective(effective[key]);
+    const declared = inheritedValue(baseDef, key);
+    const preview = placeholderFor(effective[key]) ?? declared;
+
+    const hint = [base.hint, extraHint, inForce].filter(Boolean).join(" ");
     return {
       ...base,
       group,
-      ...(inherited ? { unsetMeans: `the agent's own: ${inherited}`, placeholder: inherited } : {}),
-      ...(extraHint ? { hint: `${base.hint} ${extraHint}` } : {}),
+      hint,
+      ...(preview ? { placeholder: preview } : {}),
+      ...(declared ? { unsetMeans: `the agent's own: ${declared}` } : {}),
     };
   };
 

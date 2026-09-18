@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { agentDefRegistry } from "@loomcycle/def-fields";
 import type { LibraryAgentDefinition } from "@loomcycle/client";
+import type { EffectiveValue } from "@loomcycle/client";
 import { NEXT_RUN, THIS_CHAT, buildOverrideRegistry } from "./overrideRegistry";
 import { RETUNABLE_KEYS, START_ONLY_KEYS } from "./overrides";
 
@@ -96,5 +97,64 @@ describe("buildOverrideRegistry — inherited values", () => {
     const r = buildOverrideRegistry({ model: "" } as LibraryAgentDefinition);
     const upstream = agentDefRegistry.fields.find((x) => x.key === "model");
     expect(r.fields.find((x) => x.key === "model")?.unsetMeans).toBe(upstream?.unsetMeans);
+  });
+});
+
+describe("buildOverrideRegistry — what is in force", () => {
+  const ev = (value: unknown, source: EffectiveValue["source"]): EffectiveValue =>
+    ({ value, source });
+  const hintFor = (r: ReturnType<typeof buildOverrideRegistry>, k: string) =>
+    r.fields.find((f) => f.key === k)?.hint ?? "";
+
+  it("states the value and its layer in the hint, which is always rendered", () => {
+    // Not unsetMeans (a tooltip) and not placeholder (ignored by bool/enum/object
+    // controls) — the hint is the only slot shown for every field in both states.
+    const r = buildOverrideRegistry(undefined, {
+      max_iterations: ev(16, "default"),
+      retry_attempts: ev(2, "user_tier"),
+    });
+    expect(hintFor(r, "max_iterations")).toContain("In force: 16 (runtime default).");
+    expect(hintFor(r, "retry_attempts")).toContain("In force: 2 (from your tier).");
+  });
+
+  it("reaches the fields the agent report never carried", () => {
+    // These ten have no entry in LibraryAgentDefinition, so before the effective
+    // report they could only show generic prose.
+    const r = buildOverrideRegistry(undefined, {
+      inject_tool_guide: ev(false, "default"),
+      sampling: ev({ temperature: 0.7 }, "definition"),
+      max_context_tokens: ev(8192, "resolved"),
+    });
+    expect(hintFor(r, "inject_tool_guide")).toContain("In force: off (runtime default).");
+    expect(hintFor(r, "sampling")).toContain("In force: temperature (from the agent).");
+    expect(hintFor(r, "max_context_tokens")).toContain("In force: 8192 (resolved at run time).");
+  });
+
+  it("keeps the authority note and the lifetime warning alongside it", () => {
+    const r = buildOverrideRegistry(undefined, {
+      model: ev("m", "run"),
+      max_context_tokens: ev(1, "default"),
+    });
+    expect(hintFor(r, "model")).toContain("PINS");
+    expect(hintFor(r, "model")).toContain("In force:");
+    expect(hintFor(r, "max_context_tokens")).toContain("next new run");
+  });
+
+  it("previews an inherited scalar, but not one this chat overrides", () => {
+    const r = buildOverrideRegistry(undefined, {
+      model: ev("claude-sonnet-5", "definition"),
+      tier: ev("fast-lane", "run"),
+    });
+    const f = (k: string) => r.fields.find((x) => x.key === k);
+    expect(f("model")?.placeholder).toBe("claude-sonnet-5");
+    // Overridden: the control already shows the value, so we do not ALSO offer
+    // it as a preview of what would be inherited — that would be a lie. The
+    // field keeps whatever generic placeholder the upstream registry declares.
+    expect(f("tier")?.placeholder).not.toBe("fast-lane");
+  });
+
+  it("says nothing extra with no report — a chat with no run yet is normal", () => {
+    const bare = buildOverrideRegistry();
+    for (const f of bare.fields) expect(f.hint).not.toContain("In force:");
   });
 });

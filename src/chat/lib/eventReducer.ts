@@ -9,6 +9,7 @@ import {
   describeFallback,
   describeLimit,
   describeOverride,
+  shouldPostOverride,
   transcriptToEvents,
   type ChatEvent,
   type InterruptionInfo,
@@ -372,15 +373,21 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
         ),
       };
 
-    case "override":
+    case "override": {
       // RFC DC: an operator retuned this run mid-flight. Post it where it
       // happened — a settings change is exactly the context someone needs when
       // the answers change character partway down a transcript.
-      if (!ev.override) return state;
+      //
+      // A ROUTING retune produces TWO frames — the operator's request, then the
+      // routing the run adopted — so shouldPostOverride decides which of them
+      // earns a line. See its comment for why a routing-only request is left to
+      // its outcome while a budget change is not.
+      if (!ev.override || !shouldPostOverride(ev.override)) return state;
       return {
         ...state,
         messages: postNotice(state.messages, "info", describeOverride(ev.override)),
       };
+    }
 
     case "interruption_pending":
       return { ...state, pendingInterrupt: ev.interruption ?? null };
