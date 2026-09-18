@@ -34,23 +34,13 @@ describe("RFC CZ team-debug contract — @loomcycle/client", () => {
   });
 });
 
-describe("known gap — watching ONE walk's agents", () => {
-  // The runtime supports `GET /v1/users/{id}/agents/stream?walk_id=<run_id>`
-  // (loomcycle #1212, internal/api/http/runs_stream.go). The TYPED client does
-  // not: #1212 touched no adapters/ts file, and the 1.77.0 bump came from #1207
-  // which predates it. So the query param is reachable only by raw fetch today.
-  //
-  // This test asserts the gap rather than the feature, so it turns red the day
-  // a bump closes it — at which point the canvas should switch to the typed
-  // call and this block should be deleted, not updated.
-  it("streamUserRunStates still cannot filter by walk_id", () => {
-    // The options type is erased at runtime, so the check reads the shipped
-    // URL builder itself: it sets `status` and `agent`, and nothing else.
-    const src = LoomcycleClient.prototype.streamUserRunStates.toString();
-    expect(src, "sanity: this is the URL builder we think it is").toContain('"agent"');
-    expect(
-      src.includes("walk_id"),
-      "walk_id is now supported — switch the canvas to the typed option and DELETE this test",
-    ).toBe(false);
-  });
-});
+// The "known gap — watching ONE walk's agents" block that used to live here is
+// gone, exactly as it asked to be: it asserted that the TYPED client could not
+// filter streamUserRunStates by walk_id, so that it would turn red the day a
+// bump closed the gap. @loomcycle/client 1.78.0 added the `walkId` option and
+// the 1.82.0 bump brought it in, so the gap is closed and the assertion was
+// deleted rather than updated, per its own instruction.
+//
+// Nothing in the canvas filtered by walk yet — there was no raw-fetch
+// workaround to migrate — so adopting `streamUserRunStates(userId, { walkId })`
+// is now available, unblocked, and still to do.
