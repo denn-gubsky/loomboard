@@ -1,0 +1,140 @@
+import type { ContinueOptions, RunOptions } from "@loomcycle/client";
+import type { ConversationOverrides } from "../types";
+
+// The RFC DC override half of a run's options.
+//
+// DERIVED from the exported RunOptions rather than imported: loomcycle declares
+// `RunOverrideOptions` in its types but does not re-export it from the package
+// entry, so it is unreachable by name from a consumer (checked at 1.82.0). Since
+// RunOptions extends it, picking the twelve names off RunOptions gets the same
+// types — and does it better, because the Pick stops compiling the day upstream
+// renames one, which a hand-written copy of the interface would not.
+type RunOverrideOptions = Pick<
+  RunOptions,
+  | "model"
+  | "provider"
+  | "tier"
+  | "effort"
+  | "maxTokens"
+  | "maxIterations"
+  | "unboundedIterations"
+  | "maxConcurrentChildren"
+  | "retryAttempts"
+  | "memoryInjectMaxTokens"
+  | "memoryIndexMaxBytes"
+  | "injectToolGuide"
+>;
+export type { RunOverrideOptions };
+
+// Maps a conversation's sparse snake_case overlay onto the client's camelCase
+// per-run options (RFC DC). Pure → unit-tested.
+//
+// TWO LIFETIMES, and the split is the point. The RETUNABLE keys are the ones
+// loomcycle will accept against a run that is ALREADY going; the START-ONLY ones
+// are fixed when a run begins and are simply not in the retune vocabulary, so
+// sending them to that endpoint is a 422. Keeping them in separate tables is
+// what lets the panel say which is which instead of the UI guessing.
+//
+// PRESENCE, NEVER TRUTHINESS. An absent key means "inherit the agent"; a key
+// present with a zero value is a real setting — loomcycle stores several of
+// these as pointers precisely so `retry_attempts: 0` and `inject_tool_guide:
+// false` can be expressed. `""` is the one value that still means inherit: the
+// editor emits it for a cleared text box. This mirrors the gate in loomcycle's
+// own applyOverridesToWire, which tests `!== undefined` for the same reason.
+//
+// VALUE-SHAPE-AGNOSTIC ON PURPOSE. Values are copied through untouched rather
+// than coerced per type. `interruption` — already accepted by the runtime, not
+// yet in the typed client — is an OBJECT, and loomcycle had to hand-write its
+// own isZero over exactly that. A mapper that assumes scalars would need
+// rewriting for it; this one only needs another row in the table.
+
+/** snake_case overlay key → the client's camelCase option name.
+ *
+ *  Typed as plain strings, not `keyof RunOverrideOptions`: that type widens to
+ *  `string | number | symbol` because the client's options carry an index
+ *  signature, which defeats the check it looks like it is making. The names are
+ *  guarded by the parity test instead. */
+const RETUNABLE: Readonly<Record<string, string>> = {
+  model: "model",
+  provider: "provider",
+  tier: "tier",
+  effort: "effort",
+  max_tokens: "maxTokens",
+  max_iterations: "maxIterations",
+  unbounded_iterations: "unboundedIterations",
+  max_concurrent_children: "maxConcurrentChildren",
+  retry_attempts: "retryAttempts",
+  memory_inject_max_tokens: "memoryInjectMaxTokens",
+  memory_index_max_bytes: "memoryIndexMaxBytes",
+  inject_tool_guide: "injectToolGuide",
+};
+
+type StartOnlyKey = "sampling" | "compaction" | "maxContextTokens" | "runTimeoutSeconds";
+
+/** Fixed at run start. Present on both RunOptions and ContinueOptions, absent
+ *  from the retune vocabulary. */
+const START_ONLY: Readonly<Record<string, StartOnlyKey>> = {
+  sampling: "sampling",
+  compaction: "compaction",
+  max_context_tokens: "maxContextTokens",
+  run_timeout_seconds: "runTimeoutSeconds",
+};
+
+export const RETUNABLE_KEYS: readonly string[] = Object.keys(RETUNABLE);
+export const START_ONLY_KEYS: readonly string[] = Object.keys(START_ONLY);
+
+/** Whether a key carries a real setting. Absent, undefined and "" all mean
+ *  inherit; 0 and false do not. */
+function isSet(v: unknown): boolean {
+  return v !== undefined && v !== "";
+}
+
+function project(
+  ov: ConversationOverrides,
+  table: Readonly<Record<string, string>>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [snake, camel] of Object.entries(table)) {
+    if (snake in ov && isSet(ov[snake])) out[camel] = ov[snake];
+  }
+  return out;
+}
+
+/** The overlay's retunable half, as client options. */
+export function toRunOverrides(ov: ConversationOverrides): RunOverrideOptions {
+  return project(ov, RETUNABLE) as RunOverrideOptions;
+}
+
+/** The overlay's start-only half. Valid on runStreaming and continueSession;
+ *  never on a retune. */
+export function toStartOnlyOptions(
+  ov: ConversationOverrides,
+): Pick<RunOptions & ContinueOptions, StartOnlyKey> {
+  return project(ov, START_ONLY) as Pick<RunOptions & ContinueOptions, StartOnlyKey>;
+}
+
+/** Whether the overlay sets anything the runtime would act on. */
+export function hasOverrides(ov: ConversationOverrides): boolean {
+  return Object.keys(toRunOverrides(ov)).length > 0 ||
+    Object.keys(toStartOnlyOptions(ov)).length > 0;
+}
+
+/** What moved between two overlays, for a retune.
+ *
+ *  `cleared` is reported SEPARATELY because the wire has no clear verb: a retune
+ *  MERGES, writing only the keys it names, so a key the user cleared cannot be
+ *  un-set on a live run at all. A caller seeing a non-empty `cleared` has to
+ *  start a fresh run rather than pretend the clear took. */
+export function retunePayload(
+  prev: ConversationOverrides,
+  next: ConversationOverrides,
+): { set: RunOverrideOptions; cleared: string[] } {
+  const a = toRunOverrides(prev) as Record<string, unknown>;
+  const b = toRunOverrides(next) as Record<string, unknown>;
+  const set: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(b)) {
+    if (!(k in a) || a[k] !== v) set[k] = v;
+  }
+  const cleared = Object.keys(a).filter((k) => !(k in b));
+  return { set: set as RunOverrideOptions, cleared };
+}
