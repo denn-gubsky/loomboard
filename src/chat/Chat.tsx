@@ -81,7 +81,7 @@ export default function Chat({
   const baseDef = agents.find(
     (a) => a.name === conversation.baseAgent,
   )?.static_definition;
-  const chat = useChat(client, conversation, baseDef, onConversationChange);
+  const chat = useChat(client, conversation, onConversationChange);
 
   // Esc stops the current operation, like Claude Code — a live turn or a run
   // parked on a question — via RFC BH turn-cancel: the chat stays alive to
