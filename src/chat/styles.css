@@ -3,7 +3,15 @@
    lives on the root as CSS variables; light mode activates when the root (via
    the `theme` prop) OR any ancestor carries data-theme="light", so an app that
    themes <html> gets themed chat for free. Override any --var on `.loomchat`
-   to restyle. */
+   to restyle.
+
+   @loomcycle/def-fields' stylesheet is imported here rather than left to the
+   consumer: the overrides panel is unreadable without it, so making it a second
+   thing to remember would just produce bug reports. Same stance as
+   @loomboard/workflow takes with @xyflow/react. Bundlers resolve the bare
+   specifier from the consumer's tree, and `build:lib` copies this file verbatim
+   so the import survives into the published package. */
+@import "@loomcycle/def-fields/styles.css";
 
 .loomchat {
   /* dark palette (default) */
@@ -409,53 +417,29 @@
   font-size: 0.82rem;
 }
 
-/* ---- config panel ---- */
+/* ---- overrides panel ----
+   The fields themselves are @loomcycle/def-fields' (all scoped under
+   .loomcycle-def-fields, imported at the top of this file), so this only frames
+   them: the old grid and per-control rules went with AgentConfigPanel. */
 .loomchat .config-panel {
   border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
   padding: 0.9rem 1rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.7rem 1rem;
+  max-height: 46vh;
+  overflow-y: auto;
 }
-.loomchat .config-hint {
-  grid-column: 1 / -1;
-  margin: 0;
+.loomchat .config-legacy-note {
+  margin: 0 0 0.7rem;
+  padding: 0.5em 0.7em;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
   color: var(--text-dim);
   font-size: 0.8rem;
+  line-height: 1.45;
 }
-.loomchat .config-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3em;
-}
-.loomchat .config-field > span {
-  font-size: 0.78rem;
-  color: var(--text-dim);
-}
-.loomchat .config-field select,
-.loomchat .config-field input {
-  background: var(--bg-input);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 0.45em 0.6em;
-  font: inherit;
-}
-.loomchat .config-field select:focus,
-.loomchat .config-field input:focus {
-  outline: none;
-  border-color: var(--accent-dim);
-}
-.loomchat .config-actions {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5em;
-}
-.loomchat .config-actions button:disabled {
-  opacity: 0.5;
-  cursor: default;
+.loomchat .config-legacy-note code {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.95em;
 }
 
 /* ---- messages ---- */

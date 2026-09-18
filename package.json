@@ -1,6 +1,6 @@
 {
   "name": "@loomboard/chat",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "module",
   "workspaces": [
     "packages/*"
@@ -59,11 +59,12 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "@loomcycle/client": "^1.51.0",
+    "@loomcycle/client": "^1.83.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
+    "@loomcycle/def-fields": "0.1.0",
     "@loomcycle/explorer": "0.7.0",
     "@loomcycle/loomboard": "0.1.0",
     "@loomcycle/memory-view": "0.1.0",
@@ -82,7 +83,7 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.33",
-    "@loomcycle/client": "^1.77.0",
+    "@loomcycle/client": "^1.83.0",
     "@loomcycle/library": "0.2.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/cli": "^2.11.4",

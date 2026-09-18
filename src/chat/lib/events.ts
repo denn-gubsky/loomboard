@@ -42,6 +42,32 @@ export interface LimitInfo {
   message?: string;
 }
 
+/** Payload on an `override` event (loomcycle RFC DC per-run overrides) — a run's
+ *  own configuration changed mid-run because an operator retuned it.
+ *
+ *  It names what MOVED rather than what the settings now are, which is the
+ *  useful half: "the configuration changed" answers nothing for someone trying
+ *  to work out why the answers got different after turn 12. Declared here rather
+ *  than imported because the SDK does not re-export it from the package entry
+ *  (checked at 1.82.0), and declared with every field optional so it is
+ *  assignable FROM the SDK's stricter shape. ChatEvent does NOT redeclare the
+ *  `override` field: AgentEvent already carries it, and a second declaration
+ *  intersects rather than replaces — which is what made `source` required. */
+export interface OverrideInfo {
+  /** Who changed it. "operator" today; present so a later automatic retune is
+   *  distinguishable rather than indistinguishable. Optional here where the SDK
+   *  makes it required, so this stays assignable FROM the SDK's shape and also
+   *  accepts an older runtime that omits it. */
+  source?: string;
+  /** "provider/model" before the change. Absent when routing did not move. */
+  from_model?: string;
+  /** "provider/model" after the change. */
+  to_model?: string;
+  /** The override keys the request actually set, so a budget or tuning change
+   *  that moved no model is still legible. */
+  fields?: string[];
+}
+
 export type ChatEvent = Omit<AgentEvent, "type"> & {
   type: string;
   /** Payload on `interruption_pending`. */
@@ -74,6 +100,60 @@ export function describeLimit(info: LimitInfo): string {
     return `${scope} ${sev} token budget reached: ${info.used} of ${info.limit} tokens this month`;
   }
   return `${scope} ${sev} token budget reached`;
+}
+
+/** Note for a mid-run retune.
+ *
+ *  TWO EVENTS carry this payload and one retune can produce both, so a reader
+ *  has to tell them apart or the transcript gets the same change twice. The
+ *  server emits one when the OPERATOR ACTS — it names the keys the request set
+ *  and carries no from/to pair, because nothing has been re-resolved yet. The
+ *  runtime emits one when the run ADOPTS a routing change, and that one always
+ *  carries both halves of the pair. So a pair present means "the run is now
+ *  using this"; a pair absent means "an operator asked for these fields".
+ *
+ *  We keep the ADOPTED one whenever it exists — it is the outcome, and it is
+ *  what explains a change in the answers — and fall back to the request one,
+ *  which is the only event a tuning-only retune produces at all.
+ *
+ *  Field names are shown raw (`max_tokens`, not "Output cap") — they match what
+ *  the server logs and what the panel's own key chips show, and pulling the
+ *  registry's labels in here would drag @loomcycle/def-fields into the core
+ *  render path for a cosmetic gain. The source is named only when it is NOT the
+ *  operator, because operator is the unremarkable case. */
+/** Routing keys — the ones whose outcome the runtime reports separately once the
+ *  run adopts them. */
+const ROUTING_KEYS = new Set(["model", "provider", "tier", "effort"]);
+
+/** Whether this frame is worth a transcript note.
+ *
+ *  The REQUEST frame arrives first and names the keys the operator set; the
+ *  ADOPTED frame follows only if routing actually moved, and reports the pair.
+ *  Posting both for a routing retune says the same change twice, in increasing
+ *  order of usefulness — so a request frame that names ONLY routing keys is
+ *  left to its outcome. A request that touched a budget or a tuning knob is
+ *  posted, because nothing else will report it: the runtime's frame speaks for
+ *  routing alone.
+ *
+ *  A routing request whose model resolves to what was already serving produces
+ *  no adopted frame and so no note — which is correct: nothing changed. */
+export function shouldPostOverride(info: OverrideInfo): boolean {
+  if (info.from_model) return true; // adopted: the outcome, always worth saying
+  if (!info.fields?.length) return true; // says nothing; better than silence
+  return info.fields.some((f) => !ROUTING_KEYS.has(f));
+}
+
+export function describeOverride(info: OverrideInfo): string {
+  const head =
+    info.from_model && info.to_model
+      ? `Model changed: ${info.from_model} → ${info.to_model}`
+      : info.to_model
+        ? `Model set to ${info.to_model}`
+        : info.fields?.length
+          ? `Run settings changed: ${info.fields.join(", ")}`
+          : "Run settings changed";
+  const by = info.source && info.source !== "operator" ? ` (by ${info.source})` : "";
+  return `${head}${by}`;
 }
 
 // Extract only the role:"user" text from a persisted user_input row. loomcycle

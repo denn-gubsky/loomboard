@@ -8,6 +8,8 @@ import {
 import {
   describeFallback,
   describeLimit,
+  describeOverride,
+  shouldPostOverride,
   transcriptToEvents,
   type ChatEvent,
   type InterruptionInfo,
@@ -113,6 +115,28 @@ function updateOpenAssistant(
   }
   const fresh: AssistantMessage = { role: "assistant", parts: [], status: "streaming" };
   return [...messages, update(fresh)];
+}
+
+/** Post a notice into the transcript, whether or not a turn is streaming.
+ *
+ *  Neither existing pattern is right for an event that can arrive at either
+ *  moment. `updateOpenAssistant` alone (what `limit` and `provider_fallback` do)
+ *  FABRICATES a streaming bubble when nothing is open, and nothing ever closes
+ *  it. An unconditional `closeOpen` + append (what `compacted` does) is wrong the
+ *  other way: it would end a turn that is still generating. So: join the open
+ *  turn when there is one, and stand alone when there is not. */
+function postNotice(
+  messages: ChatMessage[],
+  level: "warn" | "info" | "error",
+  text: string,
+): ChatMessage[] {
+  if (openAssistant(messages)) {
+    return updateOpenAssistant(messages, (m) => addNotice(m, level, text));
+  }
+  return [
+    ...messages,
+    { role: "assistant", status: "done", parts: [{ type: "notice", level, text }] },
+  ];
 }
 
 /** Mark the open assistant message done (no-op if none open). */
@@ -348,6 +372,22 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
           addNotice(m, ev.limit!.severity === "hard" ? "error" : "warn", describeLimit(ev.limit!)),
         ),
       };
+
+    case "override": {
+      // RFC DC: an operator retuned this run mid-flight. Post it where it
+      // happened — a settings change is exactly the context someone needs when
+      // the answers change character partway down a transcript.
+      //
+      // A ROUTING retune produces TWO frames — the operator's request, then the
+      // routing the run adopted — so shouldPostOverride decides which of them
+      // earns a line. See its comment for why a routing-only request is left to
+      // its outcome while a budget change is not.
+      if (!ev.override || !shouldPostOverride(ev.override)) return state;
+      return {
+        ...state,
+        messages: postNotice(state.messages, "info", describeOverride(ev.override)),
+      };
+    }
 
     case "interruption_pending":
       return { ...state, pendingInterrupt: ev.interruption ?? null };

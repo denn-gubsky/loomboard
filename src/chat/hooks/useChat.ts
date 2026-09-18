@@ -2,7 +2,6 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type {
   AgentEvent,
   CompactRunResult,
-  LibraryAgentDefinition,
   LoomcycleClient,
 } from "@loomcycle/client";
 import { type ChatConversation as Conversation } from "../types";
@@ -14,8 +13,9 @@ import {
 import { lastSeqForRun, transcriptToEvents, type ChatEvent } from "../lib/events";
 import { tokensPerSecond } from "../lib/metrics";
 import { buildUserSegments } from "../lib/segments";
-import { resolveConversationAgent } from "../lib/agentFork";
 import type { SentAttachment, StagedAttachment } from "../lib/attachments";
+import { retunePayload, toRunOverrides, toStartOnlyOptions } from "../lib/overrides";
+import type { ConversationOverrides } from "../types";
 import { describeError, isAbortError } from "../lib/errors";
 
 export interface UseChat {
@@ -45,7 +45,6 @@ function titleFrom(text: string): string {
 export function useChat(
   client: LoomcycleClient,
   conversation: Conversation | null,
-  baseDef: LibraryAgentDefinition | undefined,
   onChange: (patch: Partial<Conversation>) => void,
 ): UseChat {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
@@ -56,6 +55,11 @@ export function useChat(
   const genRef = useRef(0); // active-stream generation
   const runIdRef = useRef("");
   const liveRef = useRef(false);
+  // The overlay the CURRENT run was last started or continued with, so a later
+  // edit can be recognised as movement. Null means "unknown": on re-attach we
+  // did not send this run's overrides and no endpoint reads them back, so the
+  // honest move is to re-assert rather than assume they match.
+  const appliedConfigRef = useRef<ConversationOverrides | null>(null);
 
   const turnStartRef = useRef(0);
   const outputTokensRef = useRef(0);
@@ -185,11 +189,23 @@ export function useChat(
       beginTurnTiming();
 
       try {
+        // Has the user changed the run's settings since it was started? The
+        // steer path cannot carry a retune on this client, so a moved overlay
+        // has to take the segments path — see below.
+        const { set, cleared } = retunePayload(appliedConfigRef.current ?? {}, convo.config);
+        const configMoved = Object.keys(set).length > 0 || cleared.length > 0;
+
         // Fast path: steer the live run with plain text (no attachments) so the
         // whole conversation stays under ONE run_id. If the steer fails (the run
         // was reaped / went terminal since we attached), fall through to
         // continueSession, which resumes the session with a fresh run.
-        if (ready.length === 0 && liveRef.current && runIdRef.current) {
+        //
+        // Skipped when the overlay moved. Continuing the session costs one new
+        // run_id under the same session — exactly what a FAILED steer already
+        // does — and it is the only way this client can get the new settings to
+        // the runtime. Silently steering instead would apply the old ones, which
+        // is the defect the fork had: an edit that goes nowhere and says nothing.
+        if (!configMoved && ready.length === 0 && liveRef.current && runIdRef.current) {
           try {
             await client.sendRunInput(runIdRef.current, trimmed);
             return;
@@ -199,8 +215,9 @@ export function useChat(
             console.warn("[chat] steer failed; resuming via continueSession", e);
           }
         }
-        // Segments path: attachments, or a fresh/resumed turn (no live run to
-        // steer). continueSession replays the session server-side into a new run.
+        // Segments path: attachments, a changed overlay, or a fresh/resumed turn
+        // (no live run to steer). continueSession replays the session
+        // server-side into a new run.
         const segments = buildUserSegments(trimmed, ready);
         if (segments.length === 0) {
           setRunning(false);
@@ -210,6 +227,12 @@ export function useChat(
         abortRef.current?.abort();
         const ac = new AbortController();
         abortRef.current = ac;
+        // RFC DC per-run overrides, sent with EVERY new run: they live with the
+        // run, so a session continued into a fresh run has to re-assert them.
+        const overrides = {
+          ...toRunOverrides(convo.config),
+          ...toStartOnlyOptions(convo.config),
+        };
         let stream: AsyncIterable<AgentEvent>;
         if (convo.sessionId) {
           stream = client.continueSession({
@@ -217,16 +240,18 @@ export function useChat(
             segments,
             interactive: true,
             signal: ac.signal,
+            ...overrides,
           });
         } else {
-          const agentName = await resolveConversationAgent(client, convo, baseDef, onChange);
           stream = client.runStreaming({
-            agent: agentName,
+            agent: convo.baseAgent,
             segments,
             interactive: true,
             signal: ac.signal,
+            ...overrides,
           });
         }
+        appliedConfigRef.current = { ...convo.config };
         void consume(stream, gen);
       } catch (e) {
         if (!isAbortError(e)) {
@@ -238,7 +263,7 @@ export function useChat(
         }
       }
     },
-    [conversation, baseDef, client, onChange, consume, beginTurnTiming],
+    [conversation, client, onChange, consume, beginTurnTiming],
   );
 
   const cancel = useCallback(async () => {
@@ -315,6 +340,10 @@ export function useChat(
     abortRef.current = null;
     runIdRef.current = "";
     liveRef.current = false;
+    // Unknown, not empty: re-attaching to an existing run means we did not send
+    // its overrides and cannot read them back, so the first send on this
+    // conversation re-asserts the overlay rather than assuming it already holds.
+    appliedConfigRef.current = null;
     outputTokensRef.current = 0;
     outputAtTurnStartRef.current = 0;
     turnStartRef.current = 0;

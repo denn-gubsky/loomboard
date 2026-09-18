@@ -6,7 +6,12 @@
 export { default as Chat } from "./Chat";
 export type { ChatProps } from "./Chat";
 
-export type { ChatConversation, ConversationConfig } from "./types";
+export type {
+  ChatConversation,
+  ConversationOverrides,
+  /** @deprecated alias of ConversationOverrides */
+  ConversationConfig,
+} from "./types";
 export { configIsCustom, sameConfig } from "./types";
 
 export { createLoomcycleClient } from "./lib/createClient";

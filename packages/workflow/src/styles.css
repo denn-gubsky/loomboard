@@ -11,6 +11,9 @@
  * reports. Bundlers resolve the bare specifier from the consumer's tree.
  */
 @import "@xyflow/react/dist/style.css";
+/* Same reason, same stance: the inspector renders <FoldedFieldList>, whose rules
+   all live under .loomcycle-def-fields — without this it comes out unstyled. */
+@import "@loomcycle/def-fields/styles.css";
 
 .loomboard-workflow {
   --lb-wf-bg: #ffffff;

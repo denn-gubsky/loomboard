@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptResponse } from "@loomcycle/client";
-import { lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
+import { shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
 
 describe("optionsToArray", () => {
   it("passes through a string array", () => {
@@ -95,5 +95,57 @@ describe("transcriptToEvents", () => {
       ],
     } as unknown as TranscriptResponse;
     expect(transcriptToEvents(t)).toEqual([]);
+  });
+});
+
+describe("describeOverride", () => {
+  it("leads with the routing move, which is what a reader is trying to explain", () => {
+    expect(
+      describeOverride({ source: "operator", from_model: "ollama-local/gemma4", to_model: "anthropic/claude-sonnet-5" }),
+    ).toBe("Model changed: ollama-local/gemma4 → anthropic/claude-sonnet-5");
+  });
+
+  it("handles a routing set with no previous model", () => {
+    expect(describeOverride({ to_model: "openai/gpt-5" })).toBe("Model set to openai/gpt-5");
+  });
+
+  it("names the keys when the change moved no model", () => {
+    expect(describeOverride({ fields: ["max_tokens", "effort"] })).toBe(
+      "Run settings changed: max_tokens, effort",
+    );
+  });
+
+  it("still reads sensibly when the runtime sends neither", () => {
+    expect(describeOverride({})).toBe("Run settings changed");
+  });
+
+  // "operator" is the unremarkable case; anything else is worth naming.
+  it("names a non-operator source only", () => {
+    expect(describeOverride({ fields: ["effort"], source: "operator" })).not.toContain("by");
+    expect(describeOverride({ fields: ["effort"], source: "autotuner" })).toContain(
+      "(by autotuner)",
+    );
+  });
+});
+
+describe("shouldPostOverride", () => {
+  it("always posts the adopted frame — it is the outcome", () => {
+    expect(shouldPostOverride({ source: "operator", from_model: "a/1", to_model: "a/2" })).toBe(true);
+  });
+
+  it("leaves a routing-only request to the frame that reports its outcome", () => {
+    expect(shouldPostOverride({ source: "operator", fields: ["model"] })).toBe(false);
+    expect(shouldPostOverride({ source: "operator", fields: ["tier", "effort"] })).toBe(false);
+  });
+
+  it("posts a request touching anything routing does not cover", () => {
+    // Nothing else will report it: the runtime's frame speaks for routing alone.
+    expect(shouldPostOverride({ source: "operator", fields: ["max_tokens"] })).toBe(true);
+    expect(shouldPostOverride({ source: "operator", fields: ["model", "retry_attempts"] })).toBe(true);
+  });
+
+  it("posts a frame that names nothing rather than staying silent", () => {
+    expect(shouldPostOverride({ source: "operator" })).toBe(true);
+    expect(shouldPostOverride({ source: "operator", fields: [] })).toBe(true);
   });
 });

@@ -4,7 +4,7 @@ import type { InterruptRow } from "@loomcycle/client";
 import { useConversations } from "../state/conversations";
 import { useActiveChat } from "../state/activeChat";
 import { useConnection, useLoomcycle } from "../state/connection";
-import { deleteConversationAgent } from "../chat/lib/agentFork";
+import { deleteConversationAgent } from "../chat/lib/legacyFork";
 import { useUserRunStates } from "../hooks/useUserRunStates";
 import { useUserInterrupts } from "../hooks/useUserInterrupts";
 import { useChatHistory } from "../hooks/useChatHistory";
