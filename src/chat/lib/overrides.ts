@@ -80,13 +80,23 @@ const RETUNABLE: Readonly<Record<string, string>> = {
   interruption: "interruption",
 };
 
-type StartOnlyKey = "sampling" | "compaction" | "maxContextTokens" | "runTimeoutSeconds";
+type StartOnlyKey =
+  | "sampling"
+  | "compaction"
+  | "context"
+  | "maxContextTokens"
+  | "runTimeoutSeconds";
 
 /** Fixed at run start. Present on both RunOptions and ContinueOptions, absent
  *  from the retune vocabulary. */
 const START_ONLY: Readonly<Record<string, StartOnlyKey>> = {
   sampling: "sampling",
   compaction: "compaction",
+  // How history is distilled: append / recap / stateful / auto, plus the
+  // thresholds. Start-only because `mode` is resolved once when the run begins
+  // and the loop latches it — a mid-run change could not take effect, so the
+  // runtime does not accept one rather than accepting it and doing nothing.
+  context: "context",
   max_context_tokens: "maxContextTokens",
   run_timeout_seconds: "runTimeoutSeconds",
 };
@@ -100,13 +110,39 @@ function isSet(v: unknown): boolean {
   return v !== undefined && v !== "";
 }
 
+/** The overlay stores nested keys the way the YAML does — `top_p`,
+ *  `keep_last_n` — because agentDefRegistry mirrors the definition shape. Most
+ *  of the client's option objects are the camelCase twin of that, and their
+ *  serialisers read ONLY camelCase: samplingToWire looks for `topP` and ignores
+ *  `top_p` entirely. A key whose name happens to coincide (`temperature`,
+ *  `enabled`, `mode`) survives; every other one is dropped without a word.
+ *
+ *  That is the same failure this whole area is about — a setting that looks
+ *  applied and is not — so the conversion is done here rather than trusted to
+ *  coincidence. */
+function snakeToCamelKeys(v: unknown): unknown {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+  const out: Record<string, unknown> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    out[k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())] = val;
+  }
+  return out;
+}
+
+/** Nested overrides whose client type is snake_case already, so converting them
+ *  would break what works. `interruption` declares `max_pending` verbatim
+ *  (checked at 1.84.0) because it is passed to the wire untouched rather than
+ *  through a *ToWire serialiser. */
+const WIRE_SHAPED = new Set(["interruption", "state_schema"]);
+
 function project(
   ov: ConversationOverrides,
   table: Readonly<Record<string, string>>,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [snake, camel] of Object.entries(table)) {
-    if (snake in ov && isSet(ov[snake])) out[camel] = ov[snake];
+    if (!(snake in ov) || !isSet(ov[snake])) continue;
+    out[camel] = WIRE_SHAPED.has(snake) ? ov[snake] : snakeToCamelKeys(ov[snake]);
   }
   return out;
 }

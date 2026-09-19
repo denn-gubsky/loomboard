@@ -269,6 +269,14 @@
 .loomchat .gauge-pct {
   min-width: 2.4em;
 }
+/* The whole-conversation figure, shown beside the gauge only once it has
+   outgrown a single prompt. Quieter than the percentage: the percentage is the
+   number you act on, this one is the context for it. */
+.loomchat .gauge-convo {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
 .loomchat .compact {
   display: inline-flex;
   align-items: center;

@@ -7,6 +7,8 @@ import {
 } from "./metrics";
 import {
   describeFallback,
+  describeDistill,
+  describeDistillDeclined,
   describeLimit,
   describeOverride,
   shouldPostOverride,
@@ -373,6 +375,47 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
         ),
       };
 
+    case "context_compaction":
+    case "context_recap": {
+      // The runtime distilled the working context. Until now these fell through
+      // `default:` and the user saw nothing at all — no note, no metric move —
+      // so "it never compacted" and "it compacted and barely helped" looked
+      // identical from the chat, which is how a conversation reached the top of
+      // its window with nobody able to say whether anything had tried.
+      const d = ev.type === "context_recap" ? ev.context_recap : ev.context_compaction;
+      if (!d) return state;
+      const kind = ev.type === "context_recap" ? "recap" : "compaction";
+      return {
+        ...state,
+        // The gauge would otherwise stay stale until the next turn's usage
+        // event, showing a full window that is no longer full.
+        metrics:
+          typeof d.after_tokens === "number"
+            ? { ...state.metrics, contextTokens: d.after_tokens }
+            : state.metrics,
+        messages: postNotice(state.messages, "info", describeDistill(kind, d)),
+      };
+    }
+
+    case "context_distill_declined": {
+      // The runtime crossed its threshold and then did nothing. Without this
+      // the transcript could not distinguish "it never tried" from "it tried
+      // and could not" — which is how a conversation reached the top of its
+      // window with the reason sitting unreported on the server the whole time.
+      //
+      // Warn, not info: a distillation that declines at 99% is a run about to
+      // fail, and it is the one notice here the reader has to act on.
+      if (!ev.context_distill) return state;
+      return {
+        ...state,
+        messages: postNotice(
+          state.messages,
+          "warn",
+          describeDistillDeclined(ev.context_distill),
+        ),
+      };
+    }
+
     case "override": {
       // RFC DC: an operator retuned this run mid-flight. Post it where it
       // happened — a settings change is exactly the context someone needs when
@@ -416,8 +459,8 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
     case "error":
       return { ...state, messages: finalizeError(state.messages, ev.error ?? "error") };
 
-    // started, retry, host_widened, context_compaction, channel_*, spawn_*,
-    // _meta — not rendered as messages.
+    // started, retry, host_widened, channel_*, spawn_*, _meta — not rendered
+    // as messages.
     default:
       return state;
   }

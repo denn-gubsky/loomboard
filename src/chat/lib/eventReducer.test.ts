@@ -115,7 +115,7 @@ describe("chatReducer — usage metrics", () => {
     ]);
     expect(s.metrics.inputTokens).toBe(350);
     expect(s.metrics.outputTokens).toBe(60);
-    expect(s.metrics.contextTokens).toBe(290);
+    expect(s.metrics.contextTokens).toBe(250); // the prompt, not prompt + answer
     expect(s.metrics.maxContextTokens).toBe(200000);
   });
 });
@@ -127,7 +127,7 @@ describe("chatReducer — compaction", () => {
         usage: { input_tokens: 78000, output_tokens: 500, max_context_tokens: 200000 },
       }),
     ]);
-    expect(s.metrics.contextTokens).toBe(78500);
+    expect(s.metrics.contextTokens).toBe(78000); // prompt only
 
     s = chatReducer(s, { kind: "compacted", before: 78000, after: 515 });
     // The gauge reflects the freed footprint immediately (it used to stay stale
@@ -417,6 +417,97 @@ describe("chatReducer — per-run overrides (RFC DC)", () => {
   it("ignores an override frame with no payload", () => {
     const before = run([ev("text", { text: "hi" })]);
     const after = run([ev("text", { text: "hi" }), ev("override", {})]);
+    expect(after.messages).toEqual(before.messages);
+  });
+});
+
+describe("chatReducer — context distillation", () => {
+  // These fell through `default:` and produced nothing at all, so "it never
+  // compacted" and "it compacted and barely helped" were indistinguishable from
+  // the chat — which is how a conversation reached the top of its window with
+  // nobody able to say whether anything had tried.
+  it("posts a note when the runtime compacts", () => {
+    const s = run([
+      ev("context_compaction", {
+        context_compaction: { before_tokens: 18299, after_tokens: 11676, trigger: "auto" },
+      }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toBe(
+      "Context compacted (automatic): 18k → 12k tokens",
+    );
+  });
+
+  it("posts a note when the runtime recaps", () => {
+    const s = run([
+      ev("context_recap", { context_recap: { before_tokens: 30000, after_tokens: 9000 } }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toContain("Context recapped");
+  });
+
+  // The gauge would otherwise keep showing a full window until the next turn's
+  // usage event — the exact staleness the manual-compact path already avoids.
+  it("moves the gauge to the freed footprint immediately", () => {
+    const s = run([
+      ev("usage", { usage: { input_tokens: 30000, output_tokens: 0, max_context_tokens: 32768 } }),
+      ev("context_recap", { context_recap: { before_tokens: 30000, after_tokens: 9000 } }),
+    ]);
+    expect(s.metrics.contextTokens).toBe(9000);
+    expect(s.metrics.maxContextTokens).toBe(32768);
+  });
+
+  it("leaves the gauge alone when the runtime reports no counts", () => {
+    const s = run([
+      ev("usage", { usage: { input_tokens: 30000, output_tokens: 0, max_context_tokens: 32768 } }),
+      ev("context_compaction", { context_compaction: { summary: "x" } }),
+    ]);
+    expect(s.metrics.contextTokens).toBe(30000);
+  });
+
+  it("ignores a distillation frame with no payload", () => {
+    const before = run([ev("text", { text: "hi" })]);
+    const after = run([ev("text", { text: "hi" }), ev("context_compaction", {})]);
+    expect(after.messages).toEqual(before.messages);
+  });
+});
+
+describe("chatReducer — distillation declined", () => {
+  // THE EVENT WHOSE ABSENCE HID THE ORIGINAL PROBLEM. A conversation climbed to
+  // the top of its window while recap fired and declined every turn, leaving no
+  // marker and no error — so "it never tried" and "it tried and could not"
+  // looked identical from the chat.
+  it("posts the reason the runtime gave", () => {
+    const s = run([
+      ev("context_distill_declined", {
+        context_distill: {
+          mode: "recap",
+          reason: "split_declined",
+          used_tokens: 23666,
+          window_tokens: 32768,
+          message: "keep_last_n 6 pins all 7 messages — lower it",
+        },
+      }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toBe(
+      "Context recap declined at 72% of the window: keep_last_n 6 pins all 7 messages — lower it",
+    );
+  });
+
+  // The one notice here the reader has to act on: declining at 99% is a run
+  // about to fail, not housekeeping.
+  it("warns rather than informs", () => {
+    const s = run([
+      ev("context_distill_declined", { context_distill: { mode: "recap", reason: "empty_summary" } }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.level).toBe("warn");
+  });
+
+  it("ignores a frame with no payload", () => {
+    const before = run([ev("text", { text: "hi" })]);
+    const after = run([ev("text", { text: "hi" }), ev("context_distill_declined", {})]);
     expect(after.messages).toEqual(before.messages);
   });
 });

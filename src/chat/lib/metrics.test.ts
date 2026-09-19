@@ -3,6 +3,7 @@ import type { Usage } from "@loomcycle/client";
 import {
   accumulateUsage,
   contextPercent,
+  estimateConversationTokens,
   emptyMetrics,
   formatCount,
   formatDuration,
@@ -25,12 +26,36 @@ describe("accumulateUsage", () => {
     expect(m.cacheReadTokens).toBe(130);
   });
 
-  it("tracks the latest call's footprint as context used", () => {
+  it("tracks the latest call's prompt as context used", () => {
     let m = emptyMetrics;
     m = accumulateUsage(m, usage({ input_tokens: 100, output_tokens: 20 }));
     m = accumulateUsage(m, usage({ input_tokens: 500, output_tokens: 60 }));
-    // contextTokens reflects only the most recent call, not the sum.
-    expect(m.contextTokens).toBe(560);
+    // Only the most recent call, not the sum — the prompt already carries the
+    // prior turns.
+    expect(m.contextTokens).toBe(500);
+  });
+
+  // THE AUTHORITY IS THE RUNTIME. loomcycle computes the footprint that drives
+  // its distillation trigger as input + cache_read + cache_creation, with NO
+  // output. Adding output here made the gauge read 98% where the runtime — the
+  // party that actually decides whether to compact — saw 92%, which is how a
+  // conversation climbed to the top of its window looking like it was already
+  // there.
+  it("counts the prompt the model read, not the answer it wrote", () => {
+    const m = accumulateUsage(
+      emptyMetrics,
+      usage({ input_tokens: 30100, output_tokens: 2141, max_context_tokens: 32768 }),
+    );
+    expect(m.contextTokens).toBe(30100);
+    expect(Math.round(contextPercent(m)!)).toBe(92);
+  });
+
+  it("counts cached prompt tokens, which the model still read", () => {
+    const m = accumulateUsage(
+      emptyMetrics,
+      usage({ input_tokens: 1000, cache_read_input_tokens: 4000, output_tokens: 500 }),
+    );
+    expect(m.contextTokens).toBe(5000);
   });
 
   it("keeps the last reported context window and survives omissions", () => {
@@ -84,3 +109,53 @@ describe("formatDuration", () => {
   });
 });
 
+
+describe("estimateConversationTokens", () => {
+  const user = (text: string) => ({ role: "user" as const, text });
+  const asst = (...parts: Parameters<typeof Array>[number][]) =>
+    ({ role: "assistant" as const, status: "done" as const, parts: parts as never });
+
+  it("is zero for an empty conversation", () => {
+    expect(estimateConversationTokens([])).toBe(0);
+  });
+
+  it("counts what was actually said, at four characters per token", () => {
+    const m = [user("x".repeat(400)), asst({ type: "text", text: "y".repeat(800) })];
+    expect(estimateConversationTokens(m)).toBe(300);
+  });
+
+  // Reasoning is sent back to the model on later turns, so it is part of what
+  // the conversation weighs even though the user may never expand it.
+  it("counts reasoning, which is conversation too", () => {
+    const m = [asst({ type: "thinking", text: "t".repeat(400) })];
+    expect(estimateConversationTokens(m)).toBe(100);
+  });
+
+  it("counts a tool call and its result", () => {
+    const m = [
+      asst({
+        type: "tool",
+        call: { id: "1", name: "Read", input: { path: "/a" }, result: "r".repeat(400) },
+      }),
+    ];
+    // name + JSON input + result, all over four.
+    expect(estimateConversationTokens(m)).toBeGreaterThan(100);
+  });
+
+  // Our own UI text was never sent to anyone; counting it would inflate the one
+  // number whose whole job is to be comparable with the window.
+  it("excludes notices, which are ours and not the conversation's", () => {
+    const m = [asst({ type: "notice", level: "info", text: "n".repeat(4000) })];
+    expect(estimateConversationTokens(m)).toBe(0);
+  });
+
+  // The point of the number: it keeps growing after the prompt stops, because
+  // the runtime distils the middle away before sending. Measured live it can
+  // also read SMALLER than the prompt — a prompt carries the system prompt, the
+  // tool definitions and injected memory that no transcript shows — which is
+  // why the caller only surfaces it once it has clearly outgrown the prompt.
+  it("grows past what any single prompt would hold", () => {
+    const many = Array.from({ length: 50 }, () => user("q".repeat(4000)));
+    expect(estimateConversationTokens(many)).toBe(50000);
+  });
+});
