@@ -43,10 +43,15 @@ export type { RunOverrideOptions };
 // own applyOverridesToWire, which tests `!== undefined` for the same reason.
 //
 // VALUE-SHAPE-AGNOSTIC ON PURPOSE. Values are copied through untouched rather
-// than coerced per type. `interruption` — already accepted by the runtime, not
-// yet in the typed client — is an OBJECT, and loomcycle had to hand-write its
-// own isZero over exactly that. A mapper that assumes scalars would need
-// rewriting for it; this one only needs another row in the table.
+// than coerced per type, because `interruption` is an OBJECT — loomcycle had to
+// hand-write its own isZero over exactly that. Writing it this way cost nothing
+// and meant adopting the field was one row in the table rather than a rewrite.
+//
+// `interactive` is deliberately NOT here even though 1.83.0 accepts it per-run.
+// It is not an AgentDef field — parking at a turn boundary is a property of a
+// RUN — so no field registry describes it, and a loomboard chat already starts
+// interactive, which would make the control a no-op. It belongs on the surfaces
+// that show somebody else's live run, where promoting one is a real action.
 
 /** snake_case overlay key → the client's camelCase option name.
  *
@@ -67,6 +72,12 @@ const RETUNABLE: Readonly<Record<string, string>> = {
   memory_inject_max_tokens: "memoryInjectMaxTokens",
   memory_index_max_bytes: "memoryIndexMaxBytes",
   inject_tool_guide: "injectToolGuide",
+  // The first OBJECT-valued override ({enabled, kinds, max_pending}), and the
+  // reason this mapper copies values through untouched instead of coercing per
+  // type. It is also what lets a chat ask questions on an agent whose own
+  // definition does not enable them — the one capability the deleted AgentDef
+  // fork had that per-run overrides could not express until 1.83.0.
+  interruption: "interruption",
 };
 
 type StartOnlyKey = "sampling" | "compaction" | "maxContextTokens" | "runTimeoutSeconds";
