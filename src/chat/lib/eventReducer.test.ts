@@ -115,7 +115,7 @@ describe("chatReducer — usage metrics", () => {
     ]);
     expect(s.metrics.inputTokens).toBe(350);
     expect(s.metrics.outputTokens).toBe(60);
-    expect(s.metrics.contextTokens).toBe(290);
+    expect(s.metrics.contextTokens).toBe(250); // the prompt, not prompt + answer
     expect(s.metrics.maxContextTokens).toBe(200000);
   });
 });
@@ -127,7 +127,7 @@ describe("chatReducer — compaction", () => {
         usage: { input_tokens: 78000, output_tokens: 500, max_context_tokens: 200000 },
       }),
     ]);
-    expect(s.metrics.contextTokens).toBe(78500);
+    expect(s.metrics.contextTokens).toBe(78000); // prompt only
 
     s = chatReducer(s, { kind: "compacted", before: 78000, after: 515 });
     // The gauge reflects the freed footprint immediately (it used to stay stale

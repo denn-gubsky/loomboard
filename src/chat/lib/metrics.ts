@@ -25,18 +25,26 @@ export const emptyMetrics: TokenMetrics = {
 };
 
 /** Fold one `usage` event into the running totals. input/output accumulate
- *  across the conversation; contextTokens tracks the LATEST call's footprint
- *  (the prompt already includes prior turns, so the newest input_tokens is the
- *  best proxy for "context used right now"); maxContextTokens keeps the last
- *  reported window. */
+ *  across the conversation; contextTokens tracks the LATEST call's prompt (the
+ *  prompt already includes prior turns, so the newest input is the footprint
+ *  "right now"); maxContextTokens keeps the last reported window.
+ *
+ *  contextTokens counts the PROMPT ONLY — input plus whatever of it was served
+ *  from cache — and deliberately not the output. The runtime computes the same
+ *  quantity the same way, and its number is the one that decides whether to
+ *  distil, so a UI that adds the answer on top reports a fuller window than the
+ *  party acting on it believes. That gap is not cosmetic: it read 98% where the
+ *  runtime saw 92%, which is how a conversation climbed to the top of its
+ *  window while looking like it was already there and nothing could help. */
 export function accumulateUsage(m: TokenMetrics, u: Usage): TokenMetrics {
   const input = u.input_tokens ?? 0;
   const output = u.output_tokens ?? 0;
+  const cacheRead = u.cache_read_input_tokens ?? 0;
   return {
     inputTokens: m.inputTokens + input,
     outputTokens: m.outputTokens + output,
-    cacheReadTokens: m.cacheReadTokens + (u.cache_read_input_tokens ?? 0),
-    contextTokens: input + output,
+    cacheReadTokens: m.cacheReadTokens + cacheRead,
+    contextTokens: input + cacheRead,
     maxContextTokens: u.max_context_tokens ?? m.maxContextTokens,
   };
 }

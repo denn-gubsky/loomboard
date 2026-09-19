@@ -25,12 +25,36 @@ describe("accumulateUsage", () => {
     expect(m.cacheReadTokens).toBe(130);
   });
 
-  it("tracks the latest call's footprint as context used", () => {
+  it("tracks the latest call's prompt as context used", () => {
     let m = emptyMetrics;
     m = accumulateUsage(m, usage({ input_tokens: 100, output_tokens: 20 }));
     m = accumulateUsage(m, usage({ input_tokens: 500, output_tokens: 60 }));
-    // contextTokens reflects only the most recent call, not the sum.
-    expect(m.contextTokens).toBe(560);
+    // Only the most recent call, not the sum — the prompt already carries the
+    // prior turns.
+    expect(m.contextTokens).toBe(500);
+  });
+
+  // THE AUTHORITY IS THE RUNTIME. loomcycle computes the footprint that drives
+  // its distillation trigger as input + cache_read + cache_creation, with NO
+  // output. Adding output here made the gauge read 98% where the runtime — the
+  // party that actually decides whether to compact — saw 92%, which is how a
+  // conversation climbed to the top of its window looking like it was already
+  // there.
+  it("counts the prompt the model read, not the answer it wrote", () => {
+    const m = accumulateUsage(
+      emptyMetrics,
+      usage({ input_tokens: 30100, output_tokens: 2141, max_context_tokens: 32768 }),
+    );
+    expect(m.contextTokens).toBe(30100);
+    expect(Math.round(contextPercent(m)!)).toBe(92);
+  });
+
+  it("counts cached prompt tokens, which the model still read", () => {
+    const m = accumulateUsage(
+      emptyMetrics,
+      usage({ input_tokens: 1000, cache_read_input_tokens: 4000, output_tokens: 500 }),
+    );
+    expect(m.contextTokens).toBe(5000);
   });
 
   it("keeps the last reported context window and survives omissions", () => {
