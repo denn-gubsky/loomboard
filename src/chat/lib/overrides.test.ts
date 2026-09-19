@@ -190,3 +190,46 @@ describe("retunePayload", () => {
     });
   });
 });
+
+describe("nested objects reach the wire whole", () => {
+  // THE BUG THIS EXISTS TO CATCH. The overlay stores nested keys in snake_case
+  // (agentDefRegistry mirrors the YAML shape), but the client's serialisers read
+  // camelCase — samplingToWire looks for `topP`, not `top_p`. A key whose name
+  // happens to coincide survives; every other one is silently dropped. That is
+  // the same failure class as the context-packing bug: a setting that looks
+  // applied and is not.
+  it("converts sampling's nested keys to what the client reads", () => {
+    const out = toStartOnlyOptions({
+      sampling: { temperature: 0.7, top_p: 0.9, frequency_penalty: 0.2 },
+    }) as { sampling?: Record<string, unknown> };
+    expect(out.sampling).toEqual({
+      temperature: 0.7,
+      topP: 0.9,
+      frequencyPenalty: 0.2,
+    });
+  });
+
+  it("converts compaction's nested keys", () => {
+    const out = toStartOnlyOptions({
+      compaction: { enabled: true, keep_last_n: 4, autocompact_at_pct: 70 },
+    }) as { compaction?: Record<string, unknown> };
+    expect(out.compaction).toEqual({
+      enabled: true,
+      keepLastN: 4,
+      autocompactAtPct: 70,
+    });
+  });
+
+  it("leaves a scalar override untouched", () => {
+    expect(toRunOverrides({ max_tokens: 2048 })).toEqual({ maxTokens: 2048 });
+  });
+
+  // interruption is the one nested object whose wire shape the client takes
+  // as-is — RunOverrideOptions declares it with snake_case members — so
+  // converting it would break what already works.
+  it("does NOT convert interruption, whose client type is snake_case", () => {
+    expect(toRunOverrides({ interruption: { enabled: true, max_pending: 2 } })).toEqual({
+      interruption: { enabled: true, max_pending: 2 },
+    });
+  });
+});

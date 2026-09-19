@@ -100,13 +100,39 @@ function isSet(v: unknown): boolean {
   return v !== undefined && v !== "";
 }
 
+/** The overlay stores nested keys the way the YAML does — `top_p`,
+ *  `keep_last_n` — because agentDefRegistry mirrors the definition shape. Most
+ *  of the client's option objects are the camelCase twin of that, and their
+ *  serialisers read ONLY camelCase: samplingToWire looks for `topP` and ignores
+ *  `top_p` entirely. A key whose name happens to coincide (`temperature`,
+ *  `enabled`, `mode`) survives; every other one is dropped without a word.
+ *
+ *  That is the same failure this whole area is about — a setting that looks
+ *  applied and is not — so the conversion is done here rather than trusted to
+ *  coincidence. */
+function snakeToCamelKeys(v: unknown): unknown {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+  const out: Record<string, unknown> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    out[k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())] = val;
+  }
+  return out;
+}
+
+/** Nested overrides whose client type is snake_case already, so converting them
+ *  would break what works. `interruption` declares `max_pending` verbatim
+ *  (checked at 1.84.0) because it is passed to the wire untouched rather than
+ *  through a *ToWire serialiser. */
+const WIRE_SHAPED = new Set(["interruption", "state_schema"]);
+
 function project(
   ov: ConversationOverrides,
   table: Readonly<Record<string, string>>,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [snake, camel] of Object.entries(table)) {
-    if (snake in ov && isSet(ov[snake])) out[camel] = ov[snake];
+    if (!(snake in ov) || !isSet(ov[snake])) continue;
+    out[camel] = WIRE_SHAPED.has(snake) ? ov[snake] : snakeToCamelKeys(ov[snake]);
   }
   return out;
 }
