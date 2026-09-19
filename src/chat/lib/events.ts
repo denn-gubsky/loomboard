@@ -1,4 +1,5 @@
 import type { AgentEvent, TranscriptEvent, TranscriptResponse } from "@loomcycle/client";
+import { formatCount } from "./metrics";
 
 // The SDK's AgentEvent type models only a subset of the event types the server
 // emits — the SSE parser passes through unmodeled types (e.g. "thinking",
@@ -68,6 +69,30 @@ export interface OverrideInfo {
   fields?: string[];
 }
 
+/** Payload on a `context_compaction` or `context_recap` event — the runtime
+ *  DISTILLED the working context: it replaced an evicted span of the
+ *  conversation with a summary so the next prompt fits.
+ *
+ *  The two carry the same shape but for the summary's field name, so one type
+ *  serves both. Declared here rather than imported for the same reason as
+ *  FallbackInfo and LimitInfo: the SDK types only a subset of what the SSE
+ *  parser passes through, and `context_recap` is not in its EventType union at
+ *  all (checked at 1.83.0). */
+export interface DistillInfo {
+  /** The compaction summary. Present on `context_compaction`. */
+  summary?: string;
+  /** The running progress recap. Present on `context_recap`. */
+  recap?: string;
+  before_tokens?: number;
+  after_tokens?: number;
+  /** How many trailing messages were kept verbatim. */
+  keep_n?: number;
+  keep_first?: boolean;
+  /** "auto" when the runtime crossed its own threshold, "self" when the agent
+   *  asked, absent on an operator's manual compaction. */
+  trigger?: string;
+}
+
 export type ChatEvent = Omit<AgentEvent, "type"> & {
   type: string;
   /** Payload on `interruption_pending`. */
@@ -76,6 +101,12 @@ export type ChatEvent = Omit<AgentEvent, "type"> & {
   fallback?: FallbackInfo;
   /** Payload on `limit` (token-budget crossing). */
   limit?: LimitInfo;
+  /** Payload on `context_compaction` — the SDK's EventType names the type but
+   *  AgentEvent carries no field for it. */
+  context_compaction?: DistillInfo;
+  /** Payload on `context_recap` — not in the SDK's EventType union at all, but
+   *  the SSE parser passes unmodelled types through with their payloads. */
+  context_recap?: DistillInfo;
   /** Accumulated reasoning trace, present on `done` for some providers. */
   reasoning?: string;
 };
@@ -154,6 +185,29 @@ export function describeOverride(info: OverrideInfo): string {
           : "Run settings changed";
   const by = info.source && info.source !== "operator" ? ` (by ${info.source})` : "";
   return `${head}${by}`;
+}
+
+/** Note for a distillation the runtime performed.
+ *
+ *  Says what it FREED, because that is the only part a reader can act on: a
+ *  distillation that barely moved the number is the signal that the window is
+ *  about to become a problem, and until now it was invisible either way.
+ *
+ *  `trigger` separates the runtime crossing its own threshold from an operator
+ *  pressing the button — those look identical in a transcript otherwise, and
+ *  "did it ever do this by itself?" is exactly the question that goes
+ *  unanswered. */
+export function describeDistill(kind: "compaction" | "recap", d: DistillInfo): string {
+  const what = kind === "recap" ? "Context recapped" : "Context compacted";
+  const by = d.trigger === "auto" ? " (automatic)" : d.trigger === "self" ? " (agent asked)" : "";
+  const before = d.before_tokens;
+  const after = d.after_tokens;
+  if (typeof before !== "number" || typeof after !== "number") {
+    return `${what}${by}`;
+  }
+  const freed = before - after;
+  const tail = freed > 0 ? "" : " — no smaller";
+  return `${what}${by}: ${formatCount(before)} → ${formatCount(after)} tokens${tail}`;
 }
 
 // Extract only the role:"user" text from a persisted user_input row. loomcycle

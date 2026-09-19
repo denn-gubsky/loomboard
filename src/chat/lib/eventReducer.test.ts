@@ -420,3 +420,54 @@ describe("chatReducer — per-run overrides (RFC DC)", () => {
     expect(after.messages).toEqual(before.messages);
   });
 });
+
+describe("chatReducer — context distillation", () => {
+  // These fell through `default:` and produced nothing at all, so "it never
+  // compacted" and "it compacted and barely helped" were indistinguishable from
+  // the chat — which is how a conversation reached the top of its window with
+  // nobody able to say whether anything had tried.
+  it("posts a note when the runtime compacts", () => {
+    const s = run([
+      ev("context_compaction", {
+        context_compaction: { before_tokens: 18299, after_tokens: 11676, trigger: "auto" },
+      }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toBe(
+      "Context compacted (automatic): 18k → 12k tokens",
+    );
+  });
+
+  it("posts a note when the runtime recaps", () => {
+    const s = run([
+      ev("context_recap", { context_recap: { before_tokens: 30000, after_tokens: 9000 } }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toContain("Context recapped");
+  });
+
+  // The gauge would otherwise keep showing a full window until the next turn's
+  // usage event — the exact staleness the manual-compact path already avoids.
+  it("moves the gauge to the freed footprint immediately", () => {
+    const s = run([
+      ev("usage", { usage: { input_tokens: 30000, output_tokens: 0, max_context_tokens: 32768 } }),
+      ev("context_recap", { context_recap: { before_tokens: 30000, after_tokens: 9000 } }),
+    ]);
+    expect(s.metrics.contextTokens).toBe(9000);
+    expect(s.metrics.maxContextTokens).toBe(32768);
+  });
+
+  it("leaves the gauge alone when the runtime reports no counts", () => {
+    const s = run([
+      ev("usage", { usage: { input_tokens: 30000, output_tokens: 0, max_context_tokens: 32768 } }),
+      ev("context_compaction", { context_compaction: { summary: "x" } }),
+    ]);
+    expect(s.metrics.contextTokens).toBe(30000);
+  });
+
+  it("ignores a distillation frame with no payload", () => {
+    const before = run([ev("text", { text: "hi" })]);
+    const after = run([ev("text", { text: "hi" }), ev("context_compaction", {})]);
+    expect(after.messages).toEqual(before.messages);
+  });
+});

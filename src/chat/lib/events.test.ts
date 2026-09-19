@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptResponse } from "@loomcycle/client";
-import { shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
+import { describeDistill, shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
 
 describe("optionsToArray", () => {
   it("passes through a string array", () => {
@@ -147,5 +147,37 @@ describe("shouldPostOverride", () => {
   it("posts a frame that names nothing rather than staying silent", () => {
     expect(shouldPostOverride({ source: "operator" })).toBe(true);
     expect(shouldPostOverride({ source: "operator", fields: [] })).toBe(true);
+  });
+});
+
+describe("describeDistill", () => {
+  it("reports what the distillation freed", () => {
+    expect(describeDistill("compaction", { before_tokens: 18299, after_tokens: 11676 }))
+      .toBe("Context compacted: 18k → 12k tokens");
+    expect(describeDistill("recap", { before_tokens: 30000, after_tokens: 9000 }))
+      .toBe("Context recapped: 30k → 9.0k tokens");
+  });
+
+  // Observed live: a manual compaction whose summary cost MORE than the span it
+  // replaced. formatCount rounds both sides to "14k", so without the suffix this
+  // would render as a tidy no-op instead of the regression it is.
+  it("names a distillation that did not shrink anything", () => {
+    expect(describeDistill("compaction", { before_tokens: 14230, after_tokens: 14334 }))
+      .toBe("Context compacted: 14k → 14k tokens — no smaller");
+  });
+
+  // "Did it ever do this by itself?" is the question a transcript could not
+  // answer: an operator's click and the runtime's own threshold looked alike.
+  it("separates the runtime's own trigger from an operator's click", () => {
+    expect(describeDistill("recap", { before_tokens: 100, after_tokens: 50, trigger: "auto" }))
+      .toContain("(automatic)");
+    expect(describeDistill("compaction", { before_tokens: 100, after_tokens: 50, trigger: "self" }))
+      .toContain("(agent asked)");
+    expect(describeDistill("compaction", { before_tokens: 100, after_tokens: 50 }))
+      .not.toContain("(");
+  });
+
+  it("still reads sensibly when the runtime reports no token counts", () => {
+    expect(describeDistill("compaction", { summary: "x" })).toBe("Context compacted");
   });
 });
