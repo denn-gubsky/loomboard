@@ -8,6 +8,7 @@ import {
 import {
   describeFallback,
   describeDistill,
+  describeDistillDeclined,
   describeLimit,
   describeOverride,
   shouldPostOverride,
@@ -393,6 +394,25 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
             ? { ...state.metrics, contextTokens: d.after_tokens }
             : state.metrics,
         messages: postNotice(state.messages, "info", describeDistill(kind, d)),
+      };
+    }
+
+    case "context_distill_declined": {
+      // The runtime crossed its threshold and then did nothing. Without this
+      // the transcript could not distinguish "it never tried" from "it tried
+      // and could not" — which is how a conversation reached the top of its
+      // window with the reason sitting unreported on the server the whole time.
+      //
+      // Warn, not info: a distillation that declines at 99% is a run about to
+      // fail, and it is the one notice here the reader has to act on.
+      if (!ev.context_distill) return state;
+      return {
+        ...state,
+        messages: postNotice(
+          state.messages,
+          "warn",
+          describeDistillDeclined(ev.context_distill),
+        ),
       };
     }
 

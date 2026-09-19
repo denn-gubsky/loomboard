@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptResponse } from "@loomcycle/client";
-import { describeDistill, shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
+import { describeDistill, describeDistillDeclined, shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
 
 describe("optionsToArray", () => {
   it("passes through a string array", () => {
@@ -179,5 +179,50 @@ describe("describeDistill", () => {
 
   it("still reads sensibly when the runtime reports no token counts", () => {
     expect(describeDistill("compaction", { summary: "x" })).toBe("Context compacted");
+  });
+});
+
+describe("describeDistillDeclined", () => {
+  // The runtime always populates `message` and it names the fix, so it wins —
+  // same precedence describeLimit uses. A client rebuilding that line from an
+  // enum drifts from the server that knows which lever to pull.
+  it("prefers the runtime's own line", () => {
+    expect(
+      describeDistillDeclined({
+        mode: "recap",
+        reason: "split_declined",
+        used_tokens: 23666,
+        window_tokens: 32768,
+        message: "keep_last_n 6 pins all 7 messages — lower it",
+      }),
+    ).toBe("Context recap declined at 72% of the window: keep_last_n 6 pins all 7 messages — lower it");
+  });
+
+  // Declining at 40% is housekeeping; declining at 99% is a run about to fail.
+  it("says how urgent the decline is", () => {
+    expect(describeDistillDeclined({ mode: "recap", used_tokens: 32352, window_tokens: 32768 }))
+      .toContain("at 99% of the window");
+  });
+
+  it("names which block to edit — the two modes read different config", () => {
+    expect(describeDistillDeclined({ mode: "recap" })).toContain("Context recap declined");
+    expect(describeDistillDeclined({ mode: "compaction" })).toContain("Context compaction declined");
+  });
+
+  it("builds the split diagnosis from its two numbers when there is no line", () => {
+    expect(describeDistillDeclined({ mode: "recap", reason: "split_declined", messages: 7, keep_last_n: 6 }))
+      .toContain("keep_last_n 6 pins all 7 messages");
+  });
+
+  it("builds the not-smaller evidence from its two numbers", () => {
+    expect(describeDistillDeclined({ mode: "compaction", reason: "not_smaller", before_tokens: 14230, after_tokens: 14334 }))
+      .toContain("no smaller (14k → 14k)");
+  });
+
+  // The reason IS the actionable part, so an unheard-of one must survive rather
+  // than collapse into a bare "declined".
+  it("passes an unknown reason through", () => {
+    expect(describeDistillDeclined({ mode: "recap", reason: "some_new_reason" }))
+      .toBe("Context recap declined: some_new_reason");
   });
 });

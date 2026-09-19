@@ -93,6 +93,38 @@ export interface DistillInfo {
   trigger?: string;
 }
 
+/** Payload on a `context_distill_declined` event — the runtime CROSSED its
+ *  distillation threshold and then did nothing.
+ *
+ *  This is the event whose absence made the original problem invisible: a
+ *  conversation climbed to the top of its window while recap fired and declined
+ *  every turn, leaving no marker and no error, so "it never tried" and "it tried
+ *  and could not" looked identical.
+ *
+ *  Which numbers are the evidence depends on the reason, so they are populated
+ *  per reason rather than always — `messages`/`keep_last_n` diagnose
+ *  `split_declined`, `before_tokens`/`after_tokens` diagnose `not_smaller`. */
+export interface DistillDeclinedInfo {
+  /** Which path declined: "recap" or "compaction". They read DIFFERENT config
+   *  keys, so this decides which block an operator should edit. */
+  mode?: string;
+  /** "auto" (the threshold fired) or "self" (the agent asked). */
+  trigger?: string;
+  /** split_declined | empty_summary | summarize_failed | not_smaller |
+   *  reasoning_keep — and possibly one this build has not heard of. */
+  reason?: string;
+  /** The footprint that opened the gate. Declining at 40% is housekeeping;
+   *  declining at 99% is a run about to fail. */
+  used_tokens?: number;
+  window_tokens?: number;
+  messages?: number;
+  keep_last_n?: number;
+  before_tokens?: number;
+  after_tokens?: number;
+  /** A line naming the condition and the fix. The runtime always populates it. */
+  message?: string;
+}
+
 export type ChatEvent = Omit<AgentEvent, "type"> & {
   type: string;
   /** Payload on `interruption_pending`. */
@@ -107,6 +139,10 @@ export type ChatEvent = Omit<AgentEvent, "type"> & {
   /** Payload on `context_recap` — not in the SDK's EventType union at all, but
    *  the SSE parser passes unmodelled types through with their payloads. */
   context_recap?: DistillInfo;
+  /** Payload on `context_distill_declined`. Note the field is `context_distill`
+   *  while the event type is `context_distill_declined` — they differ on the
+   *  wire, so this is not a typo to tidy. */
+  context_distill?: DistillDeclinedInfo;
   /** Accumulated reasoning trace, present on `done` for some providers. */
   reasoning?: string;
 };
@@ -208,6 +244,44 @@ export function describeDistill(kind: "compaction" | "recap", d: DistillInfo): s
   const freed = before - after;
   const tail = freed > 0 ? "" : " — no smaller";
   return `${what}${by}: ${formatCount(before)} → ${formatCount(after)} tokens${tail}`;
+}
+
+/** Note for a distillation that was triggered and did nothing.
+ *
+ *  Prefers the runtime's own line, which names both the condition and the fix —
+ *  same precedence `describeLimit` uses, and for the same reason: the server
+ *  knows which lever the operator should reach for and a client rebuilding that
+ *  from an enum will drift from it.
+ *
+ *  The fallback covers an older or newer runtime that sends a reason this build
+ *  has not heard of. It must never collapse to a bare "declined": the whole
+ *  point of the event is that the reason is the actionable part. */
+export function describeDistillDeclined(d: DistillDeclinedInfo): string {
+  const at =
+    d.used_tokens && d.window_tokens
+      ? ` at ${Math.round((d.used_tokens / d.window_tokens) * 100)}% of the window`
+      : "";
+  const head = `Context ${d.mode === "recap" ? "recap" : "compaction"} declined${at}`;
+  if (d.message) return `${head}: ${d.message}`;
+
+  switch (d.reason) {
+    case "split_declined":
+      return d.messages && d.keep_last_n
+        ? `${head}: keep_last_n ${d.keep_last_n} pins all ${d.messages} messages, so there is nothing to summarize`
+        : `${head}: the kept tail spans the whole conversation`;
+    case "empty_summary":
+      return `${head}: the summarizer returned no text`;
+    case "summarize_failed":
+      return `${head}: the summarize call failed`;
+    case "not_smaller":
+      return d.before_tokens && d.after_tokens
+        ? `${head}: the summary came back no smaller (${formatCount(d.before_tokens)} → ${formatCount(d.after_tokens)})`
+        : `${head}: the summary came back no smaller`;
+    case "reasoning_keep":
+      return `${head}: reasoning is set to keep, which turns distillation off`;
+    default:
+      return d.reason ? `${head}: ${d.reason}` : head;
+  }
 }
 
 // Extract only the role:"user" text from a persisted user_input row. loomcycle

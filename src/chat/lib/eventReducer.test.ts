@@ -471,3 +471,43 @@ describe("chatReducer — context distillation", () => {
     expect(after.messages).toEqual(before.messages);
   });
 });
+
+describe("chatReducer — distillation declined", () => {
+  // THE EVENT WHOSE ABSENCE HID THE ORIGINAL PROBLEM. A conversation climbed to
+  // the top of its window while recap fired and declined every turn, leaving no
+  // marker and no error — so "it never tried" and "it tried and could not"
+  // looked identical from the chat.
+  it("posts the reason the runtime gave", () => {
+    const s = run([
+      ev("context_distill_declined", {
+        context_distill: {
+          mode: "recap",
+          reason: "split_declined",
+          used_tokens: 23666,
+          window_tokens: 32768,
+          message: "keep_last_n 6 pins all 7 messages — lower it",
+        },
+      }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toBe(
+      "Context recap declined at 72% of the window: keep_last_n 6 pins all 7 messages — lower it",
+    );
+  });
+
+  // The one notice here the reader has to act on: declining at 99% is a run
+  // about to fail, not housekeeping.
+  it("warns rather than informs", () => {
+    const s = run([
+      ev("context_distill_declined", { context_distill: { mode: "recap", reason: "empty_summary" } }),
+    ]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.level).toBe("warn");
+  });
+
+  it("ignores a frame with no payload", () => {
+    const before = run([ev("text", { text: "hi" })]);
+    const after = run([ev("text", { text: "hi" }), ev("context_distill_declined", {})]);
+    expect(after.messages).toEqual(before.messages);
+  });
+});
