@@ -18,4 +18,13 @@ interface ImportMetaEnv {
    *  handed a token by any page. Set only for a HOSTED loomboard behind a trusted
    *  landing — NOT baked into the published CLI/desktop/extension builds. */
   readonly VITE_LOOMBOARD_CONNECT_ORIGINS?: string;
+  /** DEV ONLY — bearer to auto-connect with, so `VITE_DEV_TOKEN=… npm run dev`
+   *  skips the Connect screen. Read behind `import.meta.env.DEV`, which is the
+   *  literal `false` in any `vite build`, so neither the branch nor the inlined
+   *  token survives into a shipped bundle (see lib/devConnect). */
+  readonly VITE_DEV_TOKEN?: string;
+  /** DEV ONLY — the runtime VITE_DEV_TOKEN points at, e.g.
+   *  http://192.168.0.77:8787. Blank/unset ⇒ the dev proxy's own default target
+   *  (LOOMBOARD_PROXY_TARGET, else http://127.0.0.1:8787). */
+  readonly VITE_DEV_BASE_URL?: string;
 }

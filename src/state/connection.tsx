@@ -12,6 +12,7 @@ import type { LoomcycleClient, WhoamiResponse } from "@loomcycle/client";
 import { getClient, resetClient } from "../lib/loomcycle";
 import { deriveCapabilities, type Capabilities } from "../lib/capabilities";
 import { describeError } from "../chat/lib/errors";
+import { devConnectSettings } from "../lib/devConnect";
 import {
   clearSettings,
   loadSettings,
@@ -42,11 +43,15 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<ConnectionSettings | null>(() =>
     loadSettings(),
   );
-  // If we have persisted settings, we start in "connecting" and validate them
-  // before showing the app — avoids a flash of the login screen on reload.
-  const [status, setStatus] = useState<Status>(() =>
-    loadSettings() ? "connecting" : "idle",
-  );
+  // If we have a connection to validate — persisted, or the dev-only env seed —
+  // we start in "connecting" and validate it before showing the app, which
+  // avoids a flash of the login screen on reload.
+  const [status, setStatus] = useState<Status>(() => {
+    const persisted = loadSettings();
+    return persisted || devConnectSettings(import.meta.env, persisted)
+      ? "connecting"
+      : "idle";
+  });
   const [principal, setPrincipal] = useState<WhoamiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,13 +85,16 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setStatus("idle");
   }, []);
 
-  // Validate a persisted connection exactly once on first mount.
+  // Validate a persisted connection exactly once on first mount — falling back
+  // in dev to the VITE_DEV_TOKEN seed (see lib/devConnect; compiled out of every
+  // build), so a `VITE_DEV_TOKEN=… npm run dev` opens straight into the app.
   const validatedRef = useRef(false);
   useEffect(() => {
     if (validatedRef.current) return;
     validatedRef.current = true;
     const persisted = loadSettings();
-    if (persisted) void connect(persisted);
+    const initial = persisted ?? devConnectSettings(import.meta.env, persisted);
+    if (initial) void connect(initial);
   }, [connect]);
 
   // Cross-origin connect handoff. A first-party page whose origin is allowlisted
