@@ -7,6 +7,7 @@ import { useAgents } from "./hooks/useAgents";
 import { useChat } from "./hooks/useChat";
 import { useEffectiveConfig } from "./hooks/useEffectiveConfig";
 import { effectiveFields } from "./lib/effective";
+import { estimateConversationTokens } from "./lib/metrics";
 import AgentPicker from "./components/AgentPicker";
 import OverridesPanel from "./components/OverridesPanel";
 import MessageList from "./components/MessageList";
@@ -129,6 +130,11 @@ export default function Chat({
   const custom = configIsCustom(conversation.config);
   const noAgent = !conversation.baseAgent;
   const m = chat.state.metrics;
+  // What the whole conversation weighs, beside what the last prompt carried.
+  const conversationTokens = useMemo(
+    () => estimateConversationTokens(chat.state.messages),
+    [chat.state.messages],
+  );
   const hasUsage = m.inputTokens > 0 || m.outputTokens > 0;
   // Tokens left in the model's window, for the attachment budget (null = the
   // model didn't report a window, so we can't enforce).
@@ -163,6 +169,7 @@ export default function Chat({
         {(hasUsage || chat.running) && (
           <MetricsHud
             metrics={chat.state.metrics}
+            conversationTokens={conversationTokens}
             tokensPerSec={chat.tokensPerSec}
             running={chat.running}
             servingModel={chat.state.servingModel}

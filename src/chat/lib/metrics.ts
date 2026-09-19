@@ -1,4 +1,5 @@
 import type { Usage } from "@loomcycle/client";
+import type { ChatMessage } from "./eventReducer";
 
 // Token accounting for the live HUD. Pure math — timing (tokens/sec) is computed
 // by useChat with a wall clock and the pure helper below, so this module has no
@@ -76,4 +77,45 @@ export function formatDuration(ms: number): string {
   if (s < 60) return s.toFixed(s < 10 ? 1 : 0) + "s";
   const m = Math.floor(s / 60);
   return `${m}m ${Math.round(s % 60)}s`;
+}
+
+/** Rough size of the visible TRANSCRIPT, in tokens.
+ *
+ *  It is deliberately not called the size of the prompt, and it is smaller than
+ *  one: a prompt also carries the system prompt, the tool definitions and any
+ *  injected memory, none of which appear in the transcript. Measured live, a
+ *  session showed 24k of transcript against a 30k prompt for exactly that
+ *  reason.
+ *
+ *  What it is FOR is the opposite comparison. Once the runtime distils, the
+ *  prompt stops growing while the transcript does not, and the gap between them
+ *  is the only visible evidence that distillation is working — which is the
+ *  question behind "why does it keep forgetting". So it earns its place on
+ *  screen only when it has clearly outgrown the prompt (see the caller); below
+ *  that it is a second number that agrees with the first and explains nothing.
+ *
+ *  Estimated at four characters per token, the same heuristic loomcycle's own
+ *  `estimateMessageTokens` uses for its distillation bookkeeping, so the two
+ *  agree about what they are approximating. It overcounts dense text; treat it
+ *  as an order of magnitude, which is all it is asked to be.
+ *
+ *  Notices are excluded: they are our own UI text and were never sent to anyone.
+ */
+export function estimateConversationTokens(messages: readonly ChatMessage[]): number {
+  let chars = 0;
+  for (const m of messages) {
+    if (m.role === "user") {
+      chars += m.text.length;
+      continue;
+    }
+    for (const p of m.parts) {
+      if (p.type === "text" || p.type === "thinking") chars += p.text.length;
+      else if (p.type === "tool") {
+        chars += p.call.name.length;
+        chars += JSON.stringify(p.call.input ?? "").length;
+        chars += p.call.result?.length ?? 0;
+      }
+    }
+  }
+  return Math.round(chars / 4);
 }
