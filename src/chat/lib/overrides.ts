@@ -80,13 +80,23 @@ const RETUNABLE: Readonly<Record<string, string>> = {
   interruption: "interruption",
 };
 
-type StartOnlyKey = "sampling" | "compaction" | "maxContextTokens" | "runTimeoutSeconds";
+type StartOnlyKey =
+  | "sampling"
+  | "compaction"
+  | "context"
+  | "maxContextTokens"
+  | "runTimeoutSeconds";
 
 /** Fixed at run start. Present on both RunOptions and ContinueOptions, absent
  *  from the retune vocabulary. */
 const START_ONLY: Readonly<Record<string, StartOnlyKey>> = {
   sampling: "sampling",
   compaction: "compaction",
+  // How history is distilled: append / recap / stateful / auto, plus the
+  // thresholds. Start-only because `mode` is resolved once when the run begins
+  // and the loop latches it — a mid-run change could not take effect, so the
+  // runtime does not accept one rather than accepting it and doing nothing.
+  context: "context",
   max_context_tokens: "maxContextTokens",
   run_timeout_seconds: "runTimeoutSeconds",
 };

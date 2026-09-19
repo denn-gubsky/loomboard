@@ -138,10 +138,26 @@ describe("the two vocabularies", () => {
     );
   });
 
-  it("start-only is exactly the four run-start keys", () => {
+  it("start-only is exactly the five run-start keys", () => {
     expect([...START_ONLY_KEYS].sort()).toEqual(
-      ["compaction", "max_context_tokens", "run_timeout_seconds", "sampling"].sort(),
+      ["compaction", "context", "max_context_tokens", "run_timeout_seconds", "sampling"].sort(),
     );
+  });
+
+  // The knobs the context investigation is about. They are useless unless they
+  // arrive camelCased, which is why this asserts the value and not just presence.
+  it("carries the distillation mode and its thresholds", () => {
+    expect(
+      toStartOnlyOptions({
+        context: { mode: "recap", keep_last_n: 2, autorecap_at_pct: 60 },
+      }),
+    ).toEqual({
+      context: { mode: "recap", keepLastN: 2, autorecapAtPct: 60 },
+    });
+  });
+
+  it("keeps context out of a retune, which cannot carry it", () => {
+    expect(toRunOverrides({ context: { mode: "recap" } })).toEqual({});
   });
 
   it("no key belongs to both lifetimes", () => {
