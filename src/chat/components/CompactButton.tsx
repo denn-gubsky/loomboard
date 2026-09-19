@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Minimize2, Loader2 } from "lucide-react";
 import type { CompactRunResult } from "@loomcycle/client";
 import { describeError } from "../lib/errors";
+import { describeCompactResult } from "../lib/compactResult";
 
 interface Props {
   /** Only enabled while the run is parked — compactRun 409s mid-turn. */
@@ -11,7 +12,9 @@ interface Props {
 
 // Summarizes the parked run's context to free tokens. A successful compaction
 // posts its before→after result into the transcript and refreshes the context
-// gauge; the inline note only covers the no-op and error cases.
+// gauge; the inline note only covers the no-op and error cases — and it names
+// WHICH no-op, because "nothing to compact" beside a nearly-full window reads as
+// reassurance when the server meant "the list I rebuilt was too short".
 export default function CompactButton({ enabled, onCompact }: Props) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -21,7 +24,7 @@ export default function CompactButton({ enabled, onCompact }: Props) {
     setNote(null);
     try {
       const r = await onCompact();
-      if (r && !r.compacted) setNote("nothing to compact");
+      if (r && !r.compacted) setNote(describeCompactResult(r));
     } catch (e) {
       setNote(describeError(e));
     } finally {
