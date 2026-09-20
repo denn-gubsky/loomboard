@@ -23,9 +23,18 @@ export interface InterruptionInfo {
 export interface FallbackInfo {
   failed_provider?: string;
   failed_model?: string;
+  /** The next-in-queue the resolver picked. ABSENT when it found no
+   *  non-stalled candidate at all — the run fails next. */
   new_provider?: string;
   new_model?: string;
+  /** The error CLASS that triggered the switch ("retryable"). A stable wire
+   *  label, not a description of what went wrong. */
   reason?: string;
+  /** Cumulative fallback counter: 1 for the first switch, 2 for the second. */
+  attempt?: number;
+  /** The provider's own error, truncated by the runtime to ~200 chars. This is
+   *  the operator-useful half — `reason` only names the class. */
+  cause_error?: string;
 }
 
 /** Payload on a `limit` event (loomcycle RFC AW per-scope token budgets). A
@@ -152,8 +161,21 @@ export type ChatEvent = Omit<AgentEvent, "type"> & {
 export function describeFallback(f: FallbackInfo): string {
   const from = [f.failed_provider, f.failed_model].filter(Boolean).join("/");
   const to = [f.new_provider, f.new_model].filter(Boolean).join("/");
-  const head = to ? `Switched model: ${from || "?"} → ${to}` : `Model ${from || "?"} unavailable`;
-  return f.reason ? `${head} (${f.reason})` : head;
+  // The resolver may legitimately re-pick the SAME provider/model — a tier with
+  // one candidate has nowhere else to go — and the loop emits the fallback event
+  // regardless. Rendering that as "Switched model: X → X" reports a switch that
+  // did not happen; what happened is a retry of the same model.
+  const head = !to
+    ? `Model ${from || "?"} unavailable`
+    : to === from
+      ? `Retried ${to}`
+      : `Switched model: ${from || "?"} → ${to}`;
+  const attempt = f.attempt && f.attempt > 1 ? ` (attempt ${f.attempt})` : "";
+  // `reason` is the error class ("retryable"); `cause_error` is what the provider
+  // actually said. The class alone sits where an explanation belongs while
+  // explaining nothing, so prefer the cause and keep the class as the fallback.
+  const why = f.cause_error || f.reason;
+  return why ? `${head}${attempt} — ${why}` : `${head}${attempt}`;
 }
 
 /** Banner for a token-budget crossing. Prefer the server's ready-made message;
