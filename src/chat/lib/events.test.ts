@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptResponse } from "@loomcycle/client";
-import { describeDistill, describeDistillDeclined, shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
+import { describeDistill, describeDistillDeclined, describeFallback, shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
 
 describe("optionsToArray", () => {
   it("passes through a string array", () => {
@@ -147,6 +147,71 @@ describe("shouldPostOverride", () => {
   it("posts a frame that names nothing rather than staying silent", () => {
     expect(shouldPostOverride({ source: "operator" })).toBe(true);
     expect(shouldPostOverride({ source: "operator", fields: [] })).toBe(true);
+  });
+});
+
+describe("describeFallback", () => {
+  // Observed live on chat/local: the notice read
+  // "Switched model: ollama-local/qwen3.8:latest → ollama-local/qwen3.8:latest
+  // (retryable)". The runtime is not wrong to emit it — ReResolve re-picked the
+  // only candidate the tier has — but "switched X → X" reports a switch that
+  // did not happen, and the operator-useful half (the provider's actual error)
+  // was dropped in favour of the class label.
+  it("calls a same-model re-pick a retry, not a switch", () => {
+    expect(
+      describeFallback({
+        failed_provider: "ollama-local",
+        failed_model: "qwen3.8:latest",
+        new_provider: "ollama-local",
+        new_model: "qwen3.8:latest",
+        reason: "retryable",
+      }),
+    ).toBe("Retried ollama-local/qwen3.8:latest — retryable");
+  });
+
+  it("still reports a real switch as a switch", () => {
+    expect(
+      describeFallback({
+        failed_provider: "anthropic",
+        failed_model: "claude-opus-5",
+        new_provider: "ollama-local",
+        new_model: "qwen3.8:latest",
+        reason: "retryable",
+      }),
+    ).toBe("Switched model: anthropic/claude-opus-5 → ollama-local/qwen3.8:latest — retryable");
+  });
+
+  it("prefers the provider's own error over the class label", () => {
+    expect(
+      describeFallback({
+        failed_provider: "anthropic",
+        failed_model: "claude-opus-5",
+        new_provider: "ollama-local",
+        new_model: "qwen3.8:latest",
+        reason: "retryable",
+        cause_error: "anthropic 429: rate limit exceeded",
+      }),
+    ).toContain("— anthropic 429: rate limit exceeded");
+  });
+
+  it("names the attempt once there has been more than one", () => {
+    expect(
+      describeFallback({
+        failed_provider: "p",
+        failed_model: "m",
+        new_provider: "p",
+        new_model: "m",
+        attempt: 3,
+        reason: "retryable",
+      }),
+    ).toBe("Retried p/m (attempt 3) — retryable");
+  });
+
+  it("says unavailable when the resolver found no candidate at all", () => {
+    // new_* absent = the tier's candidate list was exhausted; the run fails next.
+    expect(describeFallback({ failed_provider: "p", failed_model: "m", reason: "retryable" })).toBe(
+      "Model p/m unavailable — retryable",
+    );
   });
 });
 
