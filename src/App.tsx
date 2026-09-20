@@ -5,6 +5,7 @@ import { PathExplorer } from "@loomcycle/explorer";
 import { MemoryView } from "@loomcycle/memory-view";
 import { Loomboard } from "@loomcycle/loomboard";
 import { ConnectionProvider, useConnection } from "./state/connection";
+import { serverCapabilities } from "./lib/capabilities";
 import {
   ConversationsProvider,
   useConversations,
@@ -88,6 +89,10 @@ function LibraryArea() {
       <Library
         connection={connection}
         principal={principal ?? undefined}
+        // Runtime posture from whoami (RFC AU). Without it the MCP tab pins its
+        // stdio-import gate closed and drops the http-allowlist warning, so the
+        // tab silently under-reports what this runtime actually allows.
+        serverCapabilities={serverCapabilities(principal)}
         tabs={["agents", "skills", "mcp"]}
         onError={(e) => console.error("[library]", e)}
       />

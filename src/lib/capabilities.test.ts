@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { WhoamiResponse } from "@loomcycle/client";
-import { deriveCapabilities, tokenKindLabel } from "./capabilities";
+import { deriveCapabilities, serverCapabilities, tokenKindLabel } from "./capabilities";
 
 function who(p: Partial<WhoamiResponse>): WhoamiResponse {
   return {
@@ -52,5 +52,46 @@ describe("tokenKindLabel", () => {
     expect(tokenKindLabel(who({ scopes: ["substrate:user"] }))).toBe("isolated");
     expect(tokenKindLabel(who({ scopes: ["runs:create"] }))).toBe("user");
     expect(tokenKindLabel(null)).toBe("");
+  });
+});
+
+// `capabilities` rides on whoami (RFC AU) but isn't in the SDK's WhoamiResponse
+// (1.72.0), so these go through the same undeclared-field narrow the app uses.
+function whoWithCaps(caps: unknown): WhoamiResponse {
+  return { ...who({}), capabilities: caps } as WhoamiResponse;
+}
+
+describe("serverCapabilities", () => {
+  it("reads the runtime posture loomcycle advertises on whoami", () => {
+    expect(
+      serverCapabilities(
+        whoWithCaps({
+          mcp_allow_dynamic_stdio: true,
+          http_host_allowlist_configured: false,
+        }),
+      ),
+    ).toEqual({
+      mcp_allow_dynamic_stdio: true,
+      http_host_allowlist_configured: false,
+    });
+  });
+
+  it("returns undefined when the runtime advertises nothing", () => {
+    expect(serverCapabilities(who({}))).toBeUndefined();
+    expect(serverCapabilities(null)).toBeUndefined();
+  });
+
+  it("omits a key an older runtime doesn't send rather than inventing false", () => {
+    // false and absent mean different things to <Library>'s gate; absent must
+    // not be flattened into an explicit deny that outlives a runtime upgrade.
+    const out = serverCapabilities(whoWithCaps({ mcp_allow_dynamic_stdio: true }));
+    expect(out).toEqual({ mcp_allow_dynamic_stdio: true });
+    expect("http_host_allowlist_configured" in out!).toBe(false);
+  });
+
+  it("ignores non-boolean and malformed values instead of trusting the wire", () => {
+    expect(serverCapabilities(whoWithCaps({ mcp_allow_dynamic_stdio: "true" }))).toEqual({});
+    expect(serverCapabilities(whoWithCaps("nope"))).toBeUndefined();
+    expect(serverCapabilities(whoWithCaps(null))).toBeUndefined();
   });
 });
