@@ -10,6 +10,7 @@ import { useUserInterrupts } from "../hooks/useUserInterrupts";
 import { useChatHistory } from "../hooks/useChatHistory";
 import { useAutoRecap } from "../hooks/useAutoRecap";
 import { isChatAgent, mergeChats, type DisplayChat } from "../lib/chatIndex";
+import { nextIdleStamp, NO_IDLE } from "../lib/recapIdle";
 import type { RunTile } from "../lib/runStates";
 import HistorySearch, { NO_FILTER, type ChatFilter } from "./HistorySearch";
 import ConversationTile from "./agentchat/ConversationTile";
@@ -82,14 +83,10 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
     [history.sessions, conversations],
   );
 
-  // Auto-recap the active chat when it sits idle for 3 min (see useAutoRecap).
-  // Keyed on the History row's last_activity — a parked interactive run still
-  // reports "running", so idle can't be read off the run status.
   const activeSessionId = conversations.find((c) => c.id === activeId)?.sessionId;
   const activeChat = activeSessionId
     ? merged.find((c) => c.sessionId === activeSessionId)
     : undefined;
-  const activeLastActivity = activeChat?.lastActivity ?? 0;
 
   // Publish the active chat's recap to the main pane (it renders it as a ghost
   // message — the tile has no room). null clears it when there's no active chat.
@@ -97,9 +94,19 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
     setRecap(activeChat?.summary ?? null);
   }, [activeChat?.summary, setRecap]);
 
+  // Auto-recap the active chat when it sits idle for 3 min (see useAutoRecap).
+  // The idle clock is stamped from <Chat>'s working→quiet transition rather than
+  // the History row's last_activity: a steered chat keeps ONE run for its whole
+  // life, so last_activity is frozen at that run's start and the timer armed
+  // only once (see lib/recapIdle).
+  const [idle, setIdle] = useState(NO_IDLE);
+  useEffect(() => {
+    setIdle((prev) => nextIdleStamp(prev, activeSessionId, activeStatus.running, Date.now()));
+  }, [activeSessionId, activeStatus.running]);
+
   useAutoRecap({
     sessionId: activeSessionId,
-    lastActivity: activeLastActivity,
+    idleSince: idle.at,
     recap: history.recap,
   });
 

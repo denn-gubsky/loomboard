@@ -1,4 +1,5 @@
 import type { WhoamiResponse } from "@loomcycle/client";
+import type { ServerCapabilities } from "@loomcycle/library";
 
 // What the connected bearer can actually reach, derived from the whoami
 // principal's scopes (RFC BX / RFC L / RFC CB). The tenant plane — the agent
@@ -48,4 +49,36 @@ export function tokenKindLabel(p: WhoamiResponse | null): string {
   if (p.scopes?.includes("substrate:tenant")) return "operator";
   if (p.scopes?.includes("substrate:user")) return "isolated";
   return "user";
+}
+
+// The runtime posture loomcycle advertises on /v1/_me alongside the principal
+// (RFC AU): booleans only — whether a tenant may import a stdio MCP server, and
+// whether ANY http host allowlist is configured. Deliberately non-secret; the
+// server never puts allowlist CONTENTS on this wire, so it is safe to hand
+// straight to the UI.
+//
+// It is read off an UNDECLARED field: loomcycle has returned `capabilities` on
+// whoami since RFC AU, but @loomcycle/client's WhoamiResponse still doesn't
+// declare it (still absent at 1.84.0). Hence the narrow rather than a property
+// access — drop it once the SDK type catches up.
+//
+// <Library> gates on `mcp_allow_dynamic_stdio === true`, so omitting this prop
+// isn't neutral: it pins the gate closed and hides the stdio MCP import path
+// even on a runtime whose operator enabled it.
+export function serverCapabilities(
+  p: WhoamiResponse | null,
+): ServerCapabilities | undefined {
+  const raw = (p as { capabilities?: unknown } | null)?.capabilities;
+  if (!raw || typeof raw !== "object") return undefined;
+  const c = raw as Record<string, unknown>;
+  const out: ServerCapabilities = {};
+  // Copy only the booleans we know: an older runtime omits a key, and a newer
+  // one may add others we shouldn't forward blind.
+  if (typeof c.mcp_allow_dynamic_stdio === "boolean") {
+    out.mcp_allow_dynamic_stdio = c.mcp_allow_dynamic_stdio;
+  }
+  if (typeof c.http_host_allowlist_configured === "boolean") {
+    out.http_host_allowlist_configured = c.http_host_allowlist_configured;
+  }
+  return out;
 }
