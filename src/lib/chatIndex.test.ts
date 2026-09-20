@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Conversation } from "../state/conversations";
 import type { HistoryChat } from "./historyTypes";
-import { mergeChats } from "./chatIndex";
+import { isChatAgent, mergeChats } from "./chatIndex";
 
 function chat(p: Partial<HistoryChat> & { session_id: string }): HistoryChat {
   return {
@@ -90,5 +90,21 @@ describe("mergeChats", () => {
       [],
     );
     expect(rows.map((r) => r.key)).toEqual(["real"]);
+  });
+});
+
+describe("isChatAgent", () => {
+  it("accepts a chat/* agent, a per-conversation fork of one, and an unpicked draft", () => {
+    expect(isChatAgent("chat/medium")).toBe(true);
+    expect(isChatAgent("chat/local-small")).toBe(true);
+    expect(isChatAgent("chat/medium__lb-1a2b3c4d")).toBe(true);
+    expect(isChatAgent("")).toBe(true); // fresh draft, no agent picked yet
+  });
+
+  it("rejects an agent outside the chat/ namespace", () => {
+    expect(isChatAgent("researcher")).toBe(false);
+    expect(isChatAgent("team/orchestrator")).toBe(false);
+    expect(isChatAgent("dev/exec")).toBe(false);
+    expect(isChatAgent("mychat/thing")).toBe(false); // the prefix must be the path root
   });
 });

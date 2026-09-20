@@ -439,6 +439,7 @@ button {
 }
 
 .sidebar-foot {
+  position: relative; /* anchors .logout-confirm */
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -478,6 +479,64 @@ button {
 }
 .btn-ghost.sm {
   padding: 0.4em;
+}
+
+/* Log-out confirmation, anchored ABOVE the footer (the footer is the last row of
+   the rail, so a popover below it would fall off screen). Pinned to the rail's
+   left edge with a min-width of its own rather than stretching to the footer:
+   collapsed, the rail is only 58px, and the card has to overhang it to stay
+   readable. */
+.logout-confirm {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 20;
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  padding: 0.7em 0.8em;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+.logout-confirm-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.logout-confirm-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+.logout-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.4em;
+  margin-top: 0.3em;
+}
+.logout-confirm-actions .btn-ghost.sm {
+  padding: 0.35em 0.7em;
+  font-size: 0.8rem;
+}
+.logout-confirm-go {
+  padding: 0.35em 0.7em;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.logout-confirm-go:hover {
+  background: var(--danger);
+  color: var(--bg);
 }
 
 /* ---- left-rail view switch (Chats / Library) ---- */
@@ -1489,11 +1548,16 @@ button {
   font-size: 0.75rem;
   color: var(--text-dim);
 }
+.conv-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
 .conv-archived-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.35em;
-  align-self: flex-start;
   padding: 0.3em 0.5em;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1504,6 +1568,21 @@ button {
 }
 .conv-archived-toggle:hover { color: var(--text); }
 .conv-archived-toggle.active { color: var(--accent); border-color: var(--accent); }
+.conv-allagents-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.conv-allagents-toggle:hover { color: var(--text); }
+.conv-allagents-toggle input {
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 
 /* Rename + delete cluster, top-right of the tile. Always visible (dimmed) so the
    controls are discoverable at a glance — not hover-only, which reads as "no

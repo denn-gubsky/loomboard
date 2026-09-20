@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Brain,
   FolderTree,
@@ -53,6 +53,21 @@ export default function Sidebar({ view, onViewChange }: Props) {
   const { theme, toggle } = useTheme();
   // Read synchronously on first render so there's no expand→collapse flash.
   const [collapsed, setCollapsed] = useState(loadCollapsed);
+  // Log out is one click away from wiping the stored bearer, and the only way
+  // back is re-pasting a token the user may not have to hand — so it confirms.
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
+
+  // Escape closes the confirmation. Bound to the document, not the card: clicking
+  // the card's text moves focus off the buttons, and a handler on the card only
+  // sees keys from inside it.
+  useEffect(() => {
+    if (!confirmingLogout) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirmingLogout(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmingLogout]);
 
   function toggleCollapsed() {
     setCollapsed((c) => {
@@ -179,12 +194,38 @@ export default function Sidebar({ view, onViewChange }: Props) {
         </button>
         <button
           className="btn-ghost sm"
-          onClick={disconnect}
-          title="Disconnect"
-          aria-label="Disconnect"
+          onClick={() => setConfirmingLogout(true)}
+          title="Log out"
+          aria-label="Log out"
+          aria-expanded={confirmingLogout}
         >
           <LogOut size={15} />
         </button>
+
+        {confirmingLogout && (
+          <div className="logout-confirm" role="dialog" aria-label="Confirm log out">
+            <p className="logout-confirm-title">Log out?</p>
+            <p className="logout-confirm-note">
+              This clears the saved connection — you'll need your loomcycle token
+              to sign back in.
+            </p>
+            <div className="logout-confirm-actions">
+              {/* Cancel takes focus: on a destructive prompt, a stray Enter should
+                  back out, not commit. */}
+              <button
+                type="button"
+                className="btn-ghost sm"
+                autoFocus
+                onClick={() => setConfirmingLogout(false)}
+              >
+                Cancel
+              </button>
+              <button type="button" className="logout-confirm-go" onClick={disconnect}>
+                Log out
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );
