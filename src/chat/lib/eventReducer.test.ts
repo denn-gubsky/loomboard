@@ -583,4 +583,27 @@ describe("chatReducer — context_exhausted (loomcycle 1.85.0)", () => {
     const after = run([ev("text", { text: "hi" }), ev("context_exhausted", {})]);
     expect(after.messages).toEqual(before.messages);
   });
+
+  // FLAGGED BY THE RUNTIME AUTHOR: a genuine exhaustion still fires POST-TURN,
+  // after `done` has closed the assistant message. That is a third arrival
+  // shape — not mid-stream (there is no open turn to join) and not cold (there
+  // IS a prior message). It must stand alone rather than be dropped or
+  // retro-fitted into a turn the user has already read.
+  it("stands alone when it arrives after the turn has closed", () => {
+    const s = run([
+      ev("text", { text: "the answer" }),
+      ev("done", {}),
+      ev("context_exhausted", { context_exhausted: payload }),
+    ]);
+    const last = s.messages[s.messages.length - 1];
+    if (last.role !== "assistant") throw new Error("last message is not assistant");
+    const notice = last.parts.find((p) => p.type === "notice");
+    expect(notice).toMatchObject({ level: "error" });
+
+    // and it did NOT reopen or mutate the finished turn
+    const answer = s.messages[0];
+    if (answer.role !== "assistant") throw new Error("first message is not assistant");
+    expect(answer.status).toBe("done");
+    expect(answer.parts.some((p) => p.type === "notice")).toBe(false);
+  });
 });
