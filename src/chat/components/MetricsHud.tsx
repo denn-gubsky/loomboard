@@ -79,8 +79,13 @@ export default function MetricsHud({
           </span>
           <span className="gauge-pct">{Math.round(pct)}%</span>
           {outgrown && (
-            <span className="gauge-convo" title="the transcript behind it">
-              of {formatCount(conversationTokens!)}
+            // NOT "of {transcript}". Sat next to the percentage, the word "of"
+            // reads as its denominator — so a gauge showing 30k of a 33k window
+            // rendered as "90% of 36k", inviting the reader to check 30/36 and
+            // conclude the number was wrong. The denominator is the WINDOW; the
+            // transcript is a second, larger quantity and has to be labelled.
+            <span className="gauge-convo" title="the transcript behind the prompt">
+              · transcript {formatCount(conversationTokens!)}
             </span>
           )}
           <span className="gauge-popup" role="tooltip">
