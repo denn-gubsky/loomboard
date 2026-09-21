@@ -147,7 +147,7 @@ describe("chatReducer — interrupts", () => {
   it("sets and clears the pending interrupt", () => {
     let s = run([
       ev("interruption_pending", {
-        interruption: { interrupt_id: "intr_1", kind: "question", question: "Proceed?", options: ["yes", "no"] },
+        interruption: { interrupt_id: "intr_1", kind: "question", priority: "normal", question: "Proceed?", options: ["yes", "no"] },
       }),
     ]);
     expect(s.pendingInterrupt?.interrupt_id).toBe("intr_1");
@@ -160,7 +160,7 @@ describe("chatReducer — interrupts", () => {
     let s = run([
       ev("text", { text: "working…" }),
       ev("interruption_pending", {
-        interruption: { interrupt_id: "intr_1", kind: "question", question: "Proceed?" },
+        interruption: { interrupt_id: "intr_1", kind: "question", priority: "normal", question: "Proceed?" },
       }),
     ]);
     expect(s.pendingInterrupt).not.toBeNull();
@@ -271,6 +271,8 @@ describe("chatReducer — serving model & provider fallback", () => {
           failed_model: "gemma4:latest",
           new_provider: "deepseek",
           new_model: "deepseek-v4-flash",
+          attempt: 1,
+          user_tier: "default",
           reason: "UNAVAILABLE",
         },
       }),
@@ -429,7 +431,7 @@ describe("chatReducer — context distillation", () => {
   it("posts a note when the runtime compacts", () => {
     const s = run([
       ev("context_compaction", {
-        context_compaction: { before_tokens: 18299, after_tokens: 11676, trigger: "auto" },
+        context_compaction: { before_tokens: 18299, after_tokens: 11676, trigger: "auto", summary: "…" },
       }),
     ]);
     const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
@@ -440,7 +442,7 @@ describe("chatReducer — context distillation", () => {
 
   it("posts a note when the runtime recaps", () => {
     const s = run([
-      ev("context_recap", { context_recap: { before_tokens: 30000, after_tokens: 9000 } }),
+      ev("context_recap", { context_recap: { before_tokens: 30000, after_tokens: 9000, recap: "…" } }),
     ]);
     const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
     expect(notice && notice.type === "notice" && notice.text).toContain("Context recapped");
@@ -451,7 +453,7 @@ describe("chatReducer — context distillation", () => {
   it("moves the gauge to the freed footprint immediately", () => {
     const s = run([
       ev("usage", { usage: { input_tokens: 30000, output_tokens: 0, max_context_tokens: 32768 } }),
-      ev("context_recap", { context_recap: { before_tokens: 30000, after_tokens: 9000 } }),
+      ev("context_recap", { context_recap: { before_tokens: 30000, after_tokens: 9000, recap: "…" } }),
     ]);
     expect(s.metrics.contextTokens).toBe(9000);
     expect(s.metrics.maxContextTokens).toBe(32768);

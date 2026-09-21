@@ -79,33 +79,19 @@ export function effectiveFields(
 /** A setting this run carries that CANNOT take effect — loomcycle's `inert`
  *  array on the effective-config report (RFC B §B6).
  *
+ *  Derived from the SDK rather than re-declared: client 1.86.0 types `inert`
+ *  on EffectiveConfigResponse, so the shape now has one owner. (Indexed access
+ *  because the package's index.d.ts re-export is an enumerated list that does
+ *  not yet include `InertContextSetting` itself.)
+ *
  *  Shaped by the runtime, relayed VERBATIM. The reason names the other setting
  *  that disables this one, and `fix` names the knob that does work; rewriting
  *  either here would put us back where `describeDistillDeclined` was, restating
  *  a server that knows more than we do. */
-export interface InertSetting {
-  /** The yaml path, e.g. "compaction.autocompact_at_pct". */
-  setting: string;
-  /** Why it cannot take effect, in terms of the setting that disables it. */
-  reason: string;
-  /** The setting that DOES work for what the operator was trying to do. */
-  fix?: string;
-}
+export type InertSetting = EffectiveConfigResponse["inert"][number];
 
-/** The inert advisories from the report, or [] when there are none.
- *
- *  Read off an UNDECLARED field: loomcycle has returned `inert` on
- *  effective-config since RFC B §B6, but @loomcycle/client's
- *  EffectiveConfigResponse still doesn't declare it (checked at 1.84.0) — it
- *  only mentions it in a ContextOptions doc comment. Hence the narrow rather
- *  than a property access; drop it once the SDK type catches up.
- *
- *  The runtime sends `[]` rather than omitting the key precisely so a consumer
- *  can tell "nothing inert" from "this server is too old to report it". We
- *  cannot preserve that distinction through this signature and do not need to:
- *  both render nothing. */
 export function inertSettings(report: EffectiveConfigResponse | null): InertSetting[] {
-  const raw = (report as { inert?: unknown } | null)?.inert;
+  const raw: unknown = report?.inert;
   if (!Array.isArray(raw)) return [];
   const out: InertSetting[] = [];
   for (const r of raw) {

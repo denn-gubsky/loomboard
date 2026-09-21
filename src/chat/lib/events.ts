@@ -1,196 +1,65 @@
 import type { AgentEvent, TranscriptEvent, TranscriptResponse } from "@loomcycle/client";
 import { formatCount } from "./metrics";
 
-// The SDK's AgentEvent type models only a subset of the event types the server
-// emits — the SSE parser passes through unmodeled types (e.g. "thinking",
-// "interruption_pending") with their full payloads, but TypeScript doesn't know
-// their fields. ChatEvent is the loosened view the reducer consumes: `type` is a
-// string, plus the extra payload fields we render.
-export interface InterruptionInfo {
-  interrupt_id: string;
-  kind: string;
-  question?: string;
-  /** Raw JSON from the interrupt row — an array of option strings, or a
-   *  JSON-encoded string of one. Normalize with optionsToArray. */
-  options?: unknown;
-  context?: string;
-  priority?: string;
-  expires_at?: string;
-}
+// These wire shapes were hand-declared here for as long as the SDK did not
+// carry them. Client 1.86.0 does — its own note: "a value a typed client cannot
+// name is a value it is likely to drop" — so they are DERIVED from AgentEvent
+// rather than re-described. One declaration per wire shape, owned by the repo
+// that owns the wire, and a server-side field change now breaks the build here
+// instead of being ignored at runtime.
+//
+// WHY indexed access rather than importing the named interfaces: 1.86.0 adds
+// them to types.ts but its index.d.ts re-export is an ENUMERATED list that does
+// not include them, so `import type { ContextExhaustedInfo }` does not resolve.
+// AgentEvent is exported and carries every payload as a field, so indexing it
+// reaches the same types through the door that is actually open — and keeps
+// working unchanged once the export list catches up.
+type Payload<K extends keyof AgentEvent> = NonNullable<AgentEvent[K]>;
 
-/** Payload on a `provider_fallback` event — the loop switched providers after
- *  the picked one failed (e.g. the model was UNAVAILABLE). */
-export interface FallbackInfo {
-  failed_provider?: string;
-  failed_model?: string;
-  /** The next-in-queue the resolver picked. ABSENT when it found no
-   *  non-stalled candidate at all — the run fails next. */
-  new_provider?: string;
-  new_model?: string;
-  /** The error CLASS that triggered the switch ("retryable"). A stable wire
-   *  label, not a description of what went wrong. */
-  reason?: string;
-  /** Cumulative fallback counter: 1 for the first switch, 2 for the second. */
-  attempt?: number;
-  /** The provider's own error, truncated by the runtime to ~200 chars. This is
-   *  the operator-useful half — `reason` only names the class. */
-  cause_error?: string;
-}
+export type InterruptionInfo = Payload<"interruption">;
+export type FallbackInfo = Payload<"fallback">;
+export type LimitInfo = Payload<"limit">;
+export type OverrideInfo = Payload<"override">;
+export type DistillDeclinedInfo = Payload<"context_distill">;
+export type ContextExhaustedInfo = Payload<"context_exhausted">;
+export type ContextTierVerdict = NonNullable<ContextExhaustedInfo["verdicts"]>[number];
 
-/** Payload on a `limit` event (loomcycle RFC AW per-scope token budgets). A
- *  `soft` crossing warns and the run continues; a `hard` crossing means the
- *  budget is reached and the next run is blocked at admission. `message` is a
- *  ready-to-show banner; the rest lets a UI render "used of limit". Typed here
- *  (not in the pinned SDK's AgentEvent) since the SSE parser passes it through. */
-export interface LimitInfo {
-  scope?: string;
-  scope_id?: string;
-  severity?: string;
-  window?: string;
-  used?: number;
-  limit?: number;
-  message?: string;
-}
+/** A completed distillation. The two events differ only in what they call the
+ *  text they produced — `summary` for compaction, `recap` for recap — and
+ *  everything this UI renders (before/after/trigger) is common to both, so one
+ *  union serves both call sites. */
+export type DistillInfo = Payload<"context_compaction"> | Payload<"context_recap">;
 
-/** Payload on an `override` event (loomcycle RFC DC per-run overrides) — a run's
- *  own configuration changed mid-run because an operator retuned it.
- *
- *  It names what MOVED rather than what the settings now are, which is the
- *  useful half: "the configuration changed" answers nothing for someone trying
- *  to work out why the answers got different after turn 12. Declared here rather
- *  than imported because the SDK does not re-export it from the package entry
- *  (checked at 1.82.0), and declared with every field optional so it is
- *  assignable FROM the SDK's stricter shape. ChatEvent does NOT redeclare the
- *  `override` field: AgentEvent already carries it, and a second declaration
- *  intersects rather than replaces — which is what made `source` required. */
-export interface OverrideInfo {
-  /** Who changed it. "operator" today; present so a later automatic retune is
-   *  distinguishable rather than indistinguishable. Optional here where the SDK
-   *  makes it required, so this stays assignable FROM the SDK's shape and also
-   *  accepts an older runtime that omits it. */
-  source?: string;
-  /** "provider/model" before the change. Absent when routing did not move. */
-  from_model?: string;
-  /** "provider/model" after the change. */
-  to_model?: string;
-  /** The override keys the request actually set, so a budget or tuning change
-   *  that moved no model is still legible. */
-  fields?: string[];
-}
 
-/** Payload on a `context_compaction` or `context_recap` event — the runtime
- *  DISTILLED the working context: it replaced an evicted span of the
- *  conversation with a summary so the next prompt fits.
- *
- *  The two carry the same shape but for the summary's field name, so one type
- *  serves both. Declared here rather than imported for the same reason as
- *  FallbackInfo and LimitInfo: the SDK types only a subset of what the SSE
- *  parser passes through, and `context_recap` is not in its EventType union at
- *  all (checked at 1.83.0). */
-export interface DistillInfo {
-  /** The compaction summary. Present on `context_compaction`. */
-  summary?: string;
-  /** The running progress recap. Present on `context_recap`. */
-  recap?: string;
-  before_tokens?: number;
-  after_tokens?: number;
-  /** How many trailing messages were kept verbatim. */
-  keep_n?: number;
-  keep_first?: boolean;
-  /** "auto" when the runtime crossed its own threshold, "self" when the agent
-   *  asked, absent on an operator's manual compaction. */
-  trigger?: string;
-}
 
-/** Payload on a `context_distill_declined` event — the runtime CROSSED its
- *  distillation threshold and then did nothing.
- *
- *  This is the event whose absence made the original problem invisible: a
- *  conversation climbed to the top of its window while recap fired and declined
- *  every turn, leaving no marker and no error, so "it never tried" and "it tried
- *  and could not" looked identical.
- *
- *  Which numbers are the evidence depends on the reason, so they are populated
- *  per reason rather than always — `messages`/`keep_last_n` diagnose
- *  `split_declined`, `before_tokens`/`after_tokens` diagnose `not_smaller`. */
-export interface DistillDeclinedInfo {
-  /** Which path declined: "recap" or "compaction". They read DIFFERENT config
-   *  keys, so this decides which block an operator should edit. */
-  mode?: string;
-  /** "auto" (the threshold fired) or "self" (the agent asked). */
-  trigger?: string;
-  /** split_declined | empty_summary | summarize_failed | not_smaller |
-   *  reasoning_keep — and possibly one this build has not heard of. */
-  reason?: string;
-  /** The footprint that opened the gate. Declining at 40% is housekeeping;
-   *  declining at 99% is a run about to fail. */
-  used_tokens?: number;
-  window_tokens?: number;
-  messages?: number;
-  keep_last_n?: number;
-  before_tokens?: number;
-  after_tokens?: number;
-  /** "info" or "warning" — whether this path can still reclaim the window.
-   *  A `reasoning_keep` decline is the operator's own setting working as asked,
-   *  and reporting it as a warning cries wolf; `split_declined` at 90% is not.
-   *  Absent on a pre-1.85 runtime, where warn stays the safe default. */
-  severity?: string;
-  /** A line naming the condition and the fix. The runtime always populates it. */
-  message?: string;
-}
 
-/** One tier's answer inside a ContextExhaustedInfo. */
-export interface ContextTierVerdict {
-  /** "recap" | "compaction" | "stateful". */
-  mode?: string;
-  /** A decline reason, or "" when the tier was not reachable for this run. */
-  reason?: string;
-  message?: string;
-}
 
-/** Payload on `context_exhausted` (loomcycle 1.85.0).
- *
- *  DISTINCT from a decline, and the runtime is emphatic that the distinction is
- *  the point: a decline says "this path did nothing, here is why" — routine,
- *  sometimes correct. Exhaustion says the window is not being reclaimed at all
- *  and the run is heading for the provider's limit. */
-export interface ContextExhaustedInfo {
-  used_tokens?: number;
-  window_tokens?: number;
-  /** Precomputed by the runtime because a window of 0 makes the division a trap. */
-  used_pct?: number;
-  /** What each tier answered, in the order tried. */
-  verdicts?: ContextTierVerdict[];
-  message?: string;
-}
+
+
 
 export type ChatEvent = Omit<AgentEvent, "type"> & {
+  /** Widened deliberately. AgentEvent's EventType now names every type the
+   *  server emits, but it has twice lagged the wire this month — and a case
+   *  for a type the union does not yet carry must still COMPILE, or the only
+   *  way to render a new event is to cast out of the union, which is how
+   *  `context_exhausted` reached a terminal that had no case for it. */
   type: string;
-  /** Payload on `interruption_pending`. */
-  interruption?: InterruptionInfo;
-  /** Payload on `provider_fallback`. */
-  fallback?: FallbackInfo;
-  /** Payload on `limit` (token-budget crossing). */
-  limit?: LimitInfo;
-  /** Payload on `context_compaction` — the SDK's EventType names the type but
-   *  AgentEvent carries no field for it. */
-  context_compaction?: DistillInfo;
-  /** Payload on `context_recap` — not in the SDK's EventType union at all, but
-   *  the SSE parser passes unmodelled types through with their payloads. */
-  context_recap?: DistillInfo;
-  /** Payload on `context_distill_declined`. Note the field is `context_distill`
-   *  while the event type is `context_distill_declined` — they differ on the
-   *  wire, so this is not a typo to tidy. */
-  context_distill?: DistillDeclinedInfo;
-  /** Payload on `context_exhausted` — the window is not being reclaimed. */
-  context_exhausted?: ContextExhaustedInfo;
-  /** Accumulated reasoning trace, present on `done` for some providers. */
-  reasoning?: string;
 };
+
+
+// The describe* helpers below take Partial<> of their payload deliberately.
+// The SDK marks several fields required and is right to — Go emits them
+// without `omitempty`, so a CURRENT runtime always sends them. But these are
+// defensive renderers: they run against whatever actually arrives, including
+// from a runtime older than this build, and every one of them is written to
+// degrade to a shorter sentence rather than throw. Declaring the full type
+// would promise a guarantee the renderer does not rely on, and would force the
+// tests that prove the degradation to fabricate fields to get past the
+// compiler.
 
 /** A short human-readable description of a provider fallback for an inline
  *  notice ("ollama-local/gemma4 → deepseek/deepseek-v4-flash"). */
-export function describeFallback(f: FallbackInfo): string {
+export function describeFallback(f: Partial<FallbackInfo>): string {
   const from = [f.failed_provider, f.failed_model].filter(Boolean).join("/");
   const to = [f.new_provider, f.new_model].filter(Boolean).join("/");
   // The resolver may legitimately re-pick the SAME provider/model — a tier with
@@ -213,7 +82,7 @@ export function describeFallback(f: FallbackInfo): string {
 /** Banner for a token-budget crossing. Prefer the server's ready-made message;
  *  otherwise build one from the parts (so an older runtime that omits `message`
  *  still reads sensibly). */
-export function describeLimit(info: LimitInfo): string {
+export function describeLimit(info: Partial<LimitInfo>): string {
   if (info.message) return info.message;
   const sev = info.severity === "hard" ? "hard" : "soft";
   const scope = [info.scope, info.scope_id].filter(Boolean).join(" ") || "token";
@@ -264,7 +133,7 @@ export function shouldPostOverride(info: OverrideInfo): boolean {
   return info.fields.some((f) => !ROUTING_KEYS.has(f));
 }
 
-export function describeOverride(info: OverrideInfo): string {
+export function describeOverride(info: Partial<OverrideInfo>): string {
   const head =
     info.from_model && info.to_model
       ? `Model changed: ${info.from_model} → ${info.to_model}`
@@ -287,7 +156,7 @@ export function describeOverride(info: OverrideInfo): string {
  *  pressing the button — those look identical in a transcript otherwise, and
  *  "did it ever do this by itself?" is exactly the question that goes
  *  unanswered. */
-export function describeDistill(kind: "compaction" | "recap", d: DistillInfo): string {
+export function describeDistill(kind: "compaction" | "recap", d: Partial<DistillInfo>): string {
   const what = kind === "recap" ? "Context recapped" : "Context compacted";
   const by = d.trigger === "auto" ? " (automatic)" : d.trigger === "self" ? " (agent asked)" : "";
   const before = d.before_tokens;
@@ -310,7 +179,7 @@ export function describeDistill(kind: "compaction" | "recap", d: DistillInfo): s
  *  The fallback covers an older or newer runtime that sends a reason this build
  *  has not heard of. It must never collapse to a bare "declined": the whole
  *  point of the event is that the reason is the actionable part. */
-export function describeDistillDeclined(d: DistillDeclinedInfo): string {
+export function describeDistillDeclined(d: Partial<DistillDeclinedInfo>): string {
   const at =
     d.used_tokens && d.window_tokens
       ? ` at ${Math.round((d.used_tokens / d.window_tokens) * 100)}% of the window`
@@ -434,7 +303,7 @@ export function optionsToArray(options: unknown): string[] {
  *
  *  Only the fallback path composes anything, for a runtime that sends the
  *  numbers without a line. */
-export function describeContextExhausted(x: ContextExhaustedInfo): string {
+export function describeContextExhausted(x: Partial<ContextExhaustedInfo>): string {
   if (x.message) return capitalizeFirst(x.message);
 
   const pct =
