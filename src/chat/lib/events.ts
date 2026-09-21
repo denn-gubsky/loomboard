@@ -284,7 +284,13 @@ export function describeDistillDeclined(d: DistillDeclinedInfo): string {
       ? ` at ${Math.round((d.used_tokens / d.window_tokens) * 100)}% of the window`
       : "";
   const head = `Context ${d.mode === "recap" ? "recap" : "compaction"} declined${at}`;
-  if (d.message) return `${head}: ${d.message}`;
+  // The runtime builds `message` as "context <mode> declined: …" (loop.go's
+  // compactionSummaryDecline and its siblings), so prepending our head repeated
+  // that clause verbatim: "Context recap declined: context recap declined: …".
+  // Strip the runtime's prefix rather than dropping our head — ours is the one
+  // that can carry the "at N% of the window" urgency the runtime's text omits.
+  const body = d.message?.replace(/^\s*context\s+\w+\s+declined:\s*/i, "").trim();
+  if (body) return `${head}: ${body}`;
 
   switch (d.reason) {
     case "split_declined":

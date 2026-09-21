@@ -263,6 +263,42 @@ describe("describeDistillDeclined", () => {
     ).toBe("Context recap declined at 72% of the window: keep_last_n 6 pins all 7 messages — lower it");
   });
 
+  // Observed live: the transcript read "Context recap declined: context recap
+  // declined: the summarizer returned no text…". loop.go's
+  // compactionSummaryDecline builds `message` with its own
+  // "context <mode> declined: " opener, and we prepended a second one.
+  it("does not repeat the clause the runtime already wrote", () => {
+    const out = describeDistillDeclined({
+      mode: "recap",
+      reason: "empty_summary",
+      window_tokens: 33000,
+      message:
+        "context recap declined: the summarizer returned no text. A thinking model spends a " +
+        "small budget reasoning and emits nothing the summary accumulator collects — raise " +
+        "recap_max_chars, or choose an effort that stops the model thinking",
+    });
+    expect(out.match(/declined/gi)).toHaveLength(1);
+    expect(out).toContain("Context recap declined: the summarizer returned no text");
+  });
+
+  it("still keeps our own urgency prefix when the runtime prefixed its line", () => {
+    // Stripping the runtime's opener must not cost us the "at N%" it never carries.
+    expect(
+      describeDistillDeclined({
+        mode: "recap",
+        used_tokens: 25000,
+        window_tokens: 33000,
+        message: "context recap declined: the summarizer returned no text",
+      }),
+    ).toBe("Context recap declined at 76% of the window: the summarizer returned no text");
+  });
+
+  it("leaves an unprefixed runtime line exactly as written", () => {
+    expect(
+      describeDistillDeclined({ mode: "compaction", message: "the kept tail spans everything" }),
+    ).toBe("Context compaction declined: the kept tail spans everything");
+  });
+
   // Declining at 40% is housekeeping; declining at 99% is a run about to fail.
   it("says how urgent the decline is", () => {
     expect(describeDistillDeclined({ mode: "recap", used_tokens: 32352, window_tokens: 32768 }))
