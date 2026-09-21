@@ -4,6 +4,7 @@ import {
   describeEffective,
   effectiveFields,
   formatValue,
+  inertSettings,
   placeholderFor,
 } from "./effective";
 
@@ -106,5 +107,78 @@ describe("effectiveFields", () => {
   it("passes the report's fields through, keyed by wire name", () => {
     const fields = { max_tokens: ev(2048, "run") };
     expect(effectiveFields({ run_id: "r", agent: "a", fields })).toBe(fields);
+  });
+});
+
+describe("inertSettings", () => {
+  // Verbatim from truenas.local:8787 (v1.84.0) for a chat/local run — the
+  // payload that answers "autocompaction did not start", which loomboard was
+  // discarding. `inert` is NOT declared on EffectiveConfigResponse at 1.84.0,
+  // so the cast is the same shape the production narrow has to handle.
+  const live = {
+    run_id: "r_afccca23caf14587740be31c64c262e7",
+    agent: "chat/local",
+    fields: {},
+    inert: [
+      {
+        setting: "compaction.autocompact_at_pct",
+        reason:
+          'context.mode is "auto", and the compaction threshold is only consulted in append ' +
+          "mode — every other mode distils by its own path",
+        fix: "context.autorecap_at_pct",
+      },
+      {
+        setting: "compaction.memory_flush",
+        reason:
+          'context.mode is "auto", and that path banks evicted spans only when ' +
+          "context.harvest_to_memory is set",
+        fix: "context.harvest_to_memory",
+      },
+    ],
+  } as unknown as Parameters<typeof inertSettings>[0];
+
+  it("reads the advisories the SDK type does not declare", () => {
+    const got = inertSettings(live);
+    expect(got).toHaveLength(2);
+    expect(got[0].setting).toBe("compaction.autocompact_at_pct");
+    expect(got[0].fix).toBe("context.autorecap_at_pct");
+  });
+
+  it("relays the runtime's reason verbatim", () => {
+    // Rewriting it is how the declined-distillation notice ended up printing
+    // its own clause twice; the server knows which setting disables which.
+    expect(inertSettings(live)[0].reason).toBe(
+      'context.mode is "auto", and the compaction threshold is only consulted in append mode' +
+        " — every other mode distils by its own path",
+    );
+  });
+
+  it("is empty for an older runtime that does not report inert at all", () => {
+    expect(inertSettings({ run_id: "r", agent: "a", fields: {} })).toEqual([]);
+  });
+
+  it("is empty when there is no report — a chat with no live run", () => {
+    expect(inertSettings(null)).toEqual([]);
+  });
+
+  it("skips a row missing the two fields an advisory needs", () => {
+    // Better to say nothing than "undefined cannot take effect".
+    const odd = {
+      run_id: "r",
+      agent: "a",
+      fields: {},
+      inert: [{ setting: "x" }, { reason: "y" }, null, "nope", { setting: "ok", reason: "why" }],
+    } as unknown as Parameters<typeof inertSettings>[0];
+    expect(inertSettings(odd)).toEqual([{ setting: "ok", reason: "why" }]);
+  });
+
+  it("omits an empty fix rather than offering a blank alternative", () => {
+    const noFix = {
+      run_id: "r",
+      agent: "a",
+      fields: {},
+      inert: [{ setting: "s", reason: "r", fix: "" }],
+    } as unknown as Parameters<typeof inertSettings>[0];
+    expect(inertSettings(noFix)[0].fix).toBeUndefined();
   });
 });

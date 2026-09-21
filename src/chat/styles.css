@@ -1089,3 +1089,32 @@
   background: var(--danger);
   color: var(--on-accent);
 }
+
+/* Settings the run carries that cannot take effect (loomcycle's `inert`).
+   Advisory, not an error: nothing is broken, a knob simply has no reader in
+   this mode. Dimmed rather than red so it does not compete with a real
+   failure, but bordered so it is not mistaken for body copy. */
+.loomchat .config-inert {
+  margin: 0 0 0.7rem;
+  padding: 0.5em 0.7em;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn, #b8860b);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+.loomchat .config-inert__head {
+  margin: 0 0 0.35em;
+}
+.loomchat .config-inert__list {
+  margin: 0;
+  padding-left: 1.1em;
+}
+.loomchat .config-inert__list li + li {
+  margin-top: 0.35em;
+}
+.loomchat .config-inert code {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.95em;
+}
