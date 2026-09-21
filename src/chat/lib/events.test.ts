@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptResponse } from "@loomcycle/client";
-import { describeDistill, describeDistillDeclined, describeFallback, shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
+import { describeContextExhausted, describeDistill, describeDistillDeclined, describeFallback, shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
 
 describe("optionsToArray", () => {
   it("passes through a string array", () => {
@@ -325,5 +325,50 @@ describe("describeDistillDeclined", () => {
   it("passes an unknown reason through", () => {
     expect(describeDistillDeclined({ mode: "recap", reason: "some_new_reason" }))
       .toBe("Context recap declined: some_new_reason");
+  });
+});
+
+describe("describeContextExhausted", () => {
+  // Captured verbatim from truenas.local:8787 running v1.85.0 (f3c9d0c5), the
+  // run that finally made the gate fire: window 2048, footprint 19469.
+  const live = {
+    used_tokens: 19469,
+    window_tokens: 2048,
+    used_pct: 950,
+    verdicts: [
+      { mode: "recap", reason: "reasoning_keep", message: "context recap declined: …" },
+      { mode: "compaction", reason: "split_declined", message: "context compaction declined: …" },
+    ],
+    message:
+      'context not reclaimed: 950% of the window (19469/2048 tokens) is in use and ' +
+      "distillation did not shrink it — context recap declined: context.reasoning is " +
+      '"keep", which asks for no distillation',
+  };
+
+  it("relays the runtime's self-contained line, capitalized", () => {
+    // Deliberately NOT paraphrased: the declines are deduped once per run, so a
+    // reader arriving at 950% may never have seen them and must not have to
+    // scroll to find the fix. The runtime builds this line to stand alone.
+    const out = describeContextExhausted(live);
+    expect(out.startsWith("Context not reclaimed: 950% of the window")).toBe(true);
+    expect(out).toContain("19469/2048 tokens");
+    expect(out).toContain('context.reasoning is "keep"');
+  });
+
+  it("composes a line when a runtime sends the numbers without one", () => {
+    expect(describeContextExhausted({ ...live, message: undefined })).toBe(
+      "Context not reclaimed: 950% of the window (19k/2.0k tokens) is in use and " +
+        "distillation did not shrink it — recap: reasoning_keep; compaction: split_declined",
+    );
+  });
+
+  it("derives the percentage when the runtime did not precompute it", () => {
+    expect(
+      describeContextExhausted({ used_tokens: 3000, window_tokens: 2000, message: undefined }),
+    ).toContain("150% of the window");
+  });
+
+  it("says something useful with no numbers at all", () => {
+    expect(describeContextExhausted({})).toContain("Context not reclaimed");
   });
 });

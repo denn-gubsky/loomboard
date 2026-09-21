@@ -8,6 +8,7 @@ import {
 import {
   describeFallback,
   describeDistill,
+  describeContextExhausted,
   describeDistillDeclined,
   describeLimit,
   describeOverride,
@@ -403,15 +404,44 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
       // and could not" — which is how a conversation reached the top of its
       // window with the reason sitting unreported on the server the whole time.
       //
-      // Warn, not info: a distillation that declines at 99% is a run about to
-      // fail, and it is the one notice here the reader has to act on.
+      // The LEVEL comes from the runtime's own severity (1.85.0), the same way
+      // the `limit` event's does. A `reasoning_keep` decline is the operator's
+      // setting working exactly as asked — reporting that as a warning cries
+      // wolf, and a reader who learns to ignore these misses the one that
+      // matters. `split_declined` at 90% is a real warning. A pre-1.85 runtime
+      // sends no severity, and warn stays the safe default there.
+      //
+      // "The run is about to fail" is no longer this event's job: 1.85.0 has
+      // context_exhausted for exactly that, handled below.
       if (!ev.context_distill) return state;
       return {
         ...state,
         messages: postNotice(
           state.messages,
-          "warn",
+          ev.context_distill.severity === "info" ? "info" : "warn",
           describeDistillDeclined(ev.context_distill),
+        ),
+      };
+    }
+
+    case "context_exhausted": {
+      // 1.85.0. The window is at or above the threshold where distillation was
+      // supposed to reclaim it, and nothing did. The runtime draws a hard line
+      // between this and a decline — "a decline says this path did nothing and
+      // here is why, routine and sometimes correct; exhaustion says the run is
+      // heading for the provider's limit" — so rendering them at the same
+      // level would throw away the distinction it exists to make.
+      //
+      // Error, matching how `limit` treats its hard severity: it is the one
+      // notice in the transcript a reader must act on. The run has not
+      // necessarily failed yet, and the text says so rather than claiming it.
+      if (!ev.context_exhausted) return state;
+      return {
+        ...state,
+        messages: postNotice(
+          state.messages,
+          "error",
+          describeContextExhausted(ev.context_exhausted),
         ),
       };
     }
