@@ -495,9 +495,9 @@ describe("chatReducer — distillation declined", () => {
     );
   });
 
-  // The one notice here the reader has to act on: declining at 99% is a run
-  // about to fail, not housekeeping.
-  it("warns rather than informs", () => {
+  // A pre-1.85 runtime sends no severity. Warn is the safe default there —
+  // silence was the original defect, so the unknown case errs loud.
+  it("warns rather than informs when the runtime states no severity", () => {
     const s = run([
       ev("context_distill_declined", { context_distill: { mode: "recap", reason: "empty_summary" } }),
     ]);
@@ -508,6 +508,79 @@ describe("chatReducer — distillation declined", () => {
   it("ignores a frame with no payload", () => {
     const before = run([ev("text", { text: "hi" })]);
     const after = run([ev("text", { text: "hi" }), ev("context_distill_declined", {})]);
+    expect(after.messages).toEqual(before.messages);
+  });
+
+  // 1.85.0 grades its own declines. A reasoning_keep decline is the operator's
+  // setting doing exactly what they asked for; badging that as a warning
+  // teaches the reader to ignore the badge, and the next one matters.
+  it("takes the level from the runtime's severity", () => {
+    const info = run([
+      ev("context_distill_declined", {
+        context_distill: { mode: "recap", reason: "reasoning_keep", severity: "info" },
+      }),
+    ]);
+    expect(assistant(info, 0).parts.find((p) => p.type === "notice")).toMatchObject({
+      level: "info",
+    });
+
+    const warning = run([
+      ev("context_distill_declined", {
+        context_distill: { mode: "compaction", reason: "split_declined", severity: "warning" },
+      }),
+    ]);
+    expect(assistant(warning, 0).parts.find((p) => p.type === "notice")).toMatchObject({
+      level: "warn",
+    });
+  });
+});
+
+describe("chatReducer — context_exhausted (loomcycle 1.85.0)", () => {
+  // Captured from truenas.local:8787 on v1.85.0. Distinct from a decline by the
+  // runtime's own insistence: a decline is routine and sometimes correct, this
+  // says the window is not being reclaimed and the run is heading for the
+  // provider's limit. Falling through `default:` made it invisible.
+  const payload = {
+    used_tokens: 19469,
+    window_tokens: 2048,
+    used_pct: 950,
+    verdicts: [
+      { mode: "recap", reason: "reasoning_keep" },
+      { mode: "compaction", reason: "split_declined" },
+    ],
+    message:
+      "context not reclaimed: 950% of the window (19469/2048 tokens) is in use and " +
+      "distillation did not shrink it",
+  };
+
+  it("posts the runtime's line", () => {
+    const s = run([ev("context_exhausted", { context_exhausted: payload })]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toBe(
+      "Context not reclaimed: 950% of the window (19469/2048 tokens) is in use and " +
+        "distillation did not shrink it",
+    );
+  });
+
+  it("outranks a decline — this is the one the reader must act on", () => {
+    const s = run([ev("context_exhausted", { context_exhausted: payload })]);
+    expect(assistant(s, 0).parts.find((p) => p.type === "notice")).toMatchObject({
+      level: "error",
+    });
+  });
+
+  it("joins an open turn rather than standing alone mid-stream", () => {
+    const s = run([
+      ev("text", { text: "answer" }),
+      ev("context_exhausted", { context_exhausted: payload }),
+    ]);
+    expect(s.messages).toHaveLength(1);
+    expect(assistant(s, 0).parts.some((p) => p.type === "notice")).toBe(true);
+  });
+
+  it("ignores a frame with no payload", () => {
+    const before = run([ev("text", { text: "hi" })]);
+    const after = run([ev("text", { text: "hi" }), ev("context_exhausted", {})]);
     expect(after.messages).toEqual(before.messages);
   });
 });

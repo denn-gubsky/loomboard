@@ -130,7 +130,37 @@ export interface DistillDeclinedInfo {
   keep_last_n?: number;
   before_tokens?: number;
   after_tokens?: number;
+  /** "info" or "warning" — whether this path can still reclaim the window.
+   *  A `reasoning_keep` decline is the operator's own setting working as asked,
+   *  and reporting it as a warning cries wolf; `split_declined` at 90% is not.
+   *  Absent on a pre-1.85 runtime, where warn stays the safe default. */
+  severity?: string;
   /** A line naming the condition and the fix. The runtime always populates it. */
+  message?: string;
+}
+
+/** One tier's answer inside a ContextExhaustedInfo. */
+export interface ContextTierVerdict {
+  /** "recap" | "compaction" | "stateful". */
+  mode?: string;
+  /** A decline reason, or "" when the tier was not reachable for this run. */
+  reason?: string;
+  message?: string;
+}
+
+/** Payload on `context_exhausted` (loomcycle 1.85.0).
+ *
+ *  DISTINCT from a decline, and the runtime is emphatic that the distinction is
+ *  the point: a decline says "this path did nothing, here is why" — routine,
+ *  sometimes correct. Exhaustion says the window is not being reclaimed at all
+ *  and the run is heading for the provider's limit. */
+export interface ContextExhaustedInfo {
+  used_tokens?: number;
+  window_tokens?: number;
+  /** Precomputed by the runtime because a window of 0 makes the division a trap. */
+  used_pct?: number;
+  /** What each tier answered, in the order tried. */
+  verdicts?: ContextTierVerdict[];
   message?: string;
 }
 
@@ -152,6 +182,8 @@ export type ChatEvent = Omit<AgentEvent, "type"> & {
    *  while the event type is `context_distill_declined` — they differ on the
    *  wire, so this is not a typo to tidy. */
   context_distill?: DistillDeclinedInfo;
+  /** Payload on `context_exhausted` — the window is not being reclaimed. */
+  context_exhausted?: ContextExhaustedInfo;
   /** Accumulated reasoning trace, present on `done` for some providers. */
   reasoning?: string;
 };
@@ -389,4 +421,40 @@ export function optionsToArray(options: unknown): string[] {
     }
   }
   return [];
+}
+
+/** The exhaustion line for the transcript.
+ *
+ *  The runtime's `message` is relayed VERBATIM when present, and deliberately
+ *  so: it is built self-contained, carrying every tier's own wording because
+ *  "the exhaustion report does not paraphrase away the fix it named". That
+ *  repeats what the individual decline notices said, which is the right
+ *  trade — the declines are deduped once per run, so a reader arriving at 950%
+ *  may never have seen them, and must not have to scroll to learn the fix.
+ *
+ *  Only the fallback path composes anything, for a runtime that sends the
+ *  numbers without a line. */
+export function describeContextExhausted(x: ContextExhaustedInfo): string {
+  if (x.message) return capitalizeFirst(x.message);
+
+  const pct =
+    typeof x.used_pct === "number"
+      ? `${x.used_pct}% of the window`
+      : x.used_tokens && x.window_tokens
+        ? `${Math.round((x.used_tokens / x.window_tokens) * 100)}% of the window`
+        : "the window";
+  const size =
+    x.used_tokens && x.window_tokens
+      ? ` (${formatCount(x.used_tokens)}/${formatCount(x.window_tokens)} tokens)`
+      : "";
+  const tiers = (x.verdicts ?? [])
+    .map((v) => (v.mode && v.reason ? `${v.mode}: ${v.reason}` : v.mode))
+    .filter(Boolean)
+    .join("; ");
+  const why = tiers ? ` — ${tiers}` : "";
+  return `Context not reclaimed: ${pct}${size} is in use and distillation did not shrink it${why}`;
+}
+
+function capitalizeFirst(t: string): string {
+  return t ? t[0].toUpperCase() + t.slice(1) : t;
 }
