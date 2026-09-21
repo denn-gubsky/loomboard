@@ -113,3 +113,48 @@ describe("OverridesPanel", () => {
     expect(screen.getByText("Next run only")).toBeTruthy();
   });
 });
+
+describe("OverridesPanel — inert advisories (RFC B B6)", () => {
+  const inert = [
+    {
+      setting: "compaction.autocompact_at_pct",
+      reason:
+        'context.mode is "auto", and the compaction threshold is only consulted in append mode',
+      fix: "context.autorecap_at_pct",
+    },
+  ];
+
+  // The question this answers is a real one an operator asked after watching a
+  // chat climb to 90%: "autocompaction did not start". The runtime knew why and
+  // said so on effective-config; the panel was dropping it.
+  it("names the dead setting, the reason and the live knob", () => {
+    render(<OverridesPanel config={{}} inert={inert} onChange={() => undefined} />);
+    expect(screen.getByText(/cannot take effect/i)).toBeTruthy();
+    expect(screen.getByText("compaction.autocompact_at_pct")).toBeTruthy();
+    expect(screen.getByText(/only consulted in append mode/)).toBeTruthy();
+    expect(screen.getByText("context.autorecap_at_pct")).toBeTruthy();
+  });
+
+  it("says nothing when nothing is inert", () => {
+    const { container } = render(
+      <OverridesPanel config={{}} inert={[]} onChange={() => undefined} />,
+    );
+    expect(container.textContent).not.toMatch(/cannot take effect/i);
+  });
+
+  it("says nothing when the runtime is too old to report it", () => {
+    const { container } = render(<OverridesPanel config={{}} onChange={() => undefined} />);
+    expect(container.textContent).not.toMatch(/cannot take effect/i);
+  });
+
+  it("counts correctly when more than one setting is dead", () => {
+    render(
+      <OverridesPanel
+        config={{}}
+        inert={[...inert, { setting: "compaction.memory_flush", reason: "banks only when set" }]}
+        onChange={() => undefined}
+      />,
+    );
+    expect(screen.getByText(/2 settings on this run cannot take effect/)).toBeTruthy();
+  });
+});

@@ -3,6 +3,7 @@ import { FoldedFieldList, type DefValue } from "@loomcycle/def-fields";
 import type { EffectiveValue, LibraryAgentDefinition } from "@loomcycle/client";
 import type { ConversationOverrides } from "../types";
 import { THIS_CHAT, buildOverrideRegistry } from "../lib/overrideRegistry";
+import type { InertSetting } from "../lib/effective";
 
 // The chat's per-run overrides editor.
 //
@@ -20,6 +21,7 @@ export default function OverridesPanel({
   config,
   baseDef,
   effective,
+  inert,
   legacyFork,
   disabled,
   onChange,
@@ -32,6 +34,9 @@ export default function OverridesPanel({
    *  it. Empty for a chat with no run yet — the panel then speaks only for what
    *  the agent's definition declares. */
   effective?: Readonly<Record<string, EffectiveValue>>;
+  /** Settings this run carries that cannot take effect (loomcycle's `inert`).
+   *  Relayed verbatim — see lib/effective. */
+  inert?: readonly InertSetting[];
   /** Set when this conversation predates per-run overrides and still runs on a
    *  forked AgentDef. */
   legacyFork?: string;
@@ -54,6 +59,37 @@ export default function OverridesPanel({
           older version. Per-run overrides cannot reach it — start a new chat to use
           them.
         </p>
+      )}
+      {inert && inert.length > 0 && (
+        // The runtime is the only party that can know these: `auto` resolves to
+        // a concrete mode from the provider and whether the run is interactive,
+        // and only then is it decidable that a threshold below is dead. Shown
+        // ABOVE the fields because it is about fields in the list below — an
+        // operator who reads it after setting the dead knob has read it late.
+        //
+        // `reason` and `fix` are rendered VERBATIM. Restating a server that
+        // knows more than we do is how the declined-distillation notice ended
+        // up printing its own clause twice.
+        <div className="config-inert" role="note">
+          <p className="config-inert__head">
+            {inert.length === 1
+              ? "One setting on this run cannot take effect:"
+              : `${inert.length} settings on this run cannot take effect:`}
+          </p>
+          <ul className="config-inert__list">
+            {inert.map((i) => (
+              <li key={i.setting}>
+                <code>{i.setting}</code> — {i.reason}
+                {i.fix && (
+                  <>
+                    {" "}
+                    Use <code>{i.fix}</code> instead.
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       <FoldedFieldList
         registry={registry}

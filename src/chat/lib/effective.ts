@@ -75,3 +75,51 @@ export function effectiveFields(
 ): Record<string, EffectiveValue> {
   return report?.fields ?? {};
 }
+
+/** A setting this run carries that CANNOT take effect — loomcycle's `inert`
+ *  array on the effective-config report (RFC B §B6).
+ *
+ *  Shaped by the runtime, relayed VERBATIM. The reason names the other setting
+ *  that disables this one, and `fix` names the knob that does work; rewriting
+ *  either here would put us back where `describeDistillDeclined` was, restating
+ *  a server that knows more than we do. */
+export interface InertSetting {
+  /** The yaml path, e.g. "compaction.autocompact_at_pct". */
+  setting: string;
+  /** Why it cannot take effect, in terms of the setting that disables it. */
+  reason: string;
+  /** The setting that DOES work for what the operator was trying to do. */
+  fix?: string;
+}
+
+/** The inert advisories from the report, or [] when there are none.
+ *
+ *  Read off an UNDECLARED field: loomcycle has returned `inert` on
+ *  effective-config since RFC B §B6, but @loomcycle/client's
+ *  EffectiveConfigResponse still doesn't declare it (checked at 1.84.0) — it
+ *  only mentions it in a ContextOptions doc comment. Hence the narrow rather
+ *  than a property access; drop it once the SDK type catches up.
+ *
+ *  The runtime sends `[]` rather than omitting the key precisely so a consumer
+ *  can tell "nothing inert" from "this server is too old to report it". We
+ *  cannot preserve that distinction through this signature and do not need to:
+ *  both render nothing. */
+export function inertSettings(report: EffectiveConfigResponse | null): InertSetting[] {
+  const raw = (report as { inert?: unknown } | null)?.inert;
+  if (!Array.isArray(raw)) return [];
+  const out: InertSetting[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    // Both are required for the advisory to say anything useful; a row missing
+    // either is a runtime we do not understand, so skip it rather than render
+    // "undefined cannot take effect".
+    if (typeof o.setting !== "string" || typeof o.reason !== "string") continue;
+    out.push({
+      setting: o.setting,
+      reason: o.reason,
+      ...(typeof o.fix === "string" && o.fix ? { fix: o.fix } : {}),
+    });
+  }
+  return out;
+}

@@ -6,7 +6,7 @@ import type { UserMessage } from "./lib/eventReducer";
 import { useAgents } from "./hooks/useAgents";
 import { useChat } from "./hooks/useChat";
 import { useEffectiveConfig } from "./hooks/useEffectiveConfig";
-import { effectiveFields } from "./lib/effective";
+import { effectiveFields, inertSettings } from "./lib/effective";
 import { estimateConversationTokens } from "./lib/metrics";
 import AgentPicker from "./components/AgentPicker";
 import OverridesPanel from "./components/OverridesPanel";
@@ -94,6 +94,7 @@ export default function Chat({
     chat.state.messages.length,
   );
   const effective = useMemo(() => effectiveFields(effectiveReport), [effectiveReport]);
+  const inert = useMemo(() => inertSettings(effectiveReport), [effectiveReport]);
 
   // Esc stops the current operation, like Claude Code — a live turn or a run
   // parked on a question — via RFC BH turn-cancel: the chat stays alive to
@@ -189,6 +190,7 @@ export default function Chat({
           config={conversation.config}
           baseDef={baseDef}
           effective={effective}
+          inert={inert}
           legacyFork={conversation.forkDefName}
           onChange={(next) => onConversationChange({ config: next })}
         />
