@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EffectiveValue } from "@loomcycle/client";
+import type { EffectiveConfigResponse, EffectiveValue } from "@loomcycle/client";
 import {
   describeEffective,
   effectiveFields,
@@ -106,7 +106,7 @@ describe("effectiveFields", () => {
 
   it("passes the report's fields through, keyed by wire name", () => {
     const fields = { max_tokens: ev(2048, "run") };
-    expect(effectiveFields({ run_id: "r", agent: "a", fields })).toBe(fields);
+    expect(effectiveFields({ run_id: "r", agent: "a", inert: [], fields })).toBe(fields);
   });
 });
 
@@ -154,7 +154,14 @@ describe("inertSettings", () => {
   });
 
   it("is empty for an older runtime that does not report inert at all", () => {
-    expect(inertSettings({ run_id: "r", agent: "a", fields: {} })).toEqual([]);
+    // The cast is the POINT, not a convenience: client 1.86.0 types `inert` as
+    // required, so the compiler cannot express a response that omits it — yet
+    // a runtime older than the type does exactly that, and this build still
+    // talks to those. Writing `inert: []` here to satisfy the compiler would
+    // silently convert this into a duplicate of the empty-array case above and
+    // delete the only coverage of the omitted one.
+    const older = { run_id: "r", agent: "a", fields: {} } as unknown as EffectiveConfigResponse;
+    expect(inertSettings(older)).toEqual([]);
   });
 
   it("is empty when there is no report — a chat with no live run", () => {
