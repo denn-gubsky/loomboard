@@ -132,6 +132,14 @@ export interface WorkflowDataLayer {
     input?: string;
   }): Promise<DetachedRun>;
 
+  /** Stop a live walk — running or parked — by its run id (RFC CZ C16).
+   *
+   *  `stopped: false` means the runtime found nothing in flight to stop: the
+   *  walk had already ended. Hosts must let a refusal through rather than
+   *  reporting success — an older runtime (before loomcycle #1341) answers a
+   *  walk's cancel with 409, and the canvas has to say the walk is still going. */
+  cancelWalk?(runId: string, reason: string): Promise<{ stopped: boolean }>;
+
   /** Declared channels, for the publish composer's pre-flight (C7). */
   listChannels?(): Promise<ChannelInfo[]>;
 

@@ -284,16 +284,49 @@ describe("WorkflowCanvas — the mode scaffold (RFC CZ P2 / C5)", () => {
     expect(screen.getByText("Running")).toBeTruthy();
   });
 
-  it("offers Abort but disabled, with the reason the runtime cannot stop a walk", async () => {
-    // Verified against loomcycle f08068b7: run-cancel is interactive-only
-    // (409) and the agents route rejects the walk's `team:<name>` agent id
-    // (400). A live button would simply error, so it is shown-and-disabled
-    // with the explanation — "why can't I stop this" is the real question.
+  it("offers Abort disabled, with a reason, when the host cannot cancel", async () => {
+    // "Why can't I stop this" is the real question, so the button stays.
     render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
     fireEvent.click(await screen.findByRole("button", { name: "Run" }));
     const abortBtn = await screen.findByRole("button", { name: "Abort" });
     expect((abortBtn as HTMLButtonElement).disabled).toBe(true);
-    expect(abortBtn.getAttribute("title")).toMatch(/not paused/i);
+    expect(abortBtn.getAttribute("title")).toMatch(/no way to stop/i);
+  });
+
+  it("stops a RUNNING walk through the runtime, then lands in Stopped", async () => {
+    // RFC CZ C16 / loomcycle #1341. The cancel is addressed to the run id the
+    // detached start returned.
+    const cancelWalk = vi.fn(async (_runId: string, _reason: string) => ({ stopped: true }));
+    render(<WorkflowCanvas dataLayer={layer({ cancelWalk })} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abort" }));
+    await waitFor(() => expect(cancelWalk).toHaveBeenCalled());
+    expect(cancelWalk.mock.calls[0][0]).toBe("r_abc");
+    expect(await screen.findByText("Run aborted")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to Edit" })).toBeTruthy();
+  });
+
+  it("keeps the walk live when the cancel fails, rather than claiming it stopped", async () => {
+    // The regression this guards: Abort used to end the session LOCALLY and
+    // call nothing, so the canvas said "aborted" over a walk still running.
+    const cancelWalk = vi.fn(async (_runId: string, _reason: string): Promise<{ stopped: boolean }> => {
+      throw new Error("409 not_interactive");
+    });
+    render(<WorkflowCanvas dataLayer={layer({ cancelWalk })} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abort" }));
+    expect(await screen.findByText(/still running: 409 not_interactive/)).toBeTruthy();
+    expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Back to Edit" })).toBeNull();
+  });
+
+  it("says so when the walk had already ended before the cancel arrived", async () => {
+    const cancelWalk = vi.fn(async (_runId: string, _reason: string) => ({ stopped: false }));
+    render(<WorkflowCanvas dataLayer={layer({ cancelWalk })} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abort" }));
+    expect(await screen.findByText("Ended (outcome not reported)")).toBeTruthy();
+    expect(screen.getByText(/nothing was stopped/)).toBeTruthy();
   });
 
   it("does not offer Back to Edit while the walk is live", async () => {
