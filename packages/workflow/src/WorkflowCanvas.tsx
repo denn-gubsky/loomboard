@@ -13,7 +13,7 @@ import { PublishComposer } from "./PublishComposer";
 import { Palette } from "./Palette";
 import { newStateRaw, type PaletteEntry } from "./lib/palette";
 import { autoLayout, needsAutoLayout } from "./lib/layout";
-import { edgeId, toDataEdges, toFlowEdges, toFlowNodes } from "./lib/flow";
+import { edgeId, mergeMeasured, toDataEdges, toFlowEdges, toFlowNodes } from "./lib/flow";
 import {
   fromDefinition,
   patchHandler,
@@ -24,6 +24,7 @@ import {
   type TeamChannels,
 } from "./lib/model";
 import { canSave, validateModel } from "./lib/validate";
+import { aclFindings } from "./lib/channels";
 import {
   INITIAL as SESSION_INITIAL,
   abortAvailability,
@@ -131,6 +132,9 @@ function WorkflowCanvasInner({
   const [channels, setChannels] = useState<ChannelInfo[]>();
   const [activeDefId, setActiveDefId] = useState<string>();
   const [composing, setComposing] = useState(false);
+  // What xyflow measured, fed back in so the MiniMap has dimensions to draw.
+  // Presentation-only: it never reaches the definition.
+  const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
 
   // The channel the ENTRY state reads — the workflow's front door (C7). Only a
   // Starter has one; every other entry kind is run through the Run button.
@@ -154,10 +158,17 @@ function WorkflowCanvasInner({
     };
   }, [dataLayer, entryChannel]);
 
-  const findings = useMemo(() => (model ? validateModel(model) : []), [model]);
+  // The graph's own rules PLUS the team ACL. They come from different places
+  // on the runtime — validateModel mirrors teamgraph.Validate, while the ACL
+  // check lives in the TeamDef tool's create/fork preflight — but both refuse a
+  // save, so the operator sees one list.
+  const findings = useMemo(
+    () => (model ? [...validateModel(model), ...aclFindings(model)] : []),
+    [model],
+  );
   const flowNodes = useMemo(
-    () => (model ? toFlowNodes(model, findings, selectedId) : []),
-    [model, findings, selectedId],
+    () => (model ? toFlowNodes(model, findings, selectedId, measured) : []),
+    [model, findings, selectedId, measured],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
@@ -176,6 +187,18 @@ function WorkflowCanvasInner({
   // ---- graph edits ----
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      // Dimensions first, and OUTSIDE the editable gate: a read-only canvas
+      // still needs a minimap, and measuring is not an edit.
+      const sized: Record<string, { width: number; height: number }> = {};
+      for (const c of changes) {
+        if (c.type === "dimensions" && c.dimensions) sized[c.id] = c.dimensions;
+      }
+      if (Object.keys(sized).length) {
+        // Same object back when nothing changed — see mergeMeasured; a fresh
+        // object every time would loop through xyflow's re-measure.
+        setMeasured((prev) => mergeMeasured(prev, sized));
+      }
+
       if (!editable) return;
       setModel((m) => {
         if (!m) return m;
