@@ -453,7 +453,33 @@ function WorkflowCanvasInner({
     setStatus(undefined);
   }, []);
 
-  const abort = abortAvailability(session);
+  const abort = abortAvailability(session, !!dataLayer.cancelWalk);
+
+  // The session ends only on the runtime's answer. Ending it locally first
+  // would show "aborted" over a walk that is still spending tokens whenever
+  // the cancel fails — an older runtime 409s it.
+  const abortWalk = useCallback(async () => {
+    const runId = session.runId;
+    if (!dataLayer.cancelWalk || !runId || !isLive(session)) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const { stopped } = await dataLayer.cancelWalk(runId, "aborted from the team canvas");
+      if (stopped) {
+        dispatchSession({ t: "ended", status: "aborted" });
+        setStatus(`Aborted ${runId}.`);
+      } else {
+        // Nothing in flight: it ended on its own before the cancel arrived,
+        // and this surface did not see how.
+        dispatchSession({ t: "ended", status: "unknown" });
+        setStatus(`${runId} had already ended; nothing was stopped.`);
+      }
+    } catch (e) {
+      setError(`Could not stop the walk — it is still running: ${msg(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [dataLayer, session]);
 
   const errorCount = findings.filter((f) => f.level === "error").length;
   const saveable = !!model && canSave(findings) && !busy;
@@ -493,13 +519,13 @@ function WorkflowCanvasInner({
 
         {isLive(session) &&
           (abort.available ? (
-            <button className="lb-wf-btn" onClick={() => dispatchSession({ t: "ended", status: "aborted" })}>
+            <button className="lb-wf-btn" onClick={abortWalk} disabled={busy}>
               Abort
             </button>
           ) : (
             // Shown-and-disabled rather than hidden: "why can I not stop this"
             // is the question an operator will actually have, and the tooltip
-            // is the answer. See abortAvailability for the verified reason.
+            // is the answer.
             <button className="lb-wf-btn" disabled title={abort.reason}>
               Abort
             </button>

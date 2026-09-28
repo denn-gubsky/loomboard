@@ -123,8 +123,9 @@ describe("the session machine — Run ⇄ Debug", () => {
   });
 
   it("keeps the armed set canonical and sorted", () => {
-    const s = reduce(started(), { t: "armed", armed: ["b:after_collection", "a:before_dispatch"] });
-    expect(s.armed).toEqual(["a:before_dispatch", "b:after_collection"]);
+    // The two phases a walk can arm since RFC DJ removed after_collection.
+    const s = reduce(started(), { t: "armed", armed: ["b:review", "a:before_dispatch"] });
+    expect(s.armed).toEqual(["a:before_dispatch", "b:review"]);
   });
 
   it("does not change mode by arming before anything has started", () => {
@@ -169,27 +170,28 @@ describe("the session machine — ending", () => {
   });
 });
 
-describe("abort availability — honest about what the runtime can do", () => {
-  it("is available while parked, which is the path that actually works", () => {
-    const parked = run({ t: "start", runId: "r", debug: true }, { t: "parked" });
-    expect(abortAvailability(parked)).toEqual({ available: true });
+describe("abort availability (RFC CZ C16)", () => {
+  it("is available on a RUNNING walk, not only a parked one", () => {
+    // loomcycle #1341: cancelling the walk's run id stops it outright. Before
+    // that only a pause's own `abort` answer reached it, and this was false.
+    expect(abortAvailability(started(), true)).toEqual({ available: true });
   });
 
-  it("is NOT available on a running walk, and says why", () => {
-    // Verified against loomcycle f08068b7: run-cancel is cancelTurn and 409s
-    // `not_interactive`; the agents route 400s because a walk's agent id is
-    // `team:<name>` and validIdent rejects the colon. A button here would
-    // simply error, so it is withheld with a reason instead.
-    const a = abortAvailability(started());
+  it("is available while parked", () => {
+    const parked = run({ t: "start", runId: "r", debug: true }, { t: "parked" });
+    expect(abortAvailability(parked, true)).toEqual({ available: true });
+  });
+
+  it("is withheld, with a reason, when the host wires no cancel", () => {
+    const a = abortAvailability(started(), false);
     expect(a.available).toBe(false);
-    if (!a.available) {
-      expect(a.reason).toMatch(/not paused/i);
-      expect(a.reason).toMatch(/breakpoint/i);
-    }
+    if (!a.available) expect(a.reason).toMatch(/no way to stop/i);
   });
 
   it("is not available when nothing is running", () => {
-    expect(abortAvailability(INITIAL).available).toBe(false);
+    expect(abortAvailability(INITIAL, true).available).toBe(false);
+    const ended = run({ t: "start", runId: "r", debug: false }, { t: "ended", status: "completed" });
+    expect(abortAvailability(ended, true).available).toBe(false);
   });
 });
 
@@ -204,6 +206,10 @@ describe("statusLabel", () => {
     [
       run({ t: "start", runId: "r", debug: false }, { t: "ended", status: "capped" }),
       "Hit the iteration cap",
+    ],
+    [
+      run({ t: "start", runId: "r", debug: false }, { t: "ended", status: "unknown" }),
+      "Ended (outcome not reported)",
     ],
   ])("describes the session", (state, label) => {
     expect(statusLabel(state as SessionState)).toBe(label);

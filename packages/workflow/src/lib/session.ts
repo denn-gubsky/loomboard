@@ -19,7 +19,9 @@ export type SessionMode = "edit" | "run" | "debug";
  *  aborted or capped, with the trace still on screen to read. */
 export type WalkPhase = "idle" | "running" | "parked" | "ended";
 
-export type EndStatus = "completed" | "aborted" | "failed" | "capped";
+/** `unknown` is a walk the canvas tried to stop and the runtime reported as no
+ *  longer in flight: it ended, but nothing on this surface saw how. */
+export type EndStatus = "completed" | "aborted" | "failed" | "capped" | "unknown";
 
 export interface SessionState {
   mode: SessionMode;
@@ -115,37 +117,26 @@ export function canStart(s: SessionState): boolean {
 
 export type Availability = { available: true } | { available: false; reason: string };
 
-/** Whether this walk can be ABORTED, and if not, why not.
+/** Whether this walk can be ABORTED, and if not, why not (RFC CZ C16).
  *
- *  C5 says abort is always available. Verified against loomcycle at
- *  `f08068b7`, it is not — and shipping a button that errors would be worse
- *  than saying so:
+ *  A live walk — running OR parked at a breakpoint — is stopped by cancelling
+ *  its run: loomcycle #1341 registers the walk's context by run id, so
+ *  `POST /v1/runs/{run_id}/cancel` ends the walk and every run it spawned.
+ *  Before #1341 that route 409'd for a walk and abort worked only through a
+ *  pause's own `abort` answer; the one cancel covers both phases now.
  *
- *    POST /v1/runs/{run_id}/cancel   → 409 not_interactive. It is cancelTurn,
- *                                      the interactive "Esc"; it refuses a
- *                                      walk and points at the agents route.
- *    POST /v1/agents/{id}/cancel     → 400. A walk's run is filed under the
- *                                      synthetic agent `team:<name>`, and the
- *                                      handler's validIdent allows only
- *                                      [A-Za-z0-9_-] — the colon fails. Even
- *                                      if it passed it names the TEAM, not
- *                                      this walk.
- *
- *  What does work is the breakpoint's own `abort` answer, which is why abort
- *  is offered exactly while parked. Reported upstream; when a run-scoped
- *  cancel lands, this function is the single place that changes. */
-export function abortAvailability(s: SessionState): Availability {
-  if (s.phase === "parked") return { available: true };
-  if (s.phase === "running") {
+ *  `hostCanCancel` is whether the host wired the cancel at all. Without it the
+ *  button is still shown, disabled with this reason, because "why can I not
+ *  stop this" is the question an operator will actually have. */
+export function abortAvailability(s: SessionState, hostCanCancel: boolean): Availability {
+  if (!isLive(s)) return { available: false, reason: "No walk is running." };
+  if (!hostCanCancel) {
     return {
       available: false,
-      reason:
-        "This runtime has no way to stop a team walk that is not paused — " +
-        "run-cancel is interactive-only, and the walk's agent id is not addressable. " +
-        "Arm a breakpoint to regain control, or let it finish.",
+      reason: "This host provides no way to stop a walk. Let it finish, or stop it from the runtime.",
     };
   }
-  return { available: false, reason: "No walk is running." };
+  return { available: true };
 }
 
 /** A one-line description of where the session is, for the toolbar. */
@@ -154,7 +145,10 @@ export function statusLabel(s: SessionState): string {
   if (s.phase === "parked") return "Paused at a breakpoint";
   if (s.phase === "ended") {
     const st = s.ended?.status ?? "completed";
-    return st === "completed" ? "Finished" : st === "capped" ? "Hit the iteration cap" : `Run ${st}`;
+    if (st === "completed") return "Finished";
+    if (st === "capped") return "Hit the iteration cap";
+    if (st === "unknown") return "Ended (outcome not reported)";
+    return `Run ${st}`;
   }
   return "Editing";
 }

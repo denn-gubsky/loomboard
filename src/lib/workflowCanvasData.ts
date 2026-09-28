@@ -79,6 +79,14 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
     runTeamDetached: async (target): Promise<DetachedRun> =>
       client.runTeam({ ...target, mode: "detach" }),
 
+    // A walk's run has no turns, so cancelTurn ENDS it and every run it
+    // spawned (loomcycle #1341). Not caught: a 409 from an older runtime must
+    // reach the canvas, which keeps the walk live and says why.
+    async cancelWalk(runId, reason) {
+      const { stopped } = await client.cancelTurn(runId, { reason });
+      return { stopped };
+    },
+
     async listChannels(): Promise<ChannelInfo[]> {
       const { channels } = await client.listChannels();
       return (channels ?? []).map((c) => ({

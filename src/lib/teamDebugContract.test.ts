@@ -24,11 +24,22 @@ describe("RFC CZ team-debug contract — @loomcycle/client", () => {
     // C6: arm a walk that is ALREADY running — the ad-hoc Run → Debug switch.
     ["setRunBreakpoints", "arm/replace the armed set on a live run"],
     ["getRunBreakpoints", "read back the canonical armed set"],
-    // The pause is an Interruption question; these read and answer it.
+    // The before_dispatch pause is an Interruption question; these read and
+    // answer it. Since RFC DJ removed after_collection, release:<n> counts
+    // dispatches only. A code-js hook's ask is answered the same way.
     ["listRunInterrupts", "read the pause, with each composed prompt"],
-    ["resolveInterrupt", "continue | release:<n> | abort"],
+    ["resolveInterrupt", "continue | release:<n> | abort — before_dispatch only"],
     // P1's live miniatures fold this stream.
     ["streamUserRunStates", "live run states"],
+    // C16: a walk's run has no turns, so this ENDS it (loomcycle #1341).
+    ["cancelTurn", "stop a live walk by its run id"],
+    // C13: a member run is read from the Run itself (RFC DI).
+    ["getAgent", "a run's result and spec"],
+    ["getRunPrompt", "the exact prompt a run was sent"],
+    // C14: the verdict on a member held for review (RFC DJ).
+    ["reviewRun", "approve | reject with feedback | reject"],
+    // C15: HookDef names for the hooks editor (RFC DK).
+    ["hookDef", "HookDef substrate operations"],
   ])("exposes %s — %s", (method) => {
     expect(typeof surface[method]).toBe("function");
   });
