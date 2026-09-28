@@ -119,8 +119,8 @@ export function Inspector({
           value={value}
           onChange={(next) => {
             // def-fields hands back the whole overlay; translate to a patch by
-            // diffing, so a cleared field becomes an explicit `undefined` and
-            // reverts to the raw value rather than shadowing it.
+            // diffing, so a cleared field becomes an explicit `undefined` —
+            // which patchHandler takes as "remove this key from the handler".
             const patch: Record<string, Json | undefined> = {};
             for (const k of Object.keys(value)) if (!(k in next)) patch[k] = undefined;
             for (const [k, v] of Object.entries(next)) {

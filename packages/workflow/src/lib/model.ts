@@ -65,6 +65,10 @@ export interface CanvasNode {
   statePatch?: JsonObject;
   /** Handler-level keys the operator changed. */
   handlerPatch?: JsonObject;
+  /** Handler keys the saved definition HAS and the operator cleared. A patch
+   *  alone can only add or overwrite, so without this a key already in the
+   *  definition could never be removed — clearing it would snap back. */
+  handlerRemoved?: string[];
 }
 
 export interface CanvasEdge {
@@ -187,13 +191,14 @@ export function fromDefinition(raw: unknown): CanvasModel {
 function serializeState(n: CanvasNode): JsonObject {
   // The passthrough fast path: an untouched node is written back exactly as it
   // was read, which is what keeps an opaque node's unknown fields intact.
-  if (!n.statePatch && !n.handlerPatch) return clone(n.raw);
+  if (!n.statePatch && !n.handlerPatch && !n.handlerRemoved) return clone(n.raw);
 
   const out = clone(n.raw);
-  if (n.handlerPatch) {
-    const base = isObj(out.handler) ? out.handler : {};
+  if (n.handlerPatch || n.handlerRemoved) {
+    const base: JsonObject = isObj(out.handler) ? { ...out.handler } : {};
+    for (const k of n.handlerRemoved ?? []) delete base[k];
     // Spread order matters: existing keys keep their position, new keys append.
-    out.handler = { ...base, ...clone(n.handlerPatch) };
+    out.handler = { ...base, ...clone(n.handlerPatch ?? {}) };
   }
   return n.statePatch ? { ...out, ...clone(n.statePatch) } : out;
 }
@@ -239,29 +244,48 @@ export function toDefinition(model: CanvasModel): JsonObject {
 /** The handler object for a node, merged with any pending patch. Read-only view
  *  for the inspector; writes go through `patchHandler`. */
 export function handlerOf(n: CanvasNode): JsonObject {
-  const base = isObj(n.raw.handler) ? n.raw.handler : {};
-  return n.handlerPatch ? { ...base, ...n.handlerPatch } : base;
+  const raw = isObj(n.raw.handler) ? n.raw.handler : {};
+  if (!n.handlerPatch && !n.handlerRemoved) return raw;
+  const base: JsonObject = { ...raw };
+  for (const k of n.handlerRemoved ?? []) delete base[k];
+  return { ...base, ...(n.handlerPatch ?? {}) };
 }
 
-/** Return a node with `fields` merged into its handler patch. A field set to
- *  `undefined` is DELETED from the patch rather than written as undefined, so
- *  "revert my edit" restores the raw value instead of shadowing it — which is
- *  also what lets the node fall back onto the byte-identical fast path. */
+/** Return a node with `fields` applied to its handler.
+ *
+ *  `undefined` means CLEAR: the key leaves the handler. For a key the saved
+ *  definition has, that is recorded in `handlerRemoved`; a key only the patch
+ *  had is simply dropped.
+ *
+ *  A value equal to the saved one drops out of the patch rather than
+ *  shadowing it, so a node edited back to where it started takes the
+ *  byte-identical fast path again. */
 export function patchHandler(
   n: CanvasNode,
   fields: Record<string, Json | undefined>,
 ): CanvasNode {
+  const raw = isObj(n.raw.handler) ? n.raw.handler : {};
   const next: JsonObject = { ...(n.handlerPatch ?? {}) };
+  const removed = new Set(n.handlerRemoved ?? []);
   for (const [k, v] of Object.entries(fields)) {
-    if (v === undefined) delete next[k];
-    else next[k] = v;
+    delete next[k];
+    removed.delete(k);
+    if (v === undefined) {
+      if (k in raw) removed.add(k);
+    } else if (!(k in raw) || JSON.stringify(raw[k]) !== JSON.stringify(v)) {
+      next[k] = v;
+    }
   }
-  const kind = typeof next.kind === "string" ? next.kind : n.kind;
+  // From the patch, else the SAVED kind — not `n.kind`, which may be a patched
+  // kind this call just reverted.
+  const rawKind = typeof raw.kind === "string" ? raw.kind : "";
+  const kind = typeof next.kind === "string" ? next.kind : removed.has("kind") ? "" : rawKind;
   return {
     ...n,
     kind,
     opaque: !isKnownKind(kind),
     handlerPatch: Object.keys(next).length ? next : undefined,
+    handlerRemoved: removed.size ? [...removed] : undefined,
   };
 }
 
