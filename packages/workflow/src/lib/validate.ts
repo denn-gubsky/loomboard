@@ -20,6 +20,7 @@
 import type { CanvasModel, CanvasNode, JsonObject } from "./model";
 import { handlerOf } from "./model";
 import { parseJsonPath } from "./jsonpath";
+import { validateStateHooks, validateWalkHooks } from "./hooks";
 
 /** Mirrors teamgraph.MaxAllowedIterations. */
 export const MAX_ALLOWED_ITERATIONS = 1000;
@@ -386,6 +387,14 @@ export function validateModel(model: CanvasModel): Finding[] {
     if (byId.has(n.id)) err(`duplicate state id ${JSON.stringify(n.id)}`, { nodeId: n.id });
     else byId.set(n.id, n);
     for (const m of validateHandler(n)) err(`state ${JSON.stringify(n.id)} ${m}`, { nodeId: n.id });
+    // Hooks (RFC DK) are refused on a kind that starts no run. An unknown kind
+    // is skipped like every other rule here — whether it starts runs is the
+    // server's to say (see the header).
+    if (!n.opaque) {
+      for (const m of validateStateHooks(n.kind, handlerOf(n))) {
+        err(`state ${JSON.stringify(n.id)} ${m}`, { nodeId: n.id });
+      }
+    }
     if (n.opaque && n.kind) {
       findings.push({
         level: "info",
@@ -408,6 +417,10 @@ export function validateModel(model: CanvasModel): Finding[] {
       err(`max_iterations ${maxIter} exceeds the maximum ${MAX_ALLOWED_ITERATIONS}`);
     }
   }
+
+  // The walk's own hooks: it is a run that only ends, so run_end alone.
+  const walkHooks = validateWalkHooks(model.source.hooks);
+  if (walkHooks) err(walkHooks);
 
   // ---- transitions ----
   const outbound = new Map<string, Set<string>>();

@@ -20,8 +20,10 @@
     "than the runtime. Any case where they differ must say why in why_divergent.",
     "",
     "VERIFIED: every go_valid below was checked by RUNNING these cases through",
-    "teamgraph.Validate at loomcycle 0672100e \u2014 not by hand, and not by reading",
-    "the validator. All 64 agree.",
+    "loomcycle's own json decoder + teamgraph.Validate at tag v1.99.0 \u2014 not by",
+    "hand, and not by reading the validator. All 115 agree; the hook cases",
+    "(RFC DK) were added and run on 2026-09-28. Decoding counts:",
+    "several hook shapes are refused while unmarshalling, before Validate runs.",
     "",
     "That check earned its keep immediately. The `unknown handler kind from a",
     "newer runtime` case used `starter` as its example of a kind the runtime does",
@@ -2763,6 +2765,1366 @@
             "to": "done",
             "on": "success"
           }
+        ]
+      }
+    },
+    {
+      "name": "hooks: the walk may carry run_end",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ],
+        "hooks": {
+          "run_end": [
+            "notify-owner"
+          ]
+        }
+      }
+    },
+    {
+      "name": "hooks: the walk refuses any event but run_end",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ],
+        "hooks": {
+          "agent_stop": [
+            "cite-sources"
+          ]
+        }
+      }
+    },
+    {
+      "name": "hooks: a state that runs an agent may carry agent_stop",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "cite-sources@3"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: an agent-level tool event applies to every tool",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  "deny-internal-http"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: a Starter carries hooks for its members",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "intake"
+              },
+              "fanout": {
+                "agent": "reviewer",
+                "per": "message",
+                "max": 8
+              },
+              "sink": {
+                "channel": "reviewed"
+              },
+              "hooks": {
+                "agent_stop": [
+                  "cite-sources"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: a vars state starts no run, so it cannot carry hooks",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "vars",
+              "set": {
+                "today": "${run.date}"
+              },
+              "hooks": {
+                "agent_stop": [
+                  "cite-sources"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: an EMPTY list still counts as carrying hooks",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "vars",
+              "set": {
+                "today": "${run.date}"
+              },
+              "hooks": {
+                "agent_stop": []
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: an empty map is no hooks at all",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "vars",
+              "set": {
+                "today": "${run.date}"
+              },
+              "hooks": {}
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: a null event list is accepted",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": null
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: an unknown event is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "on_stop": [
+                  "cite-sources"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: channel_publish belongs to a channel, not a team",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "channel_publish": [
+                  "moderate"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tool_hooks: a tool's own pre hook",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "tool_hooks": {
+                "WebFetch": {
+                  "pre": [
+                    "deny-internal-http"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tool_hooks: a run event under a tool is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "tool_hooks": {
+                "WebFetch": {
+                  "agent_stop": [
+                    "cite-sources"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tool_hooks: a blank tool name is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "tool_hooks": {
+                " ": {
+                  "pre": [
+                    "deny-internal-http"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks ref: version 0 is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "cite-sources@0"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks ref: Atoi takes a leading plus",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "cite-sources@+3"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks ref: a colon is not a name character",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "tenant:cite-sources"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks ref: nested names use slashes",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "team/review/cite-sources"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks ref: a trailing slash is an empty segment",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "review/"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: a well-formed webhook",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "name": "url-gate",
+                    "url": "https://app.example/hooks/url-gate",
+                    "fail_mode": "closed",
+                    "timeout_ms": 800
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: an unknown key is refused while decoding",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "name": "url-gate",
+                    "url": "https://app.example/hooks/url-gate",
+                    "fail_mode": "closed",
+                    "timeout_ms": 800,
+                    "secret": "x"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: url must be http(s)",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "name": "url-gate",
+                    "url": "ftp://app.example/h",
+                    "fail_mode": "closed",
+                    "timeout_ms": 800
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: fail_mode is open or closed",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "name": "url-gate",
+                    "url": "https://app.example/hooks/url-gate",
+                    "fail_mode": "strict",
+                    "timeout_ms": 800
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: a negative timeout is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "name": "url-gate",
+                    "url": "https://app.example/hooks/url-gate",
+                    "fail_mode": "closed",
+                    "timeout_ms": -1
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: a fractional timeout fails to decode",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "name": "url-gate",
+                    "url": "https://app.example/hooks/url-gate",
+                    "fail_mode": "closed",
+                    "timeout_ms": 1.5
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: a header the call sets itself is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "name": "url-gate",
+                    "url": "https://app.example/hooks/url-gate",
+                    "fail_mode": "closed",
+                    "timeout_ms": 800,
+                    "headers": {
+                      "Content-Type": "x"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: a credential-named header value is fine",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "name": "url-gate",
+                    "url": "https://app.example/hooks/url-gate",
+                    "fail_mode": "closed",
+                    "timeout_ms": 800,
+                    "headers": {
+                      "X-Api-Key": "$cred:gate-key"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: a name is required",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "url": "https://app.example/h"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: an entry that is neither a name nor an object fails to decode",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  42
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: a list instead of a map fails to decode",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": [
+                "cite-sources"
+              ]
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks on an unknown kind: the runtime refuses, the canvas defers",
+      "go_valid": false,
+      "ts_valid": true,
+      "why_divergent": "RFC CZ decision 3, applied to hooks. teamgraph refuses hooks on any kind that does not start runs \u2014 and it refuses an unknown kind outright. The canvas cannot know whether a kind newer than itself starts runs, so it applies no hook rule to an opaque node and lets the server decide, as it does for every other rule on that node. The kind is FICTIONAL on purpose (C10).",
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "from-a-newer-runtime-with-hooks",
+              "hooks": {
+                "agent_stop": [
+                  "cite-sources"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks ref: a 128-byte name is the limit",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks ref: a 129-byte name is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks ref: a version past int64 is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "cite-sources@9223372036854775808"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks ref: the last @ splits, so an @ in the name is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "agent_stop": [
+                  "cite@sources@2"
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks inline: a line break in a header value is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "hooks": {
+                "pre": [
+                  {
+                    "name": "url-gate",
+                    "url": "https://app.example/hooks/url-gate",
+                    "headers": {
+                      "X-Trace": "a\r\nInjected: 1"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hooks: the walk's hooks must be a map",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "start",
+        "states": [
+          {
+            "state": "start",
+            "handler": {
+              "kind": "agent",
+              "agent": "a"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "start",
+            "to": "done",
+            "on": "success"
+          }
+        ],
+        "hooks": [
+          "notify-owner"
         ]
       }
     }
