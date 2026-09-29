@@ -234,7 +234,7 @@ function WorkflowCanvasInner({
         if (!m) return m;
         let dirty = m.layoutDirty;
         let nodes = m.nodes;
-        let channelPositions = m.channelPositions;
+        let derivedPositions = m.derivedPositions;
         const states = new Set(m.nodes.map((n) => n.id));
         for (const c of changes) {
           if (c.type === "position" && c.position) {
@@ -247,15 +247,15 @@ function WorkflowCanvasInner({
             } else {
               // A channel node: its position is presentation too, kept beside
               // the states' in layout.nodes under its `channel:` key.
-              channelPositions = { ...(channelPositions ?? {}), [c.id]: pos };
+              derivedPositions = { ...(derivedPositions ?? {}), [c.id]: pos };
             }
           } else if (c.type === "select" && c.selected) {
             setSelectedId(c.id);
           }
         }
-        return nodes === m.nodes && dirty === m.layoutDirty && channelPositions === m.channelPositions
+        return nodes === m.nodes && dirty === m.layoutDirty && derivedPositions === m.derivedPositions
           ? m
-          : { ...m, nodes, channelPositions, layoutDirty: dirty };
+          : { ...m, nodes, derivedPositions, layoutDirty: dirty };
       });
     },
     [editable],
