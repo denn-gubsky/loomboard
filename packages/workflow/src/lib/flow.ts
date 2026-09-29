@@ -20,6 +20,7 @@
 import type { CanvasEdge, CanvasModel, CanvasNode } from "./model";
 import { handlerAgents, handlerChannels, handlerOf } from "./model";
 import type { Finding } from "./validate";
+import type { ChannelNodeView } from "./channelNodes";
 
 /** Which relation an edge represents. `control` is a transition the operator
  *  drew; `data` is derived from channel wiring and is never draggable. */
@@ -316,53 +317,88 @@ export function toFlowEdges(model: CanvasModel, findings: Finding[]): FlowEdge[]
 /** A data edge's id. Distinct in shape from `edgeId`'s `from on to` so the two
  *  namespaces cannot collide — a transition labelled with a channel name would
  *  otherwise be able to produce the same string. */
-export function dataEdgeId(from: string, channel: string, to: string): string {
-  return `data:${from} ${channel} ${to}`;
+export function dataEdgeId(from: string, to: string): string {
+  return `data:${from} > ${to}`;
 }
 
-/** Derive the DATA edges: one per (publisher, channel, reader) triple.
+/** Handle ids on a channel node. In on the left, out on the right: a channel
+ *  sits ABOVE the states it connects, so a publisher's top handle rises into
+ *  its left side and its right side drops into a reader's top handle. */
+export const CHANNEL_HANDLE = { in: "ch-in", out: "ch-out" } as const;
+
+export interface ChannelFlowData {
+  view: ChannelNodeView;
+  [k: string]: unknown;
+}
+
+export interface ChannelFlowNode {
+  id: string;
+  type: "channel";
+  position: { x: number; y: number };
+  data: ChannelFlowData;
+  selected?: boolean;
+  measured?: { width: number; height: number };
+  /** Derived from the nodes' config, so there is nothing to delete — the way to
+   *  remove one is to stop naming the channel. */
+  deletable: false;
+  /** No new wiring by drag yet: a transition into a channel would be
+   *  meaningless, and wiring a sink or source by drag is its own change. */
+  connectable: false;
+}
+
+export function toChannelFlowNodes(
+  views: readonly ChannelNodeView[],
+  selectedId?: string | null,
+  measured?: Measured,
+): ChannelFlowNode[] {
+  return views.map((v) => ({
+    id: v.id,
+    type: "channel" as const,
+    position: v.position,
+    selected: v.id === selectedId,
+    deletable: false as const,
+    connectable: false as const,
+    data: { view: v },
+    // Exactly as toFlowNodes does it: the MiniMap draws only nodes with
+    // measured dimensions.
+    ...(measured?.[v.id] ? { measured: measured[v.id] } : {}),
+  }));
+}
+
+/** Derive the DATA edges, routed through channel nodes: one edge per
+ *  (publisher → channel) and one per (channel → reader).
  *
  *  Not stored anywhere — recomputed from the nodes' channel config every time,
- *  because that config is the only truth. A definition where these disagree
- *  with `transitions[]` is not malformed: publishing to a channel nothing
- *  reads is how you park results for a human, and a transition between two
- *  states that share no channel is the ordinary case for non-Starter kinds.
+ *  because that config is the only truth. They are not required to agree with
+ *  `transitions[]`: publishing to a channel nothing reads is how you park
+ *  results for a human, and a transition between two states that share no
+ *  channel is the ordinary case for non-Starter kinds (decision C1).
  *
- *  A node whose sink is its own source produces a self-edge, which is drawn
- *  rather than suppressed — a Starter that republishes to the channel it reads
- *  is a real (and usually unintended) loop, and seeing it is the point. */
-export function toDataEdges(model: CanvasModel): FlowEdge[] {
-  // Readers indexed by channel, so the derivation stays linear rather than
-  // quadratic on graphs with many Starters.
-  const readers = new Map<string, string[]>();
-  for (const n of model.nodes) {
-    const { source } = handlerChannels(n);
-    if (!source) continue;
-    readers.set(source, [...(readers.get(source) ?? []), n.id]);
-  }
-
+ *  Through a node rather than direct: N publishers and M readers of one
+ *  channel are N + M edges into one visible junction, not N × M unrelated
+ *  lines — which is what makes a fan-in readable. A channel nothing reads, or
+ *  nothing publishes to, still gets its node and its one side, so a dangling
+ *  sink is visible instead of silently edge-less. A Starter that republishes
+ *  to the channel it reads draws both edges: a real, usually unintended loop. */
+export function toDataEdges(views: readonly ChannelNodeView[]): FlowEdge[] {
   const out: FlowEdge[] = [];
-  for (const n of model.nodes) {
-    const { sink } = handlerChannels(n);
-    if (!sink) continue;
-    for (const to of readers.get(sink) ?? []) {
-      out.push({
-        id: dataEdgeId(n.id, sink, to),
-        source: n.id,
-        target: to,
-        sourceHandle: HANDLE.sourceTop,
-        targetHandle: HANDLE.targetTop,
-        type: "smoothstep" as const,
-        // The channel name IS the label. Unlike a control edge, where
-        // `success` is noise, a data edge without its channel says only "these
-        // are connected somehow" — which is the question, not the answer.
-        label: sink,
-        className: "lb-wf-edge lb-wf-edge--data",
-        markerEnd: { type: ARROW, width: 14, height: 14, color: ARROW_COLOR },
-        deletable: false,
-        data: { kind: "data" as const, on: "", channel: sink, findings: [] },
-      });
-    }
+  const edge = (source: string, target: string, sourceHandle: string, targetHandle: string, channel: string): FlowEdge => ({
+    id: dataEdgeId(source, target),
+    source,
+    target,
+    sourceHandle,
+    targetHandle,
+    type: "smoothstep" as const,
+    // The channel node names the channel, so the edge does not repeat it.
+    label: "",
+    className: "lb-wf-edge lb-wf-edge--data",
+    markerEnd: { type: ARROW, width: 14, height: 14, color: ARROW_COLOR },
+    deletable: false,
+    data: { kind: "data" as const, on: "", channel, findings: [] },
+  });
+  for (const v of views) {
+    for (const p of v.publishers) out.push(edge(p, v.id, HANDLE.sourceTop, CHANNEL_HANDLE.in, v.channel));
+    for (const r of v.readers) out.push(edge(v.id, r, CHANNEL_HANDLE.out, HANDLE.targetTop, v.channel));
   }
   return out;
 }

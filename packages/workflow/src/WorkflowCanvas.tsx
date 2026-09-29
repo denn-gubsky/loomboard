@@ -13,7 +13,17 @@ import { PublishComposer } from "./PublishComposer";
 import { Palette } from "./Palette";
 import { newStateRaw, type PaletteEntry } from "./lib/palette";
 import { autoLayout, needsAutoLayout } from "./lib/layout";
-import { edgeId, mergeMeasured, toDataEdges, toFlowEdges, toFlowNodes } from "./lib/flow";
+import {
+  edgeId,
+  mergeMeasured,
+  toChannelFlowNodes,
+  toDataEdges,
+  toFlowEdges,
+  toFlowNodes,
+} from "./lib/flow";
+import { channelNodes } from "./lib/channelNodes";
+import { channelsInUse } from "./lib/channels";
+import { ChannelNode } from "./nodes/ChannelNode";
 import {
   fromDefinition,
   patchHandler,
@@ -41,7 +51,7 @@ import { StateNode } from "./nodes/StateNode";
 import { handlerChannels } from "./lib/model";
 import type { ChannelInfo, SavedTeam, WorkflowCanvasProps } from "./types";
 
-const NODE_TYPES = { state: StateNode };
+const NODE_TYPES = { state: StateNode, channel: ChannelNode };
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -146,8 +156,13 @@ function WorkflowCanvasInner({
     return entry ? (handlerChannels(entry).source ?? "") : "";
   }, [model]);
 
+  // Listed whenever the graph names ANY channel, not only for the entry's
+  // front door: every channel node shows whether it is declared, held or
+  // hooked, and that comes from here.
+  const namesChannels = useMemo(() => !!model && channelsInUse(model).length > 0, [model]);
+
   useEffect(() => {
-    if (!entryChannel || !dataLayer.listChannels) return;
+    if (!(entryChannel || namesChannels) || !dataLayer.listChannels) return;
     let cancelled = false;
     dataLayer
       .listChannels()
@@ -158,7 +173,7 @@ function WorkflowCanvasInner({
     return () => {
       cancelled = true;
     };
-  }, [dataLayer, entryChannel]);
+  }, [dataLayer, entryChannel, namesChannels]);
 
   // The graph's own rules PLUS the team ACL. They come from different places
   // on the runtime — validateModel mirrors teamgraph.Validate, while the ACL
@@ -168,17 +183,25 @@ function WorkflowCanvasInner({
     () => (model ? [...validateModel(model), ...aclFindings(model)] : []),
     [model],
   );
+  // The channels the graph names, as nodes its data edges route through.
+  const channelViews = useMemo(() => (model ? channelNodes(model, channels) : []), [model, channels]);
   const flowNodes = useMemo(
-    () => (model ? toFlowNodes(model, findings, selectedId, measured) : []),
-    [model, findings, selectedId, measured],
+    () =>
+      model
+        ? [
+            ...toFlowNodes(model, findings, selectedId, measured),
+            ...toChannelFlowNodes(channelViews, selectedId, measured),
+          ]
+        : [],
+    [model, findings, selectedId, measured, channelViews],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
   // overlap: the walk's own graph is what an operator is editing, and the
   // channel wiring is context for it (decision C1).
   const flowEdges = useMemo(
-    () => (model ? [...toFlowEdges(model, findings), ...toDataEdges(model)] : []),
-    [model, findings],
+    () => (model ? [...toFlowEdges(model, findings), ...toDataEdges(channelViews)] : []),
+    [model, findings, channelViews],
   );
 
   const selected = useMemo(
@@ -206,18 +229,28 @@ function WorkflowCanvasInner({
         if (!m) return m;
         let dirty = m.layoutDirty;
         let nodes = m.nodes;
+        let channelPositions = m.channelPositions;
+        const states = new Set(m.nodes.map((n) => n.id));
         for (const c of changes) {
           if (c.type === "position" && c.position) {
             // Only a COMPLETED drag dirties the layout. Intermediate frames
             // would mark a definition changed the moment a pointer twitched.
             if (c.dragging === false) dirty = true;
             const pos = c.position;
-            nodes = nodes.map((n) => (n.id === c.id ? { ...n, position: pos } : n));
+            if (states.has(c.id)) {
+              nodes = nodes.map((n) => (n.id === c.id ? { ...n, position: pos } : n));
+            } else {
+              // A channel node: its position is presentation too, kept beside
+              // the states' in layout.nodes under its `channel:` key.
+              channelPositions = { ...(channelPositions ?? {}), [c.id]: pos };
+            }
           } else if (c.type === "select" && c.selected) {
             setSelectedId(c.id);
           }
         }
-        return nodes === m.nodes && dirty === m.layoutDirty ? m : { ...m, nodes, layoutDirty: dirty };
+        return nodes === m.nodes && dirty === m.layoutDirty && channelPositions === m.channelPositions
+          ? m
+          : { ...m, nodes, channelPositions, layoutDirty: dirty };
       });
     },
     [editable],
@@ -614,6 +647,7 @@ function WorkflowCanvasInner({
               // near-white grey on a white mask — the minimap renders as an
               // empty box, which is how it shipped.
               nodeClassName={(n) => {
+                if (n.type === "channel") return "is-channelref";
                 const d = n.data as unknown as { node?: { kind?: string; opaque?: boolean } };
                 if (d?.node?.opaque) return "is-opaque";
                 return `is-${d?.node?.kind || "unset"}`;
@@ -634,6 +668,7 @@ function WorkflowCanvasInner({
             onChannelsChange={onChannelsChange}
             walkHooks={model ? walkHooks(model) : undefined}
             onWalkHooksChange={onWalkHooksChange}
+            channel={channelViews.find((v) => v.id === selectedId) ?? null}
           />
         )}
       </div>

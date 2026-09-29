@@ -12,6 +12,7 @@ import {
   toFlowNodes,
 } from "./flow";
 import { fromDefinition } from "./model";
+import { channelNodes } from "./channelNodes";
 import { validateModel } from "./validate";
 
 const model = fromDefinition({
@@ -273,48 +274,67 @@ describe("toDataEdges", () => {
     transitions: [{ from: "triage", to: "work", on: "success" }],
   });
 
-  it("derives an edge wherever a sink channel meets a source channel", () => {
-    const pairs = toDataEdges(wired).map((e) => `${e.source}→${e.target}:${e.data.channel}`).sort();
-    expect(pairs).toEqual([
-      "intake→triage:raw",
-      "shout→triage:raw",
-      "triage→work:triaged",
-    ]);
+  const views = channelNodes(wired);
+  const edges = toDataEdges(views);
+  const ch = (name: string) => views.find((v) => v.channel === name)!.id;
+
+  it("routes every publisher INTO the channel node and the channel OUT to every reader", () => {
+    const pairs = edges.map((e) => `${e.source}→${e.target}`).sort();
+    expect(pairs).toEqual(
+      [
+        `intake→${ch("raw")}`,
+        `shout→${ch("raw")}`,
+        `${ch("raw")}→triage`,
+        `triage→${ch("triaged")}`,
+        `${ch("triaged")}→work`,
+        `${ch("inbox")}→intake`,
+        `orphan→${ch("nobody-reads-this")}`,
+      ].sort(),
+    );
   });
 
-  it("derives nothing from a sink no state reads", () => {
+  it("draws a fan-in as ONE junction, not N×M direct edges", () => {
+    // Two publishers and one reader of `raw`: three edges through one node.
+    // Direct edges would have been two unrelated lines into `triage`.
+    const raw = views.find((v) => v.channel === "raw")!;
+    expect(raw.publishers).toEqual(["intake", "shout"]);
+    expect(raw.readers).toEqual(["triage"]);
+    expect(edges.filter((e) => e.data.channel === "raw")).toHaveLength(3);
+  });
+
+  it("keeps a channel nothing reads, so a dangling sink is visible", () => {
     // Publishing where nobody listens is legitimate — results parked for a
-    // human — so it is silently no edge, not a finding.
-    expect(toDataEdges(wired).some((e) => e.source === "orphan")).toBe(false);
+    // human — but it should be SEEN, not be an invisible absence of an edge.
+    const orphan = views.find((v) => v.channel === "nobody-reads-this")!;
+    expect(orphan.readers).toEqual([]);
+    expect(edges.some((e) => e.source === "orphan")).toBe(true);
   });
 
-  it("routes data over the top handles so it cannot stack on a control edge", () => {
-    // triage → work exists in BOTH relations. If they shared handles they would
-    // render as one path and decision C1 would be violated in the only case
-    // where it is actually load-bearing.
-    const data = toDataEdges(wired).find((e) => e.source === "triage" && e.target === "work")!;
+  it("routes data over the states' top handles so it cannot stack on a control edge", () => {
+    // triage → work exists as a transition AND as data via `triaged`. The data
+    // path leaves triage's top handle, so the two never share a path (C1/C9).
+    const out = edges.find((e) => e.source === "triage")!;
+    const into = edges.find((e) => e.target === "work")!;
     const control = toFlowEdges(wired, []).find((e) => e.source === "triage" && e.target === "work")!;
-    expect([data.sourceHandle, data.targetHandle]).toEqual([HANDLE.sourceTop, HANDLE.targetTop]);
-    expect([control.sourceHandle, control.targetHandle]).not.toEqual([
-      data.sourceHandle,
-      data.targetHandle,
-    ]);
+    expect(out.sourceHandle).toBe(HANDLE.sourceTop);
+    expect(into.targetHandle).toBe(HANDLE.targetTop);
+    expect(control.sourceHandle).not.toBe(HANDLE.sourceTop);
   });
 
   it("gives a data edge an id that cannot collide with a transition's", () => {
     const control = toFlowEdges(wired, []).map((e) => e.id);
-    for (const e of toDataEdges(wired)) expect(control).not.toContain(e.id);
+    for (const e of edges) expect(control).not.toContain(e.id);
+    expect(new Set(edges.map((e) => e.id)).size).toBe(edges.length);
   });
 
-  it("labels a data edge with its channel", () => {
-    // Unlike `success` on a control edge, the channel is the whole content of
-    // the relation — an unlabelled data edge says only "connected somehow".
-    for (const e of toDataEdges(wired)) expect(e.label).toBe(e.data.channel);
+  it("names the channel on the NODE, not on every edge", () => {
+    for (const e of edges) expect(e.label).toBe("");
+    for (const e of edges) expect(e.data.channel).toBeTruthy();
   });
 
   it("marks derived edges undeletable", () => {
     // The way to remove one is to change a channel name in the inspector.
-    for (const e of toDataEdges(wired)) expect(e.deletable).toBe(false);
+    for (const e of edges) expect(e.deletable).toBe(false);
   });
 
   it("draws a starter that republishes to the channel it reads", () => {
@@ -328,11 +348,9 @@ describe("toDataEdges", () => {
       ],
       transitions: [],
     });
-    // Drawn rather than suppressed: it is a real and usually unintended loop,
-    // and seeing it is the point of having the relation on screen at all.
-    expect(toDataEdges(loop)).toHaveLength(1);
-    expect(toDataEdges(loop)[0].source).toBe("s");
-    expect(toDataEdges(loop)[0].target).toBe("s");
+    // Drawn rather than suppressed: a real and usually unintended loop.
+    const e = toDataEdges(channelNodes(loop)).map((x) => `${x.source}→${x.target}`);
+    expect(e).toEqual(["s→channel:q", "channel:q→s"]);
   });
 });
 

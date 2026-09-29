@@ -106,7 +106,15 @@ export interface CanvasModel {
    *  and the key leaves the definition. A wrapper, because "untouched" and
    *  "cleared" must not both be `undefined`. Content: it forks on save. */
   walkHooksPatch?: { hooks?: JsonObject };
+  /** Channel-node positions the operator dragged, keyed by channel node id
+   *  (`channel:<name>`). Presentation, like every other position: written to
+   *  `layout.nodes` only when the layout is dirty, excluded from the hash. */
+  channelPositions?: Record<string, XY>;
 }
+
+/** The layout key prefix channel nodes use (lib/channelNodes.ts re-exports
+ *  it). Defined here because toDefinition must recognise the keys. */
+export const CHANNEL_LAYOUT_PREFIX = "channel:";
 
 /** The workflow's own channel allowlist. The Starter is its single subject, so
  *  the authority lives here rather than on each agent in a wave. */
@@ -236,6 +244,18 @@ export function toDefinition(model: CanvasModel): JsonObject {
         x: Math.round(n.position.x),
         y: Math.round(n.position.y),
       };
+    }
+    // Channel-node positions share the map under a reserved prefix. Kept from
+    // the saved layout — they belong to no state, so rebuilding from the
+    // states alone would drop every one — unless a state now owns the key.
+    const stateIds = new Set(model.nodes.map((n) => n.id));
+    for (const [key, v] of Object.entries(prevNodes)) {
+      if (key.startsWith(CHANNEL_LAYOUT_PREFIX) && !stateIds.has(key)) nodes[key] = v;
+    }
+    for (const [key, p] of Object.entries(model.channelPositions ?? {})) {
+      if (stateIds.has(key)) continue; // never overwrite a state's own entry
+      const old = prevNodes[key];
+      nodes[key] = { ...(isObj(old) ? old : {}), x: Math.round(p.x), y: Math.round(p.y) };
     }
     out.layout = { ...prev, nodes };
   }

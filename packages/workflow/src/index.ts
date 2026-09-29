@@ -95,12 +95,27 @@ export {
   toFlowNodes,
   toFlowEdges,
   toDataEdges,
+  toChannelFlowNodes,
   fanoutSummary,
   edgeClass,
   edgeId,
   dataEdgeId,
+  CHANNEL_HANDLE,
 } from "./lib/flow";
-export type { FlowEdge, FlowEdgeData, FlowEdgeKind, FlowNode, FlowNodeData } from "./lib/flow";
+export type {
+  ChannelFlowData,
+  ChannelFlowNode,
+  FlowEdge,
+  FlowEdgeData,
+  FlowEdgeKind,
+  FlowNode,
+  FlowNodeData,
+} from "./lib/flow";
+
+// Channel nodes: the channels a team names, drawn as the junction data edges
+// route through. toDataEdges takes these views.
+export { channelNodes, channelNodeId, channelBacklog, CHANNEL_NODE_PREFIX } from "./lib/channelNodes";
+export type { ChannelNodeView } from "./lib/channelNodes";
 
 export { Palette } from "./Palette";
 export type { PaletteProps } from "./Palette";

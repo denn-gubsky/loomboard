@@ -194,6 +194,43 @@ describe("WorkflowCanvas — the Starter (RFC CZ P4)", () => {
       }),
     });
 
+  it("draws each channel the team names as a node of its own", async () => {
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    for (const ch of ["sdlc-intake", "sdlc-plans", "sdlc-done"]) {
+      expect(await screen.findByTestId(`channel-${ch}`)).toBeTruthy();
+    }
+    // sdlc-plans: intake publishes, plan reads.
+    expect(screen.getByTestId("channel-sdlc-plans").textContent).toMatch(/1 → 1/);
+  });
+
+  it("marks a channel the runtime has not declared, once the list has loaded", async () => {
+    render(
+      <WorkflowCanvas
+        dataLayer={stubLayer({
+          ...layer(),
+          listChannels: async () => [
+            { name: "sdlc-intake", scope: "tenant" },
+            { name: "sdlc-plans", scope: "tenant", hold: true, hooks: ["moderate"] },
+          ],
+        })}
+        teamName="sdlc"
+      />,
+    );
+    const done = await screen.findByTestId("channel-sdlc-done");
+    await waitFor(() => expect(done.textContent).toMatch(/not declared/));
+    const plans = screen.getByTestId("channel-sdlc-plans");
+    expect(plans.textContent).toMatch(/HELD/);
+    expect(plans.textContent).toMatch(/1 hook gate every message/);
+  });
+
+  it("shows a selected channel's details in the inspector, read-only", async () => {
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    fireEvent.click(await screen.findByTestId("channel-sdlc-plans"));
+    const panel = (await screen.findByText(/Referenced, not owned/)).closest("aside")!;
+    expect(panel.textContent).toMatch(/Publishers\s*intake/);
+    expect(panel.textContent).toMatch(/Readers\s*plan/);
+  });
+
   it("draws a Starter as a dispatcher: what it reads, how wide, where results go", async () => {
     render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
     const intake = await screen.findByTestId("node-intake");

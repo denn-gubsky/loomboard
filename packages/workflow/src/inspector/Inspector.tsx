@@ -3,6 +3,7 @@ import { FoldedFieldList, HookEventsControl, type DefValue } from "@loomcycle/de
 import type { CanvasNode, Json, JsonObject, TeamChannels } from "../lib/model";
 import { KNOWN_KINDS, handlerOf } from "../lib/model";
 import type { Finding } from "../lib/validate";
+import { channelBacklog, type ChannelNodeView } from "../lib/channelNodes";
 import { HANDLER_OMIT_IN_LIST, fieldsForKind, teamHandlerRegistry } from "./registry";
 
 export interface InspectorProps {
@@ -18,6 +19,8 @@ export interface InspectorProps {
   /** The walk's own hooks (run_end only), shown when no state is selected. */
   walkHooks?: JsonObject;
   onWalkHooksChange?: (next: JsonObject | undefined) => void;
+  /** A selected channel node, shown read-only in place of the team pane. */
+  channel?: ChannelNodeView | null;
 }
 
 /** The node inspector: the state id and kind rendered by hand, everything else
@@ -40,6 +43,7 @@ export function Inspector({
   onChannelsChange,
   walkHooks,
   onWalkHooksChange,
+  channel,
 }: InspectorProps) {
   const value = useMemo<DefValue>(() => {
     if (!node) return {};
@@ -61,6 +65,8 @@ export function Inspector({
       .filter((k) => !allowed.has(k));
     return [...HANDLER_OMIT_IN_LIST, ...hidden];
   }, [node]);
+
+  if (!node && channel) return <ChannelPanel view={channel} />;
 
   if (!node) {
     // With nothing selected the inspector shows the TEAM's own configuration
@@ -235,5 +241,49 @@ function TeamChannelPanel({
         content so a change cannot be invisible in the version history.
       </p>
     </section>
+  );
+}
+
+/** A channel node's details. Read-only: the channel is a ChannelDef that lives
+ *  outside the TeamDef (decision C11), so its scope, hold and hooks are edited
+ *  where it is declared. What the canvas CAN change is which of its nodes name
+ *  it, and the team's ACL — so the panel points at both. */
+function ChannelPanel({ view }: { view: ChannelNodeView }) {
+  const { info, grants, declared } = view;
+  const row = (label: string, value: string) => (
+    <div className="lb-wf-field">
+      <span className="lb-wf-field__label">{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+  const missing = (["publish", "subscribe"] as const).filter((s) => grants[s] === false);
+  return (
+    <aside className="lb-wf-inspector lb-wf-inspector--channel">
+      <h3 className="lb-wf-team__title">
+        Channel <code>{view.channel}</code>
+      </h3>
+      <p className="lb-wf-team__hint">
+        Referenced, not owned: this team names it; its declaration lives outside the workflow.
+      </p>
+      {row("Publishers", view.publishers.join(", ") || "none")}
+      {row("Readers", view.readers.join(", ") || "none — results are parked here")}
+      {info && row("Scope", info.scope ?? "not declared")}
+      {info && row("Stored", channelBacklog(info) ?? "")}
+      {info?.hold && row("Hold", "HELD — stored, delivered to nobody until released")}
+      {(info?.hooks?.length ?? 0) > 0 &&
+        row("Hooks", `${info!.hooks!.join(", ")} — each message is delivered only if they release it`)}
+      {declared === false && (
+        <div className="lb-wf-finding lb-wf-finding--error">
+          Not declared. The runtime refuses an undeclared channel — declare it in operator yaml or
+          with ChannelDef.
+        </div>
+      )}
+      {missing.length > 0 && (
+        <div className="lb-wf-finding lb-wf-finding--error">
+          The team ACL does not grant {missing.join(" or ")} on this channel. Add it under Team
+          channels (select empty canvas), or the runtime refuses the save.
+        </div>
+      )}
+    </aside>
   );
 }
