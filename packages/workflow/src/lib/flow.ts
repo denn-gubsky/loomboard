@@ -338,12 +338,13 @@ export interface ChannelFlowNode {
   data: ChannelFlowData;
   selected?: boolean;
   measured?: { width: number; height: number };
-  /** Derived from the nodes' config, so there is nothing to delete — the way to
-   *  remove one is to stop naming the channel. */
-  deletable: false;
-  /** No new wiring by drag yet: a transition into a channel would be
-   *  meaningless, and wiring a sink or source by drag is its own change. */
-  connectable: false;
+  /** A WIRED channel exists because a node's config names it, so there is
+   *  nothing to delete — the way to remove it is to stop naming it. Only a
+   *  placed channel nothing is wired to can be removed. */
+  deletable: boolean;
+  /** Drag to or from a channel sets a Starter's source / sink or a publish
+   *  node's channel (lib/channelWiring.ts); nothing else is accepted. */
+  connectable: true;
 }
 
 export function toChannelFlowNodes(
@@ -356,8 +357,8 @@ export function toChannelFlowNodes(
     type: "channel" as const,
     position: v.position,
     selected: v.id === selectedId,
-    deletable: false as const,
-    connectable: false as const,
+    deletable: !v.wired,
+    connectable: true as const,
     data: { view: v },
     // Exactly as toFlowNodes does it: the MiniMap draws only nodes with
     // measured dimensions.

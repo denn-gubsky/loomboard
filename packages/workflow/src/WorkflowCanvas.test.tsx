@@ -231,6 +231,39 @@ describe("WorkflowCanvas — the Starter (RFC CZ P4)", () => {
     expect(panel.textContent).toMatch(/Readers\s*plan/);
   });
 
+  it("places a channel from the palette as an unwired reference", async () => {
+    render(
+      <WorkflowCanvas
+        dataLayer={stubLayer({ ...layer(), listChannels: async () => [{ name: "results", scope: "tenant" }] })}
+        teamName="sdlc"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /^Channel/ }));
+    fireEvent.change(screen.getByLabelText("Channel name"), { target: { value: "results" } });
+    fireEvent.click(screen.getByRole("button", { name: "Place" }));
+    const node = await screen.findByTestId("channel-results");
+    expect(node.textContent).toMatch(/not wired yet/);
+    // Placing adds no state: a reference is layout, not content.
+    expect(screen.queryByTestId("node-results")).toBeNull();
+  });
+
+  it("grants a missing ACL side from the channel panel, clearing the finding", async () => {
+    const noAcl = { ...starterDef, channels: { subscribe: ["sdlc-intake", "sdlc-plans"], publish: ["sdlc-done"] } };
+    render(
+      <WorkflowCanvas
+        dataLayer={stubLayer({
+          getActiveTeamDef: async () => ({ def_id: "d", name: "sdlc", version: 1, definition: noAcl }),
+        })}
+        teamName="sdlc"
+      />,
+    );
+    // intake publishes to sdlc-plans, which the ACL does not grant.
+    await screen.findByText(/uses channel "sdlc-plans" as its sink/);
+    fireEvent.click(await screen.findByTestId("channel-sdlc-plans"));
+    fireEvent.click(await screen.findByRole("button", { name: /Grant publish in Team channels/ }));
+    await waitFor(() => expect(screen.queryByText(/uses channel "sdlc-plans" as its sink/)).toBeNull());
+  });
+
   it("draws a Starter as a dispatcher: what it reads, how wide, where results go", async () => {
     render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
     const intake = await screen.findByTestId("node-intake");

@@ -36,7 +36,6 @@ export function ChannelNode({ data, selected }: NodeProps) {
         type="target"
         position={Position.Left}
         className="lb-wf-handle lb-wf-handle--data"
-        isConnectable={false}
       />
       <div className="lb-wf-node__head">
         <span className="lb-wf-node__title" title={view.channel}>
@@ -45,6 +44,11 @@ export function ChannelNode({ data, selected }: NodeProps) {
         <span className="lb-wf-node__kind">channel</span>
       </div>
       <div className="lb-wf-node__body">
+        {!view.wired && (
+          <div className="lb-wf-node__meta" title="Drag from a Starter's or publish node's top handle into this channel, or from this channel to a Starter's top handle">
+            not wired yet
+          </div>
+        )}
         <div className="lb-wf-node__meta">
           {view.publishers.length} → {view.readers.length}
           {view.publishers.length > 1 ? " · fan-in" : ""}
@@ -77,7 +81,6 @@ export function ChannelNode({ data, selected }: NodeProps) {
         type="source"
         position={Position.Right}
         className="lb-wf-handle lb-wf-handle--data"
-        isConnectable={false}
       />
     </div>
   );

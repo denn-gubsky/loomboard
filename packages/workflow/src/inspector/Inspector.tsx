@@ -4,6 +4,7 @@ import type { CanvasNode, Json, JsonObject, TeamChannels } from "../lib/model";
 import { KNOWN_KINDS, handlerOf } from "../lib/model";
 import type { Finding } from "../lib/validate";
 import { channelBacklog, type ChannelNodeView } from "../lib/channelNodes";
+import type { ChannelSide } from "../lib/channels";
 import { HANDLER_OMIT_IN_LIST, fieldsForKind, teamHandlerRegistry } from "./registry";
 
 export interface InspectorProps {
@@ -21,6 +22,8 @@ export interface InspectorProps {
   onWalkHooksChange?: (next: JsonObject | undefined) => void;
   /** A selected channel node, shown read-only in place of the team pane. */
   channel?: ChannelNodeView | null;
+  /** Grant the sides a channel needs in the team ACL. Absent: no button. */
+  onGrantChannel?: (channel: string, sides: ChannelSide[]) => void;
 }
 
 /** The node inspector: the state id and kind rendered by hand, everything else
@@ -44,6 +47,7 @@ export function Inspector({
   walkHooks,
   onWalkHooksChange,
   channel,
+  onGrantChannel,
 }: InspectorProps) {
   const value = useMemo<DefValue>(() => {
     if (!node) return {};
@@ -66,7 +70,7 @@ export function Inspector({
     return [...HANDLER_OMIT_IN_LIST, ...hidden];
   }, [node]);
 
-  if (!node && channel) return <ChannelPanel view={channel} />;
+  if (!node && channel) return <ChannelPanel view={channel} disabled={disabled} onGrant={onGrantChannel} />;
 
   if (!node) {
     // With nothing selected the inspector shows the TEAM's own configuration
@@ -248,7 +252,15 @@ function TeamChannelPanel({
  *  outside the TeamDef (decision C11), so its scope, hold and hooks are edited
  *  where it is declared. What the canvas CAN change is which of its nodes name
  *  it, and the team's ACL — so the panel points at both. */
-function ChannelPanel({ view }: { view: ChannelNodeView }) {
+function ChannelPanel({
+  view,
+  disabled,
+  onGrant,
+}: {
+  view: ChannelNodeView;
+  disabled?: boolean;
+  onGrant?: (channel: string, sides: ChannelSide[]) => void;
+}) {
   const { info, grants, declared } = view;
   const row = (label: string, value: string) => (
     <div className="lb-wf-field">
@@ -280,9 +292,33 @@ function ChannelPanel({ view }: { view: ChannelNodeView }) {
       )}
       {missing.length > 0 && (
         <div className="lb-wf-finding lb-wf-finding--error">
-          The team ACL does not grant {missing.join(" or ")} on this channel. Add it under Team
-          channels (select empty canvas), or the runtime refuses the save.
+          The team ACL does not grant {missing.join(" or ")} on this channel, so the runtime
+          refuses the save.
+          {onGrant && (
+            <>
+              {" "}
+              <button
+                type="button"
+                className="lb-wf-btn"
+                disabled={disabled}
+                onClick={() => onGrant(view.channel, missing)}
+              >
+                Grant {missing.join(" + ")} in Team channels
+              </button>
+              <span className="lb-wf-team__warn">
+                {" "}Authority: this changes the definition, and saving forks it. The runtime still
+                refuses a grant wider than what you hold.
+              </span>
+            </>
+          )}
         </div>
+      )}
+      {!view.wired && (
+        <p className="lb-wf-team__hint">
+          Not wired yet. Drag a Starter&rsquo;s or publish node&rsquo;s top handle into this channel
+          to publish to it, or from it to a Starter&rsquo;s top handle to read it. Delete removes it
+          from the canvas.
+        </p>
       )}
     </aside>
   );

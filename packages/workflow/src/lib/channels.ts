@@ -153,3 +153,19 @@ export function requiredACL(model: CanvasModel): { publish: string[]; subscribe:
   for (const r of channelRefs(model)) (r.side === "publish" ? pub : sub).add(r.channel);
   return { publish: [...pub].sort(), subscribe: [...sub].sort() };
 }
+
+/** The team ACL with `channel` granted on `sides` — what the channel panel's
+ *  "grant" action writes. Additive and idempotent: an existing grant, exact
+ *  or by wildcard, is left as it is rather than duplicated. */
+export function withGrant(
+  current: { publish?: string[]; subscribe?: string[] },
+  channel: string,
+  sides: readonly ChannelSide[],
+): { publish?: string[]; subscribe?: string[] } {
+  const next = { ...current };
+  for (const side of sides) {
+    const list = next[side] ?? [];
+    if (!channelAllowed(channel, list)) next[side] = [...list, channel];
+  }
+  return next;
+}

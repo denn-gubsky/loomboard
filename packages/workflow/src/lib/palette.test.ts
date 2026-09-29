@@ -39,7 +39,7 @@ describe("the palette — what it offers", () => {
     // work ENTERS — not because they share a shape.
     expect(entriesInGroup("Sources").map((e) => e.id)).toEqual(["starter", "input", "trigger"]);
     expect(entriesInGroup("Work").map((e) => e.id)).toEqual(["agent", "parallel", "consolidator"]);
-    expect(entriesInGroup("Data").map((e) => e.id)).toEqual(["vars", "publish"]);
+    expect(entriesInGroup("Data").map((e) => e.id)).toEqual(["vars", "channelref", "publish"]);
     expect(entriesInGroup("End").map((e) => e.id)).toEqual(["terminal"]);
   });
 
@@ -51,6 +51,13 @@ describe("the palette — what it offers", () => {
     expect(trigger.external).toBe(true);
     expect(trigger.kind).toBeUndefined();
     expect(placeableEntries().map((e) => e.id)).not.toContain("trigger");
+  });
+
+  it("offers a channel as a REFERENCE, which places no state (C11)", () => {
+    const ref = PALETTE.find((e) => e.id === "channelref")!;
+    expect(ref.reference).toBe(true);
+    expect(ref.kind).toBeUndefined();
+    expect(placeableEntries().map((e) => e.id)).not.toContain("channelref");
   });
 
   it("never offers an external entry as placeable", () => {

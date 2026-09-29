@@ -22,7 +22,8 @@ import {
   toFlowNodes,
 } from "./lib/flow";
 import { channelNodes } from "./lib/channelNodes";
-import { channelsInUse } from "./lib/channels";
+import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
+import { applyWire, connectionKind, placeChannel, planWire, removeChannel } from "./lib/channelWiring";
 import { ChannelNode } from "./nodes/ChannelNode";
 import {
   fromDefinition,
@@ -159,7 +160,11 @@ function WorkflowCanvasInner({
   // Listed whenever the graph names ANY channel, not only for the entry's
   // front door: every channel node shows whether it is declared, held or
   // hooked, and that comes from here.
-  const namesChannels = useMemo(() => !!model && channelsInUse(model).length > 0, [model]);
+  const namesChannels = useMemo(
+    // Also while editing: placing a channel offers the declared names.
+    () => !!model && (editable || channelsInUse(model).length > 0),
+    [model, editable],
+  );
 
   useEffect(() => {
     if (!(entryChannel || namesChannels) || !dataLayer.listChannels) return;
@@ -261,6 +266,16 @@ function WorkflowCanvasInner({
       if (!editable || !c.source || !c.target) return;
       setModel((m) => {
         if (!m) return m;
+        // A drag to or from a channel sets a name; a drag on a data handle is
+        // never a transition. Classified against the model being updated, not
+        // a render-time copy, so a fast second drag cannot act on stale views.
+        const views = channelNodes(m, channels);
+        const kind = connectionKind(m, views, c);
+        if (kind === "invalid") return m;
+        if (kind === "wire") {
+          const w = planWire(m, views, c);
+          return w ? applyWire(m, w) : m;
+        }
         // A state's outbound labels must be unique, so a second edge from the
         // same source defaults to a distinct pushback rather than a duplicate
         // `success` the validator would immediately refuse.
@@ -276,7 +291,7 @@ function WorkflowCanvasInner({
         };
       });
     },
-    [editable],
+    [editable, channels],
   );
 
   const onEdgesDelete = useCallback(
@@ -294,19 +309,48 @@ function WorkflowCanvasInner({
     (deleted: { id: string }[]) => {
       if (!editable) return;
       const gone = new Set(deleted.map((n) => n.id));
-      setModel((m) =>
-        m
-          ? {
-              ...m,
-              nodes: m.nodes.filter((n) => !gone.has(n.id)),
-              // Drop the transitions that would otherwise dangle.
-              edges: m.edges.filter((e) => !gone.has(e.from) && !gone.has(e.to)),
-            }
-          : m,
-      );
+      setModel((m) => {
+        if (!m) return m;
+        // A placed channel nothing is wired to leaves the layout. xyflow only
+        // offers to delete an unwired one (`deletable`), and removeChannel
+        // refuses a wired one anyway.
+        let next = m;
+        for (const v of channelNodes(m, channels)) if (gone.has(v.id)) next = removeChannel(next, v);
+        return {
+          ...next,
+          nodes: next.nodes.filter((n) => !gone.has(n.id)),
+          // Drop the transitions that would otherwise dangle.
+          edges: next.edges.filter((e) => !gone.has(e.from) && !gone.has(e.to)),
+        };
+      });
       setSelectedId(null);
     },
+    [editable, channels],
+  );
+
+  const onPlaceChannel = useCallback(
+    (name: string) => {
+      if (!editable) return;
+      setModel((m) => (m ? placeChannel(m, channelNodes(m, channels), name) : m));
+    },
+    [editable, channels],
+  );
+
+  // The channel panel's "grant" action: adds the sides a channel needs to the
+  // team ACL. Authority, so it is an explicit click and forks on save.
+  const onGrantChannel = useCallback(
+    (channel: string, sides: ChannelSide[]) => {
+      if (!editable) return;
+      setModel((m) => (m ? { ...m, channelsPatch: withGrant(teamChannels(m), channel, sides) } : m));
+    },
     [editable],
+  );
+
+  // Feedback while dragging: xyflow greys out a target the drop would refuse.
+  const isValidConnection = useCallback(
+    (c: { source: string | null; target: string | null; sourceHandle?: string | null; targetHandle?: string | null }) =>
+      !!model && connectionKind(model, channelViews, c) !== "invalid",
+    [model, channelViews],
   );
 
   const onPatch = useCallback(
@@ -616,7 +660,14 @@ function WorkflowCanvasInner({
       )}
 
       <div className="lb-wf-body">
-        {editable && <Palette onPlace={placeNode} disabled={!model || busy} />}
+        {editable && (
+          <Palette
+            onPlace={placeNode}
+            disabled={!model || busy}
+            onPlaceChannel={onPlaceChannel}
+            channelNames={channels?.map((c) => c.name)}
+          />
+        )}
 
         <div className={`lb-wf-graph${editable ? "" : " is-locked"}`}>
           <ReactFlow
@@ -625,6 +676,7 @@ function WorkflowCanvasInner({
             nodeTypes={NODE_TYPES}
             onNodesChange={onNodesChange}
             onConnect={onConnect}
+            isValidConnection={isValidConnection}
             onNodesDelete={onNodesDelete}
             onEdgesDelete={onEdgesDelete}
             onPaneClick={() => setSelectedId(null)}
@@ -666,6 +718,7 @@ function WorkflowCanvasInner({
             onRename={onRename}
             channels={model ? teamChannels(model) : undefined}
             onChannelsChange={onChannelsChange}
+            onGrantChannel={editable ? onGrantChannel : undefined}
             walkHooks={model ? walkHooks(model) : undefined}
             onWalkHooksChange={onWalkHooksChange}
             channel={channelViews.find((v) => v.id === selectedId) ?? null}

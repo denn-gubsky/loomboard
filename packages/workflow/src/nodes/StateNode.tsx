@@ -28,6 +28,9 @@ export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
   const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings } = d;
 
+  const canRead = !node.opaque && node.kind === "starter";
+  const canPublish = !node.opaque && (node.kind === "starter" || node.kind === "channel");
+
   const errors = findings.filter((f) => f.level === "error");
   const infos = findings.filter((f) => f.level === "info");
 
@@ -60,10 +63,13 @@ export function StateNode({ data, selected }: NodeProps) {
         position={Position.Bottom}
         className="lb-wf-handle lb-wf-handle--loop"
       />
-      {/* The data-flow handles exist only on nodes that actually carry a
-          channel. An unconditional pair would put two dead dots on every agent
-          tile, implying a connection the kind cannot make. */}
-      {channels.source && (
+      {/* The data-flow handles exist only on the kinds that CAN carry a
+          channel — a Starter reads and publishes, a publish node publishes —
+          even before one is set, because dragging to a channel node is how it
+          gets set (lib/channelWiring.ts). An unconditional pair would put two
+          dead dots on every agent tile, implying a connection the kind cannot
+          make. */}
+      {(channels.source || canRead) && (
         <Handle
           id={HANDLE.targetTop}
           type="target"
@@ -169,7 +175,7 @@ export function StateNode({ data, selected }: NodeProps) {
         </div>
       )}
 
-      {channels.sink && (
+      {(channels.sink || canPublish) && (
         <Handle
           id={HANDLE.sourceTop}
           type="source"
