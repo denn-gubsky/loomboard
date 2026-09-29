@@ -40,6 +40,8 @@ export interface FlowNodeData {
   assigns: string[];
   /** Field names the `input` start form declares. */
   formFields: string[];
+  /** The hooks this node adds to its runs, as `event: name` labels. */
+  hooks: string[];
   isEntry: boolean;
   /** Findings anchored to this state, worst level first. */
   findings: Finding[];
@@ -192,6 +194,40 @@ export function formFields(n: CanvasNode): string[] {
   return Object.keys(props);
 }
 
+/** The hooks a node adds to the runs it starts (RFC DK-P4c), labelled
+ *  `event: name` or `tool event: name`, in the order the runtime chains them:
+ *  each tool's own first (tools by name), then the node-level ones.
+ *
+ *  NAMES ONLY. An inline webhook's URL may carry a token and its headers may
+ *  name credentials, so the face gets what a hook_decision event would show —
+ *  the same reduction as loomcycle's hooks.WithoutEndpoints. */
+export function hookLabels(n: CanvasNode): string[] {
+  const h = handlerOf(n);
+  const label = (e: unknown): string =>
+    typeof e === "string"
+      ? e
+      : typeof e === "object" && e !== null && !Array.isArray(e) && typeof (e as { name?: unknown }).name === "string"
+        ? (e as { name: string }).name
+        : "?";
+  const events = (m: unknown, prefix: string): string[] => {
+    if (typeof m !== "object" || m === null || Array.isArray(m)) return [];
+    return Object.keys(m)
+      .sort()
+      .flatMap((ev) => {
+        const list = (m as Record<string, unknown>)[ev];
+        return Array.isArray(list) ? list.map((e) => `${prefix}${ev}: ${label(e)}`) : [];
+      });
+  };
+  const tools = h.tool_hooks;
+  const toolLabels =
+    typeof tools === "object" && tools !== null && !Array.isArray(tools)
+      ? Object.keys(tools)
+          .sort()
+          .flatMap((t) => events((tools as Record<string, unknown>)[t], `${t} `))
+      : [];
+  return [...toolLabels, ...events(h.hooks, "")];
+}
+
 export function toFlowNodes(
   model: CanvasModel,
   findings: Finding[],
@@ -217,6 +253,7 @@ export function toFlowNodes(
         fanout: fanoutSummary(n),
         assigns: assignedVars(n),
         formFields: formFields(n),
+        hooks: hookLabels(n),
         isEntry: !!model.entry && n.id === model.entry,
         findings: findings
           .filter((f) => f.nodeId === n.id)

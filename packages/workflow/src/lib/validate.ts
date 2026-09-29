@@ -419,8 +419,14 @@ export function validateModel(model: CanvasModel): Finding[] {
   }
 
   // The walk's own hooks: it is a run that only ends, so run_end alone.
-  const walkHooks = validateWalkHooks(model.source.hooks);
-  if (walkHooks) err(walkHooks);
+  // The pending edit when there is one — an unsaved change from the team pane
+  // is exactly what needs checking before the save. Otherwise the RAW saved
+  // value, not walkHooks(), which drops a non-object and would hide the
+  // decode error for a `hooks` written as a list.
+  const walkErr = validateWalkHooks(
+    model.walkHooksPatch ? model.walkHooksPatch.hooks : model.source.hooks,
+  );
+  if (walkErr) err(walkErr);
 
   // ---- transitions ----
   const outbound = new Map<string, Set<string>>();

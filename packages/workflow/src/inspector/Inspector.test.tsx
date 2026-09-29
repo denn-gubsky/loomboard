@@ -138,3 +138,84 @@ describe("Inspector — vocabulary (RFC CZ C12)", () => {
     expect(container.textContent).toContain('state "s"');
   });
 });
+
+describe("Inspector — hooks (RFC DK-P4c)", () => {
+  it("shows a run-starting node's hooks, opened because they are set", () => {
+    render(
+      <Inspector
+        node={nodeOf({ kind: "agent", agent: "a", hooks: { agent_stop: ["cite-sources@3"] } })}
+        findings={[]}
+        onPatch={noop}
+        onRename={noop}
+      />,
+    );
+    expect(screen.getByText("Run hooks")).toBeTruthy();
+    const values = [...document.querySelectorAll("input")].map((i) => i.value);
+    expect(values).toContain("cite-sources@3");
+  });
+
+  it("clears the key when the last hook is removed, so the save removes it", () => {
+    // Paired with patchHandler's removal: an `undefined` here is what takes
+    // the saved gate out of the definition rather than snapping back to it.
+    const onPatch = vi.fn();
+    render(
+      <Inspector
+        node={nodeOf({ kind: "agent", agent: "a", hooks: { agent_stop: ["cite-sources"] } })}
+        findings={[]}
+        onPatch={onPatch}
+        onRename={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove hook" }));
+    expect(onPatch).toHaveBeenCalledWith({ hooks: undefined });
+  });
+
+  it("offers no hook editor on a kind that starts no run", () => {
+    render(
+      <Inspector
+        node={nodeOf({ kind: "vars", set: { d: "${run.date}" } })}
+        findings={[]}
+        onPatch={noop}
+        onRename={noop}
+      />,
+    );
+    expect(screen.queryByText("Run hooks")).toBeNull();
+    expect(screen.queryByText("Tool hooks")).toBeNull();
+  });
+});
+
+describe("Inspector — the walk's hooks", () => {
+  it("offers run_end only, in the team pane", () => {
+    render(
+      <Inspector
+        node={null}
+        findings={[]}
+        walkHooks={{ run_end: ["notify-owner"] }}
+        onWalkHooksChange={noop}
+        onPatch={noop}
+        onRename={noop}
+      />,
+    );
+    expect(screen.getByText("Walk hooks")).toBeTruthy();
+    const values = [...document.querySelectorAll("input")].map((i) => i.value);
+    expect(values).toContain("notify-owner");
+    // The event list offers nothing the walk refuses.
+    expect(document.body.textContent).not.toMatch(/agent_stop/);
+  });
+
+  it("clears the walk's hooks when the last one is removed", () => {
+    const onWalkHooksChange = vi.fn();
+    render(
+      <Inspector
+        node={null}
+        findings={[]}
+        walkHooks={{ run_end: ["notify-owner"] }}
+        onWalkHooksChange={onWalkHooksChange}
+        onPatch={noop}
+        onRename={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove hook" }));
+    expect(onWalkHooksChange).toHaveBeenCalledWith(undefined);
+  });
+});

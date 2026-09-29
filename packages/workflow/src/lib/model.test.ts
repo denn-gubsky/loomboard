@@ -6,6 +6,7 @@ import {
   patchHandler,
   teamChannels,
   toDefinition,
+  walkHooks,
   type CanvasModel,
 } from "./model";
 
@@ -185,18 +186,64 @@ describe("patchHandler", () => {
     expect(patchHandler(n, { kind: "consolidator" }).opaque).toBe(false);
   });
 
-  it("clears a field back to the raw value rather than shadowing it", () => {
+  it("drops an edit that returns to the saved value, back onto the fast path", () => {
     const m = fromDefinition(MINIMAL);
     const edited = patchHandler(m.nodes[0], { agent: "b" });
     expect(handlerOf(edited).agent).toBe("b");
 
-    const reverted = patchHandler(edited, { agent: undefined });
-    expect(handlerOf(reverted).agent).toBe("a");
-    expect(reverted.handlerPatch).toBeUndefined();
-    // And with no patch left it takes the byte-identical fast path again.
-    expect(JSON.stringify(toDefinition({ ...m, nodes: [reverted, m.nodes[1]] }))).toBe(
+    const back = patchHandler(edited, { agent: "a" });
+    expect(back.handlerPatch).toBeUndefined();
+    expect(back.handlerRemoved).toBeUndefined();
+    expect(JSON.stringify(toDefinition({ ...m, nodes: [back, m.nodes[1]] }))).toBe(
       JSON.stringify(MINIMAL),
     );
+  });
+
+  it("REMOVES a key the saved definition has when it is cleared", () => {
+    // The regression: clearing used to delete only the PATCH entry, so the
+    // saved value snapped back and a key could never leave the definition —
+    // an operator could not remove a hook, a timeout or a consolidator.
+    const saved = {
+      entry: "s",
+      states: [
+        { state: "s", handler: { kind: "agent", agent: "a", timeout_ms: 5000, consolidator: "j" } },
+      ],
+      transitions: [],
+    };
+    const m = fromDefinition(saved);
+    const cleared = patchHandler(m.nodes[0], { timeout_ms: undefined });
+    expect(handlerOf(cleared).timeout_ms).toBeUndefined();
+
+    const out = toDefinition({ ...m, nodes: [cleared] }) as typeof saved;
+    // Gone, and the remaining keys keep their order.
+    expect(Object.keys(out.states[0].handler)).toEqual(["kind", "agent", "consolidator"]);
+  });
+
+  it("drops a key only the patch had without leaving a removal behind", () => {
+    const m = fromDefinition(MINIMAL);
+    const added = patchHandler(m.nodes[0], { timeout_ms: 1000 });
+    const cleared = patchHandler(added, { timeout_ms: undefined });
+    expect(cleared.handlerPatch).toBeUndefined();
+    expect(cleared.handlerRemoved).toBeUndefined();
+  });
+
+  it("restores a cleared key when it is set again", () => {
+    const m = fromDefinition(MINIMAL);
+    const cleared = patchHandler(m.nodes[0], { agent: undefined });
+    expect(cleared.handlerRemoved).toEqual(["agent"]);
+    const again = patchHandler(cleared, { agent: "a" });
+    expect(again.handlerRemoved).toBeUndefined();
+    expect(JSON.stringify(toDefinition({ ...m, nodes: [again, m.nodes[1]] }))).toBe(
+      JSON.stringify(MINIMAL),
+    );
+  });
+
+  it("reads the kind from the saved handler when a kind edit is reverted", () => {
+    const m = fromDefinition(MINIMAL);
+    const n = m.nodes[0];
+    const edited = patchHandler(n, { kind: "consolidator" });
+    expect(edited.kind).toBe("consolidator");
+    expect(patchHandler(edited, { kind: n.kind }).kind).toBe(n.kind);
   });
 });
 
@@ -262,5 +309,39 @@ describe("team channels", () => {
     expect(out.channels).toEqual({ publish: ["x"] });
     expect(out.max_iterations).toBe(FORWARD_COMPAT.max_iterations);
     expect(out.states).toEqual(FORWARD_COMPAT.states);
+  });
+});
+
+describe("walk hooks (RFC DK-P4c)", () => {
+  const withHooks = {
+    entry: "s",
+    states: [
+      { state: "s", handler: { kind: "agent", agent: "a" } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [{ from: "s", to: "done", on: "success" }],
+    hooks: { run_end: ["notify-owner"] },
+  };
+
+  it("round-trips untouched walk hooks byte-identically", () => {
+    expect(JSON.stringify(toDefinition(fromDefinition(withHooks)))).toBe(JSON.stringify(withHooks));
+  });
+
+  it("reads the saved hooks until they are edited", () => {
+    expect(walkHooks(fromDefinition(withHooks))).toEqual({ run_end: ["notify-owner"] });
+  });
+
+  it("writes an edit", () => {
+    const m = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: { run_end: ["page-oncall"] } } };
+    expect(toDefinition(m).hooks).toEqual({ run_end: ["page-oncall"] });
+  });
+
+  it("REMOVES the key when the operator clears it, rather than writing {}", () => {
+    // Go tags Definition.Hooks omitempty, so {} and absent mean the same — but
+    // only absent round-trips against a definition that never had the key.
+    const m = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: undefined } };
+    expect("hooks" in toDefinition(m)).toBe(false);
+    const empty = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: {} } };
+    expect("hooks" in toDefinition(empty)).toBe(false);
   });
 });

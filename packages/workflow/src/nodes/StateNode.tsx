@@ -26,7 +26,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
-  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, isEntry, findings } = d;
+  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings } = d;
 
   const errors = findings.filter((f) => f.level === "error");
   const infos = findings.filter((f) => f.level === "info");
@@ -135,6 +135,13 @@ export function StateNode({ data, selected }: NodeProps) {
                   ${v}
                 </span>
               ))}
+            </div>
+          )}
+          {/* Hooks gate every run this node starts, so a node that carries
+              them should not look like one that does not. Names only. */}
+          {hooks.length > 0 && (
+            <div className="lb-wf-node__meta lb-wf-node__hooks" title={hooks.join("\n")}>
+              {hooks.length} hook{hooks.length === 1 ? "" : "s"}
             </div>
           )}
           {node.kind === "input" && (

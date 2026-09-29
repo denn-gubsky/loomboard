@@ -50,7 +50,7 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "@loomcycle/def-fields": "^0.1.0",
+    "@loomcycle/def-fields": "^0.2.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
@@ -58,7 +58,7 @@
     "@xyflow/react": "^12.11.6"
   },
   "devDependencies": {
-    "@loomcycle/def-fields": "^0.1.0",
+    "@loomcycle/def-fields": "^0.2.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^22.0.0",

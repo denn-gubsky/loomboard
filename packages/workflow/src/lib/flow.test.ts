@@ -4,6 +4,7 @@ import {
   edgeClass,
   edgeId,
   fanoutSummary,
+  hookLabels,
   isBackward,
   mergeMeasured,
   toDataEdges,
@@ -379,5 +380,42 @@ describe("measured dimensions — what the MiniMap needs", () => {
       a: { width: 170, height: 80 },
       b: { width: 10, height: 10 },
     });
+  });
+});
+
+describe("hookLabels (RFC DK-P4c)", () => {
+  const nodeWith = (handler: Record<string, unknown>) =>
+    fromDefinition({ entry: "s", states: [{ state: "s", handler }], transitions: [] }).nodes[0];
+
+  it("labels each hook by event and name, tool hooks first as the runtime chains them", () => {
+    const n = nodeWith({
+      kind: "agent",
+      agent: "a",
+      hooks: { agent_stop: ["cite-sources@3"], pre: ["deny-internal-http"] },
+      tool_hooks: { WebFetch: { pre: [{ name: "url-gate", url: "https://x.example/hook?token=s3cr3t" }] } },
+    });
+    expect(hookLabels(n)).toEqual([
+      "WebFetch pre: url-gate",
+      "agent_stop: cite-sources@3",
+      "pre: deny-internal-http",
+    ]);
+  });
+
+  it("never carries an inline webhook's URL or headers onto the face", () => {
+    const n = nodeWith({
+      kind: "agent",
+      agent: "a",
+      hooks: {
+        pre: [{ name: "gate", url: "https://x.example/h?token=s3cr3t", headers: { "X-Key": "$cred:k" } }],
+      },
+    });
+    const text = hookLabels(n).join(" ");
+    expect(text).not.toContain("s3cr3t");
+    expect(text).not.toContain("$cred");
+    expect(text).not.toContain("https://");
+  });
+
+  it("is empty for a node with no hooks", () => {
+    expect(hookLabels(nodeWith({ kind: "agent", agent: "a" }))).toEqual([]);
   });
 });

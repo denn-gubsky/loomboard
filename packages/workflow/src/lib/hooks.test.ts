@@ -36,6 +36,15 @@ describe("hook findings (RFC DK) — anchoring and wording", () => {
     expect(f?.message).toMatch(/only run_end fires for it \(got agent_stop\)/);
   });
 
+  it("checks an UNSAVED walk-hook edit, not only what the definition had", () => {
+    // Regression: validateModel read model.source.hooks, so an edit made in
+    // the team pane went unchecked until the server refused the save.
+    const m = linear({ kind: "agent", agent: "a" });
+    const edited = { ...m, walkHooksPatch: { hooks: { run_end: [{ name: "gate", url: "ftp://x" }] } } };
+    const f = validateModel(edited).find((x) => x.message.includes("hooks"));
+    expect(f?.message).toMatch(/url must be http:\/\/ or https:\/\//);
+  });
+
   it("names the event and the entry that is wrong", () => {
     expect(validateEventHooks({ pre: [{ name: "gate", url: "ftp://x" }] })).toBe(
       "hooks.pre: inline webhook gate: url must be http:// or https://",

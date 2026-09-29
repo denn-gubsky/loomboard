@@ -19,8 +19,10 @@ import {
   patchHandler,
   teamChannels,
   toDefinition,
+  walkHooks,
   type CanvasModel,
   type Json,
+  type JsonObject,
   type TeamChannels,
 } from "./lib/model";
 import { canSave, validateModel } from "./lib/validate";
@@ -287,6 +289,10 @@ function WorkflowCanvasInner({
 
   const onChannelsChange = useCallback((next: TeamChannels) => {
     setModel((m) => (m ? { ...m, channelsPatch: next } : m));
+  }, []);
+
+  const onWalkHooksChange = useCallback((next: JsonObject | undefined) => {
+    setModel((m) => (m ? { ...m, walkHooksPatch: { hooks: next } } : m));
   }, []);
 
   const onRename = useCallback(
@@ -628,6 +634,8 @@ function WorkflowCanvasInner({
             onRename={onRename}
             channels={model ? teamChannels(model) : undefined}
             onChannelsChange={onChannelsChange}
+            walkHooks={model ? walkHooks(model) : undefined}
+            onWalkHooksChange={onWalkHooksChange}
           />
         )}
       </div>
