@@ -32,12 +32,16 @@ describe("fieldsForKind", () => {
       "system_prompt",
       "input_template",
       "timeout_ms",
+      "hooks",
+      "tool_hooks",
     ]);
     expect(fieldsForKind("consolidator")).toEqual([
       "agent",
       "system_prompt",
       "input_template",
       "timeout_ms",
+      "hooks",
+      "tool_hooks",
     ]);
     expect(fieldsForKind("parallel")).toEqual([
       "agents",
@@ -46,6 +50,8 @@ describe("fieldsForKind", () => {
       "system_prompt",
       "input_template",
       "timeout_ms",
+      "hooks",
+      "tool_hooks",
     ]);
     expect(fieldsForKind("vars")).toEqual(["set"]);
     expect(fieldsForKind("input")).toEqual(["schema"]);
@@ -69,6 +75,24 @@ describe("fieldsForKind", () => {
       if (kind !== "vars") expect(fieldsForKind(kind), kind).not.toContain("set");
       if (kind !== "input") expect(fieldsForKind(kind), kind).not.toContain("schema");
     }
+  });
+
+  it("offers hooks exactly on the kinds that start runs (RFC DK-P4c)", () => {
+    // teamgraph refuses hooks elsewhere: "starts no run, so it cannot carry
+    // hooks". Offering the editor there would invite exactly that refusal.
+    const bearing = new Set(["agent", "parallel", "consolidator", "starter"]);
+    for (const kind of KNOWN_KINDS) {
+      for (const key of ["hooks", "tool_hooks"]) {
+        expect(fieldsForKind(kind).includes(key), `${kind} ${key}`).toBe(bearing.has(kind));
+      }
+    }
+  });
+
+  it("offers the same hook events the loomcycle Web UI offers", () => {
+    const f = teamHandlerRegistry.fields.find((x) => x.key === "hooks")!;
+    expect(f.type).toBe("hook-events");
+    expect(f.options).toContain("agent_stop");
+    expect(f.options).not.toContain("channel_publish");
   });
 
   it("shows nothing for a terminal state", () => {

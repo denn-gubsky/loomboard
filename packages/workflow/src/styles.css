@@ -235,6 +235,11 @@
   color: var(--lb-wf-muted);
   font-size: 11px;
 }
+/* The accent, not the muted grey: a hook changes what every run this node
+   starts is allowed to do, so it should read as configuration, not a footnote. */
+.loomboard-workflow .lb-wf-node__hooks {
+  color: var(--lb-wf-accent);
+}
 .loomboard-workflow .lb-wf-node__findings {
   margin-top: 6px;
 }

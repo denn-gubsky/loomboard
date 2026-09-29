@@ -20,7 +20,7 @@
 // existing value survives untouched regardless. It joins this registry in P2,
 // alongside `system_prompt`.
 
-import type { DefRegistry, FieldSpec } from "@loomcycle/def-fields";
+import { AGENT_HOOK_EVENTS, type DefRegistry, type FieldSpec } from "@loomcycle/def-fields";
 
 /** Handler kinds this build renders. Mirrors model.KNOWN_KINDS; kept as a
  *  literal here because def-fields wants a readonly string[] for an enum's
@@ -371,6 +371,35 @@ const FIELDS: readonly FieldSpec[] = [
   },
 ];
 
+// Hooks (RFC DK-P4c). The events and controls come from def-fields, so the
+// canvas offers exactly what the loomcycle Web UI's TeamDef editor offers.
+// Which kinds may carry them is fieldsForKind's job; lib/hooks.ts checks the
+// rest the way teamgraph does.
+const HOOK_FIELDS: readonly FieldSpec[] = [
+  {
+    key: "hooks",
+    label: "Run hooks",
+    group: "Hooks",
+    type: "hook-events",
+    options: AGENT_HOOK_EVENTS,
+    hint:
+      "Added to every run this node starts, after the hooks the agent itself carries. " +
+      "A team can add a hook but never remove one an agent has. agent_stop with hold " +
+      "parks a finished run for review.",
+    unsetMeans: "only the agent's own hooks run",
+  },
+  {
+    key: "tool_hooks",
+    label: "Tool hooks",
+    group: "Hooks",
+    type: "tool-hooks",
+    hint:
+      "A tool's own pre / post hooks for the runs this node starts. The tool must be one " +
+      "the agent has — the runtime refuses the run otherwise, not the save.",
+    unsetMeans: "only the agent's own tool hooks run",
+  },
+];
+
 export const teamHandlerRegistry: DefRegistry = {
   kind: "teamhandler",
   groups: [
@@ -388,8 +417,12 @@ export const teamHandlerRegistry: DefRegistry = {
     { name: "Variables", hint: "What this node assigns into ${var.*}." },
     { name: "Form", hint: "The start form a client renders for this workflow." },
     { name: "Delivery", hint: "Cursor and redelivery semantics." },
+    {
+      name: "Hooks",
+      hint: "Gates on the runs this node starts. Content: changing them forks the team.",
+    },
   ],
-  fields: FIELDS,
+  fields: [...FIELDS, ...HOOK_FIELDS],
 };
 
 /** Handler keys the canvas renders OUTSIDE the folded list, so the inspector
@@ -400,6 +433,10 @@ export const HANDLER_OMIT_IN_LIST: readonly string[] = ["kind"];
 /** Which registry fields are meaningful for a given kind. def-fields has no
  *  conditional-field concept, so the inspector filters with this rather than
  *  showing `agents` on a terminal state. */
+/** Offered only on the kinds that start runs — teamgraph refuses hooks on
+ *  the rest ("starts no run, so it cannot carry hooks"). */
+const HOOK_KEYS = ["hooks", "tool_hooks"];
+
 export function fieldsForKind(kind: string): string[] {
   switch (kind) {
     // system_prompt / input_template are offered on every kind that RUNS an
@@ -407,11 +444,11 @@ export function fieldsForKind(kind: string): string[] {
     // prompt on a state that runs nothing is a setting with no effect — which
     // is the failure the starter-only guards exist to prevent, just unenforced.
     case "agent":
-      return ["agent", "consolidator", "system_prompt", "input_template", "timeout_ms"];
+      return ["agent", "consolidator", "system_prompt", "input_template", "timeout_ms", ...HOOK_KEYS];
     case "consolidator":
-      return ["agent", "system_prompt", "input_template", "timeout_ms"];
+      return ["agent", "system_prompt", "input_template", "timeout_ms", ...HOOK_KEYS];
     case "parallel":
-      return ["agents", "consolidator", "wait", "system_prompt", "input_template", "timeout_ms"];
+      return ["agents", "consolidator", "wait", "system_prompt", "input_template", "timeout_ms", ...HOOK_KEYS];
     case "vars":
       return ["set"];
     case "input":
@@ -420,7 +457,7 @@ export function fieldsForKind(kind: string): string[] {
       // Deliberately NOT agent/agents: a starter names its agents inside
       // `fanout`, and the runtime refuses them at the top level. Offering both
       // places would invite exactly the definition that gets rejected on save.
-      return ["source", "fanout", "prompt", "sink", "binds", "ack", "timeout_ms"];
+      return ["source", "fanout", "prompt", "sink", "binds", "ack", "timeout_ms", ...HOOK_KEYS];
     case "channel":
       return ["channel"];
     case "terminal":
