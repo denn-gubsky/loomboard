@@ -7,6 +7,7 @@ import type {
   TeamSummary,
   WorkflowDataLayer,
 } from "@loomboard/workflow";
+import { hookNamesOf } from "@loomboard/workflow";
 
 // loomboard's binding of @loomboard/workflow's injected data layer to
 // @loomcycle/client.
@@ -93,7 +94,12 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
         name: c.name,
         scope: c.scope,
         hold: c.hold,
+        // Names only, reduced here so an inline webhook's URL or headers
+        // never reach the canvas at all.
+        hooks: hookNamesOf(c.hooks),
         message_count: c.message_count,
+        held_count: c.held_count,
+        awaiting_hooks_count: c.awaiting_hooks_count,
         source: c.source,
       }));
     },

@@ -79,6 +79,16 @@ describe("PublishComposer", () => {
     expect(screen.queryByText(/^Published\.$/)).toBeNull();
   });
 
+  it("says STORED, not published, when the channel's hooks must release it first", async () => {
+    // The regression: the composer said "Published." for every successful
+    // call, including a message stored invisible behind the channel's hooks.
+    show({ onPublish: async () => ({ awaiting_hooks: true }) });
+    fireEvent.change(payload(), { target: { value: '{"a":1}' } });
+    fireEvent.click(publishBtn());
+    expect(await screen.findByText(/Stored, waiting for the channel's hooks/)).toBeTruthy();
+    expect(screen.queryByText("Published.")).toBeNull();
+  });
+
   it("confirms a successful publish", async () => {
     show();
     fireEvent.change(payload(), { target: { value: "{}" } });

@@ -253,3 +253,21 @@ export function validateStateHooks(kind: string, handler: JsonObject): string[] 
   if (t) out.push(t);
   return out;
 }
+
+/** The NAMES of the hooks in an events map — a HookDef reference as written,
+ *  an inline webhook by its `name` — in event order, each once. For showing
+ *  that a channel or node is gated without showing where the gate calls: an
+ *  inline URL may carry a token and its headers may name credentials. */
+export function hookNamesOf(v: unknown): string[] {
+  if (!isObj(v)) return [];
+  const out: string[] = [];
+  for (const phase of sortedKeys(v)) {
+    const list = v[phase];
+    if (!Array.isArray(list)) continue;
+    for (const e of list) {
+      const name = typeof e === "string" ? e : isObj(e) && typeof e.name === "string" ? e.name : "";
+      if (name && !out.includes(name)) out.push(name);
+    }
+  }
+  return out;
+}

@@ -97,8 +97,28 @@ export interface ChannelInfo {
   scope?: string;
   /** Publishes are stored but never delivered until released (ChannelDef.Hold). */
   hold?: boolean;
+  /** Names of the channel's own `channel_publish` hooks (RFC DK D6). Each
+   *  message is stored and delivered only if they release it. NAMES ONLY —
+   *  never an inline webhook's URL or headers. */
+  hooks?: string[];
+  /** Everything stored, including the two counts below. */
   message_count?: number;
+  /** Stored but invisible to readers until a release (Hold). */
+  held_count?: number;
+  /** Stored but invisible to readers until the channel's hooks decide. */
+  awaiting_hooks_count?: number;
   source?: string;
+}
+
+/** What a publish reports back that changes what "sent" means. Mirrors the
+ *  fields of the SDK's ChannelPublishResult the composer acts on. */
+export interface PublishOutcome {
+  /** Stored, not delivered until the hold is released. */
+  held?: boolean;
+  /** Stored, delivered only if the channel's hooks release it. */
+  awaiting_hooks?: boolean;
+  /** How many of the oldest messages this write trimmed (max_messages). */
+  dropped_oldest?: number;
 }
 
 /** Everything the canvas needs from its host. Optional members degrade the UI
@@ -149,7 +169,11 @@ export interface WorkflowDataLayer {
    *  passed through, rather than left to the host to guess: publishing at the
    *  wrong scope succeeds and then never arrives, which is the worst failure
    *  shape available here. */
-  publishChannel?(channel: string, payload: unknown, opts: { scope: string }): Promise<unknown>;
+  publishChannel?(
+    channel: string,
+    payload: unknown,
+    opts: { scope: string },
+  ): Promise<PublishOutcome | void>;
 }
 
 export type CanvasMode = "edit" | "readonly";
