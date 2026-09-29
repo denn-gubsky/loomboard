@@ -221,9 +221,22 @@ export function toDefinition(model: CanvasModel): JsonObject {
   out.transitions = model.edges.map((e) => clone(e.raw));
 
   if (model.layoutDirty) {
-    const nodes: JsonObject = {};
-    for (const n of model.nodes) nodes[n.id] = { x: n.position.x, y: n.position.y };
     const prev = isObj(out.layout) ? out.layout : {};
+    const prevNodes = isObj(prev.nodes) ? prev.nodes : {};
+    const nodes: JsonObject = {};
+    for (const n of model.nodes) {
+      // ROUNDED: teamgraph.NodePos is `X, Y int`, and Go's decoder refuses a
+      // fraction — "cannot unmarshal number 312.5 into … of type int" — so a
+      // fractional position fails the whole save. A drag at any zoom other
+      // than 1 lands on a fraction, which made saving after a drag fail.
+      // A stored `w` / `h` survives the move.
+      const old = prevNodes[n.id];
+      nodes[n.id] = {
+        ...(isObj(old) ? old : {}),
+        x: Math.round(n.position.x),
+        y: Math.round(n.position.y),
+      };
+    }
     out.layout = { ...prev, nodes };
   }
 
