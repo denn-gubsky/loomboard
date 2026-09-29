@@ -379,6 +379,30 @@
   fill: var(--lb-wf-data);
 }
 
+/* A BINDING node (lib/bindings.ts): a Document or Memory a prompt pulls in.
+ * Below the states, squared and muted — content fed in, not wiring (channels
+ * are the rounded pills above) and not a step of the walk. */
+.loomboard-workflow .lb-wf-node--binding {
+  min-width: 170px;
+  border-style: dotted;
+  border-color: var(--lb-wf-muted);
+}
+.loomboard-workflow .lb-wf-node--binding .lb-wf-node__title {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.loomboard-workflow .lb-wf-edge--binding .react-flow__edge-path {
+  stroke: var(--lb-wf-muted);
+  stroke-dasharray: 1 3;
+  stroke-width: 1.5;
+}
+/* Derived from prompt text, so, like a data edge, not draggable or deletable. */
+.loomboard-workflow .lb-wf-edge--binding {
+  pointer-events: none;
+}
+.loomboard-workflow .react-flow__minimap-node.is-binding {
+  fill: var(--lb-wf-muted);
+}
+
 .loomboard-workflow .lb-wf-node__channel {
   margin-top: 4px;
   font-size: 11px;

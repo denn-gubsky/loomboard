@@ -16,11 +16,15 @@ import { autoLayout, needsAutoLayout } from "./lib/layout";
 import {
   edgeId,
   mergeMeasured,
+  toBindingEdges,
+  toBindingFlowNodes,
   toChannelFlowNodes,
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
 } from "./lib/flow";
+import { bindingFindings, bindingNodes } from "./lib/bindings";
+import { BindingNode } from "./nodes/BindingNode";
 import { channelNodes } from "./lib/channelNodes";
 import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
 import { applyWire, connectionKind, placeChannel, planWire, removeChannel } from "./lib/channelWiring";
@@ -52,7 +56,7 @@ import { StateNode } from "./nodes/StateNode";
 import { handlerChannels } from "./lib/model";
 import type { ChannelInfo, SavedTeam, WorkflowCanvasProps } from "./types";
 
-const NODE_TYPES = { state: StateNode, channel: ChannelNode };
+const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode };
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -185,28 +189,34 @@ function WorkflowCanvasInner({
   // check lives in the TeamDef tool's create/fork preflight — but both refuse a
   // save, so the operator sees one list.
   const findings = useMemo(
-    () => (model ? [...validateModel(model), ...aclFindings(model)] : []),
+    () => (model ? [...validateModel(model), ...aclFindings(model), ...bindingFindings(model)] : []),
     [model],
   );
   // The channels the graph names, as nodes its data edges route through.
   const channelViews = useMemo(() => (model ? channelNodes(model, channels) : []), [model, channels]);
+  // The Documents and Memory the prompts pull in, as nodes feeding them (P3).
+  const bindingViews = useMemo(() => (model ? bindingNodes(model) : []), [model]);
   const flowNodes = useMemo(
     () =>
       model
         ? [
             ...toFlowNodes(model, findings, selectedId, measured),
             ...toChannelFlowNodes(channelViews, selectedId, measured),
+            ...toBindingFlowNodes(bindingViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews],
+    [model, findings, selectedId, measured, channelViews, bindingViews],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
   // overlap: the walk's own graph is what an operator is editing, and the
   // channel wiring is context for it (decision C1).
   const flowEdges = useMemo(
-    () => (model ? [...toFlowEdges(model, findings), ...toDataEdges(channelViews)] : []),
-    [model, findings, channelViews],
+    () =>
+      model
+        ? [...toFlowEdges(model, findings), ...toDataEdges(channelViews), ...toBindingEdges(bindingViews)]
+        : [],
+    [model, findings, channelViews, bindingViews],
   );
 
   const selected = useMemo(
@@ -700,6 +710,7 @@ function WorkflowCanvasInner({
               // empty box, which is how it shipped.
               nodeClassName={(n) => {
                 if (n.type === "channel") return "is-channelref";
+                if (n.type === "binding") return "is-binding";
                 const d = n.data as unknown as { node?: { kind?: string; opaque?: boolean } };
                 if (d?.node?.opaque) return "is-opaque";
                 return `is-${d?.node?.kind || "unset"}`;
@@ -722,6 +733,7 @@ function WorkflowCanvasInner({
             walkHooks={model ? walkHooks(model) : undefined}
             onWalkHooksChange={onWalkHooksChange}
             channel={channelViews.find((v) => v.id === selectedId) ?? null}
+            binding={bindingViews.find((v) => v.id === selectedId) ?? null}
           />
         )}
       </div>

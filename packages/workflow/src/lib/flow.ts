@@ -21,6 +21,7 @@ import type { CanvasEdge, CanvasModel, CanvasNode } from "./model";
 import { handlerAgents, handlerChannels, handlerOf } from "./model";
 import type { Finding } from "./validate";
 import type { ChannelNodeView } from "./channelNodes";
+import type { BindingNodeView } from "./bindings";
 
 /** Which relation an edge represents. `control` is a transition the operator
  *  drew; `data` is derived from channel wiring and is never draggable. */
@@ -123,6 +124,10 @@ export const HANDLE = {
   targetBottom: "t-bottom",
   sourceTop: "s-top",
   targetTop: "t-top",
+  /** Where a binding (a Document / Memory its prompt names) feeds in: the
+   *  bottom, offset from the loop handle so a binding edge cannot stack on a
+   *  pushback loop. Only on kinds that carry a prompt. */
+  targetBind: "t-bind",
 } as const;
 
 /** `MarkerType.ArrowClosed`'s wire value. Inlined rather than imported so this
@@ -400,6 +405,68 @@ export function toDataEdges(views: readonly ChannelNodeView[]): FlowEdge[] {
   for (const v of views) {
     for (const p of v.publishers) out.push(edge(p, v.id, HANDLE.sourceTop, CHANNEL_HANDLE.in, v.channel));
     for (const r of v.readers) out.push(edge(v.id, r, CHANNEL_HANDLE.out, HANDLE.targetTop, v.channel));
+  }
+  return out;
+}
+
+/** A binding node's one handle: its top, rising into the states it feeds. */
+export const BINDING_HANDLE = { out: "b-out" } as const;
+
+export interface BindingFlowData {
+  view: BindingNodeView;
+  [k: string]: unknown;
+}
+
+export interface BindingFlowNode {
+  id: string;
+  type: "binding";
+  position: { x: number; y: number };
+  data: BindingFlowData;
+  selected?: boolean;
+  measured?: { width: number; height: number };
+  /** Derived from a prompt's text: removed by editing the prompt. */
+  deletable: false;
+  connectable: false;
+}
+
+export function toBindingFlowNodes(
+  views: readonly BindingNodeView[],
+  selectedId?: string | null,
+  measured?: Measured,
+): BindingFlowNode[] {
+  return views.map((v) => ({
+    id: v.id,
+    type: "binding" as const,
+    position: v.position,
+    selected: v.id === selectedId,
+    deletable: false as const,
+    connectable: false as const,
+    data: { view: v },
+    ...(measured?.[v.id] ? { measured: measured[v.id] } : {}),
+  }));
+}
+
+/** One edge per (binding → state that reads it). Several fields of one state
+ *  naming the same binding are one edge: the relation is "this state reads
+ *  it", and which field is on the panel. */
+export function toBindingEdges(views: readonly BindingNodeView[]): FlowEdge[] {
+  const out: FlowEdge[] = [];
+  for (const v of views) {
+    for (const state of [...new Set(v.readers.map((r) => r.state))]) {
+      out.push({
+        id: `bind:${v.id} > ${state}`,
+        source: v.id,
+        target: state,
+        sourceHandle: BINDING_HANDLE.out,
+        targetHandle: HANDLE.targetBind,
+        type: "smoothstep" as const,
+        label: "",
+        className: "lb-wf-edge lb-wf-edge--binding",
+        markerEnd: { type: ARROW, width: 14, height: 14, color: ARROW_COLOR },
+        deletable: false,
+        data: { kind: "data" as const, on: "", findings: [] },
+      });
+    }
   }
   return out;
 }
