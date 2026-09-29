@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { publishPreflight, type PreflightInput } from "./publish";
+import { publishOutcomeMessage, publishPreflight, type PreflightInput } from "./publish";
+import { hookNamesOf } from "./hooks";
 
 const base: PreflightInput = {
   channel: "sdlc-intake",
@@ -115,5 +116,69 @@ describe("publishPreflight — nothing to publish to", () => {
     expect(r.issues).toHaveLength(1);
     // And short-circuits: no point complaining about the payload too.
     expect(r.issues[0].message).toMatch(/nothing to publish to/);
+  });
+});
+
+describe("publishPreflight — hooked channels (RFC DK D6)", () => {
+  it("warns that a hooked channel may rewrite, drop or hold the message, naming its hooks", () => {
+    const r = of({ info: { name: "c", scope: "tenant", hooks: ["moderate", "redact"] } });
+    expect(r.canPublish).toBe(true);
+    expect(messages({ info: { name: "c", scope: "tenant", hooks: ["moderate", "redact"] } })).toMatch(
+      /carries hooks \(moderate, redact\).*delivered only if they release it/,
+    );
+  });
+
+  it("says nothing about hooks on a channel that has none", () => {
+    expect(messages({ info: { name: "c", scope: "tenant", hooks: [] } })).not.toMatch(/hook/);
+  });
+});
+
+describe("publishPreflight — the backlog counts only what a Starter can read", () => {
+  // message_count includes messages a reader cannot see yet. Counting them
+  // overstated the wave, and on a hooked channel said "forty queued" when the
+  // Starter would read none of them.
+  it("does not warn when everything stored is held or awaiting hooks", () => {
+    const info = { name: "c", scope: "tenant", message_count: 10, held_count: 3, awaiting_hooks_count: 7 };
+    expect(messages({ info })).not.toMatch(/already queued/);
+  });
+
+  it("counts only the visible remainder", () => {
+    const info = { name: "c", scope: "tenant", message_count: 5, awaiting_hooks_count: 2 };
+    expect(messages({ info })).toMatch(/^3 messages already queued/);
+  });
+});
+
+describe("publishOutcomeMessage", () => {
+  it.each([
+    [undefined, "Published."],
+    [{}, "Published."],
+    [{ awaiting_hooks: true }, "Stored, waiting for the channel's hooks — delivered only if they release it."],
+    [{ held: true }, "Stored, held — delivered to nobody until the hold is released."],
+    [{ dropped_oldest: 2 }, "Published. The channel was full: 2 older messages were trimmed to make room."],
+  ])("reports %j as %s", (outcome, text) => {
+    expect(publishOutcomeMessage(outcome)).toBe(text);
+  });
+
+  it("never says Published for a message nobody can read yet", () => {
+    expect(publishOutcomeMessage({ awaiting_hooks: true, held: true })).not.toMatch(/Published/);
+  });
+});
+
+describe("hookNamesOf", () => {
+  it("names each hook once, never carrying an inline webhook's endpoint", () => {
+    const names = hookNamesOf({
+      channel_publish: [
+        "moderate@2",
+        { name: "redact", url: "https://x.example/h?token=s3cr3t", headers: { "X-K": "$cred:k" } },
+        "moderate@2",
+      ],
+    });
+    expect(names).toEqual(["moderate@2", "redact"]);
+    expect(names.join(" ")).not.toMatch(/s3cr3t|\$cred|https:/);
+  });
+
+  it("is empty for anything that is not a hooks map", () => {
+    expect(hookNamesOf(undefined)).toEqual([]);
+    expect(hookNamesOf(["x"])).toEqual([]);
   });
 });

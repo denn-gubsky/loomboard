@@ -124,13 +124,16 @@ export type { PublishComposerProps } from "./PublishComposer";
 
 // The publish pre-flight (C7). Exported for the same reason the session
 // machine is: a host wiring its own composer must not re-derive these rules.
-export { publishPreflight } from "./lib/publish";
+export { publishOutcomeMessage, publishPreflight } from "./lib/publish";
+// For a host mapping a channel's hooks onto ChannelInfo.hooks: names only.
+export { hookNamesOf } from "./lib/hooks";
 export type { IssueLevel, Preflight, PreflightInput, PublishIssue } from "./lib/publish";
 
 export type {
   CanvasMode,
   ChannelInfo,
   DetachedRun,
+  PublishOutcome,
   SavedTeam,
   TeamDefDetail,
   TeamRunResult,

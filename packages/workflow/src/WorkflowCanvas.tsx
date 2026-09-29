@@ -577,9 +577,7 @@ function WorkflowCanvasInner({
           loadedDefId={parentDefId.current ?? undefined}
           activeDefId={activeDefId}
           disabled={busy}
-          onPublish={async (payload, scope) => {
-            await dataLayer.publishChannel!(entryChannel, payload, { scope });
-          }}
+          onPublish={(payload, scope) => dataLayer.publishChannel!(entryChannel, payload, { scope })}
           onClose={() => setComposing(false)}
         />
       )}

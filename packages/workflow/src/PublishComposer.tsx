@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { publishPreflight } from "./lib/publish";
-import type { ChannelInfo } from "./types";
+import { publishOutcomeMessage, publishPreflight } from "./lib/publish";
+import type { ChannelInfo, PublishOutcome } from "./types";
 
 // The publish composer — RFC CZ decision C7.
 //
@@ -21,7 +21,9 @@ export interface PublishComposerProps {
   loadedDefId?: string;
   activeDefId?: string;
   disabled?: boolean;
-  onPublish: (payload: unknown, scope: string) => Promise<void>;
+  /** Resolves with what the runtime reported, so the composer can say
+   *  "stored, not delivered" instead of "published" when that is the truth. */
+  onPublish: (payload: unknown, scope: string) => Promise<PublishOutcome | void>;
   onClose: () => void;
 }
 
@@ -57,8 +59,8 @@ export function PublishComposer({
     try {
       // `scope` comes from the channel's own declaration via the pre-flight.
       // Defaulting it here would be the bug the pre-flight exists to catch.
-      await onPublish(pre.payload, pre.scope ?? "");
-      setSent("Published.");
+      const outcome = await onPublish(pre.payload, pre.scope ?? "");
+      setSent(publishOutcomeMessage(outcome));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
