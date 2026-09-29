@@ -1,0 +1,182 @@
+{
+  "_comment": [
+    "Shared placeholder-scan cases for lib/bindings.ts. ONE file, TWO scanners:",
+    "the canvas's scanBindings, and loomcycle's combinedPlaceholderRe (internal/memory)",
+    "run through a throwaway Go test in package memory. VERIFIED against loomcycle",
+    "v1.100.0; re-run after any change to internal/memory's patterns."
+  ],
+  "cases": [
+    {
+      "name": "plain document by path",
+      "text": "Read {{document:/specs/launch}} first.",
+      "bindings": [
+        {
+          "kind": "document",
+          "ref": "/specs/launch"
+        }
+      ]
+    },
+    {
+      "name": "document section by heading",
+      "text": "{{document:/specs/launch#Risks}}",
+      "bindings": [
+        {
+          "kind": "document",
+          "ref": "/specs/launch#Risks"
+        }
+      ]
+    },
+    {
+      "name": "document by id",
+      "text": "{{document:5673df64fadb15c431c0eff2e78b5542}}",
+      "bindings": [
+        {
+          "kind": "document",
+          "ref": "5673df64fadb15c431c0eff2e78b5542"
+        }
+      ]
+    },
+    {
+      "name": "escaped placeholder is literal",
+      "text": "Write \\{{document:/specs/x}} to mean the syntax.",
+      "bindings": []
+    },
+    {
+      "name": "case and whitespace tolerant",
+      "text": "{{ DOCUMENT : /Specs/A }}",
+      "bindings": [
+        {
+          "kind": "document",
+          "ref": "/Specs/A"
+        }
+      ]
+    },
+    {
+      "name": "a variable inside a document ref",
+      "text": "{{document:/specs/${var.pr}}}",
+      "bindings": [
+        {
+          "kind": "document",
+          "ref": "/specs/${var.pr}"
+        }
+      ]
+    },
+    {
+      "name": "two refs, not one",
+      "text": "{{document:/a}} and {{document:/b}}",
+      "bindings": [
+        {
+          "kind": "document",
+          "ref": "/a"
+        },
+        {
+          "kind": "document",
+          "ref": "/b"
+        }
+      ]
+    },
+    {
+      "name": "memory section variant",
+      "text": "{{memory:core_blocks}}",
+      "bindings": [
+        {
+          "kind": "memory",
+          "ref": "core_blocks"
+        }
+      ]
+    },
+    {
+      "name": "memory variant is case-normalised",
+      "text": "{{memory:USER_INFO}}",
+      "bindings": [
+        {
+          "kind": "memory",
+          "ref": "user_info"
+        }
+      ]
+    },
+    {
+      "name": "unknown variant still scans (renders empty)",
+      "text": "{{memory:core_block}}",
+      "bindings": [
+        {
+          "kind": "memory",
+          "ref": "core_block"
+        }
+      ]
+    },
+    {
+      "name": "memory key sub-form wins over the plain variant",
+      "text": "{{memory:key:launch/notes}}",
+      "bindings": [
+        {
+          "kind": "memory",
+          "ref": "key:launch/notes"
+        }
+      ]
+    },
+    {
+      "name": "memory search sub-form",
+      "text": "{{memory:search:open risks for ${var.pr}}}",
+      "bindings": [
+        {
+          "kind": "memory",
+          "ref": "search:open risks for ${var.pr}"
+        }
+      ]
+    },
+    {
+      "name": "tool placeholders are not bindings",
+      "text": "{{tool:Context.tools}} {{tool:WebFetch:https://x.example/a}}",
+      "bindings": []
+    },
+    {
+      "name": "a tool ref cannot swallow a document",
+      "text": "{{tool:Context.tools}}{{document:/x}}",
+      "bindings": [
+        {
+          "kind": "document",
+          "ref": "/x"
+        }
+      ]
+    },
+    {
+      "name": "an over-long document ref does not parse",
+      "text": "{{document:/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}}",
+      "bindings": []
+    },
+    {
+      "name": "an empty path before # does not parse",
+      "text": "{{document:#Risks}}",
+      "bindings": []
+    },
+    {
+      "name": "mixed prompt, in order",
+      "text": "{{memory:ontology}} then {{document:/d#H}} then {{memory:key:k}}",
+      "bindings": [
+        {
+          "kind": "memory",
+          "ref": "ontology"
+        },
+        {
+          "kind": "document",
+          "ref": "/d#H"
+        },
+        {
+          "kind": "memory",
+          "ref": "key:k"
+        }
+      ]
+    },
+    {
+      "name": "escaped memory section is literal",
+      "text": "Use \\{{memory:core_blocks}} to include blocks.",
+      "bindings": []
+    },
+    {
+      "name": "escaped memory sub-form is literal",
+      "text": "\\{{memory:key:launch}} is the syntax",
+      "bindings": []
+    }
+  ]
+}
