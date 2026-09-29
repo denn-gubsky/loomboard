@@ -358,6 +358,27 @@
   border-style: dashed;
 }
 
+/* A channel NODE (lib/channelNodes.ts) is not a state: it is the carrier the
+ * data edges run through, referenced and never created here. A rounded pill in
+ * the data colour, so it reads as wiring rather than as a step of the walk —
+ * and distinct from the dashed publish-only STATE above, which is a step. */
+.loomboard-workflow .lb-wf-node--channelref {
+  min-width: 150px;
+  border-radius: 999px;
+  border-color: var(--lb-wf-data);
+  padding: 6px 16px;
+}
+.loomboard-workflow .lb-wf-node--channelref .lb-wf-node__title {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.loomboard-workflow .lb-wf-node__warn {
+  color: var(--lb-wf-conditional);
+  font-weight: 600;
+}
+.loomboard-workflow .react-flow__minimap-node.is-channelref {
+  fill: var(--lb-wf-data);
+}
+
 .loomboard-workflow .lb-wf-node__channel {
   margin-top: 4px;
   font-size: 11px;
