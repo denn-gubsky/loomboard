@@ -101,6 +101,11 @@ export interface CanvasModel {
    *  part — authority that can change without changing the definition's
    *  identity is not auditable — and it means this panel is never a free edit. */
   channelsPatch?: TeamChannels;
+  /** The WALK's own hooks (RFC DK-P4c: `run_end` only), once edited. Absent
+   *  means untouched; `{ hooks: undefined }` means the operator cleared them
+   *  and the key leaves the definition. A wrapper, because "untouched" and
+   *  "cleared" must not both be `undefined`. Content: it forks on save. */
+  walkHooksPatch?: { hooks?: JsonObject };
 }
 
 /** The workflow's own channel allowlist. The Starter is its single subject, so
@@ -236,6 +241,12 @@ export function toDefinition(model: CanvasModel): JsonObject {
     else delete out.channels;
   }
 
+  if (model.walkHooksPatch) {
+    const h = model.walkHooksPatch.hooks;
+    if (h && Object.keys(h).length) out.hooks = clone(h);
+    else delete out.hooks;
+  }
+
   return out;
 }
 
@@ -329,6 +340,13 @@ export function teamChannels(model: CanvasModel): TeamChannels {
   const list = (v: Json | undefined): string[] | undefined =>
     Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined;
   return { publish: list(raw.publish), subscribe: list(raw.subscribe) };
+}
+
+/** The walk's own hooks as they currently stand — the operator's edit if there
+ *  is one, otherwise whatever the definition carries. */
+export function walkHooks(model: CanvasModel): JsonObject | undefined {
+  if (model.walkHooksPatch) return model.walkHooksPatch.hooks;
+  return isObj(model.source.hooks) ? model.source.hooks : undefined;
 }
 
 /** The channels a node reads and publishes, for the node face and for deriving

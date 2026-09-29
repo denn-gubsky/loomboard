@@ -6,6 +6,7 @@ import {
   patchHandler,
   teamChannels,
   toDefinition,
+  walkHooks,
   type CanvasModel,
 } from "./model";
 
@@ -308,5 +309,39 @@ describe("team channels", () => {
     expect(out.channels).toEqual({ publish: ["x"] });
     expect(out.max_iterations).toBe(FORWARD_COMPAT.max_iterations);
     expect(out.states).toEqual(FORWARD_COMPAT.states);
+  });
+});
+
+describe("walk hooks (RFC DK-P4c)", () => {
+  const withHooks = {
+    entry: "s",
+    states: [
+      { state: "s", handler: { kind: "agent", agent: "a" } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [{ from: "s", to: "done", on: "success" }],
+    hooks: { run_end: ["notify-owner"] },
+  };
+
+  it("round-trips untouched walk hooks byte-identically", () => {
+    expect(JSON.stringify(toDefinition(fromDefinition(withHooks)))).toBe(JSON.stringify(withHooks));
+  });
+
+  it("reads the saved hooks until they are edited", () => {
+    expect(walkHooks(fromDefinition(withHooks))).toEqual({ run_end: ["notify-owner"] });
+  });
+
+  it("writes an edit", () => {
+    const m = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: { run_end: ["page-oncall"] } } };
+    expect(toDefinition(m).hooks).toEqual({ run_end: ["page-oncall"] });
+  });
+
+  it("REMOVES the key when the operator clears it, rather than writing {}", () => {
+    // Go tags Definition.Hooks omitempty, so {} and absent mean the same — but
+    // only absent round-trips against a definition that never had the key.
+    const m = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: undefined } };
+    expect("hooks" in toDefinition(m)).toBe(false);
+    const empty = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: {} } };
+    expect("hooks" in toDefinition(empty)).toBe(false);
   });
 });

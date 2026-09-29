@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { FoldedFieldList, type DefValue } from "@loomcycle/def-fields";
-import type { CanvasNode, Json, TeamChannels } from "../lib/model";
+import { FoldedFieldList, HookEventsControl, type DefValue } from "@loomcycle/def-fields";
+import type { CanvasNode, Json, JsonObject, TeamChannels } from "../lib/model";
 import { KNOWN_KINDS, handlerOf } from "../lib/model";
 import type { Finding } from "../lib/validate";
 import { HANDLER_OMIT_IN_LIST, fieldsForKind, teamHandlerRegistry } from "./registry";
@@ -15,6 +15,9 @@ export interface InspectorProps {
   /** The team's channel ACL, shown when no state is selected. */
   channels?: TeamChannels;
   onChannelsChange?: (next: TeamChannels) => void;
+  /** The walk's own hooks (run_end only), shown when no state is selected. */
+  walkHooks?: JsonObject;
+  onWalkHooksChange?: (next: JsonObject | undefined) => void;
 }
 
 /** The node inspector: the state id and kind rendered by hand, everything else
@@ -35,6 +38,8 @@ export function Inspector({
   onRename,
   channels,
   onChannelsChange,
+  walkHooks,
+  onWalkHooksChange,
 }: InspectorProps) {
   const value = useMemo<DefValue>(() => {
     if (!node) return {};
@@ -59,13 +64,28 @@ export function Inspector({
 
   if (!node) {
     // With nothing selected the inspector shows the TEAM's own configuration
-    // rather than an empty pane. The channel ACL is the only such field today
-    // and it has nowhere else to live: it is not a property of any one state.
+    // rather than an empty pane: the channel ACL and the walk's own hooks,
+    // neither of which is a property of any one state.
     return (
       <aside className="lb-wf-inspector lb-wf-inspector--team">
         <p className="lb-wf-inspector__hint">Select a node to edit it.</p>
         {channels && onChannelsChange && (
           <TeamChannelPanel value={channels} disabled={disabled} onChange={onChannelsChange} />
+        )}
+        {onWalkHooksChange && (
+          <section className="lb-wf-team">
+            <h3 className="lb-wf-team__title">Walk hooks</h3>
+            <p className="lb-wf-team__hint">
+              The walk is itself a run, and it only ends, so only <code>run_end</code> fires for it
+              &mdash; to report how it ended. Hooks on the runs it starts belong on those nodes.
+            </p>
+            <HookEventsControl
+              value={walkHooks}
+              events={["run_end"]}
+              disabled={disabled}
+              onChange={(next) => onWalkHooksChange(next as JsonObject | undefined)}
+            />
+          </section>
         )}
       </aside>
     );

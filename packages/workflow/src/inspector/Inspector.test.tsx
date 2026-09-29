@@ -183,3 +183,39 @@ describe("Inspector — hooks (RFC DK-P4c)", () => {
     expect(screen.queryByText("Tool hooks")).toBeNull();
   });
 });
+
+describe("Inspector — the walk's hooks", () => {
+  it("offers run_end only, in the team pane", () => {
+    render(
+      <Inspector
+        node={null}
+        findings={[]}
+        walkHooks={{ run_end: ["notify-owner"] }}
+        onWalkHooksChange={noop}
+        onPatch={noop}
+        onRename={noop}
+      />,
+    );
+    expect(screen.getByText("Walk hooks")).toBeTruthy();
+    const values = [...document.querySelectorAll("input")].map((i) => i.value);
+    expect(values).toContain("notify-owner");
+    // The event list offers nothing the walk refuses.
+    expect(document.body.textContent).not.toMatch(/agent_stop/);
+  });
+
+  it("clears the walk's hooks when the last one is removed", () => {
+    const onWalkHooksChange = vi.fn();
+    render(
+      <Inspector
+        node={null}
+        findings={[]}
+        walkHooks={{ run_end: ["notify-owner"] }}
+        onWalkHooksChange={onWalkHooksChange}
+        onPatch={noop}
+        onRename={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove hook" }));
+    expect(onWalkHooksChange).toHaveBeenCalledWith(undefined);
+  });
+});
