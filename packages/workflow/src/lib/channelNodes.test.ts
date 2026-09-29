@@ -110,14 +110,14 @@ describe("channelNodes — where they are drawn", () => {
   });
 
   it("uses an unsaved drag over the stored position", () => {
-    const m = { ...fromDefinition(def()), channelPositions: { "channel:raw": { x: 9, y: 9 } } };
+    const m = { ...fromDefinition(def()), derivedPositions: { "channel:raw": { x: 9, y: 9 } } };
     expect(view(m, "raw").position).toEqual({ x: 9, y: 9 });
   });
 });
 
 describe("toDefinition — channel positions in layout.nodes", () => {
   it("writes a dragged channel's position, rounded, beside the states'", () => {
-    const m = { ...fromDefinition(def()), layoutDirty: true, channelPositions: { "channel:raw": { x: 10.6, y: -3.2 } } };
+    const m = { ...fromDefinition(def()), layoutDirty: true, derivedPositions: { "channel:raw": { x: 10.6, y: -3.2 } } };
     const out = toDefinition(m) as { layout: { nodes: Record<string, unknown> } };
     expect(out.layout.nodes["channel:raw"]).toEqual({ x: 11, y: -3 });
   });
@@ -131,13 +131,22 @@ describe("toDefinition — channel positions in layout.nodes", () => {
     expect(out.layout.nodes["channel:raw"]).toEqual({ x: 5, y: 6 });
   });
 
+  it("keeps every DERIVED node's saved position, not only channels'", () => {
+    // Bindings (lib/bindings.ts) share the map under their own prefix.
+    const m = fromDefinition(
+      def({ layout: { nodes: { intake: { x: 0, y: 0 }, "binding:document:/specs/a": { x: 3, y: 4 } } } }),
+    );
+    const out = toDefinition({ ...m, layoutDirty: true }) as { layout: { nodes: Record<string, unknown> } };
+    expect(out.layout.nodes["binding:document:/specs/a"]).toEqual({ x: 3, y: 4 });
+  });
+
   it("never overwrites a state's own layout entry with a channel's", () => {
     const m = fromDefinition({
       entry: "channel:raw",
       states: [{ state: "channel:raw", handler: starter(undefined, "raw") }],
       transitions: [],
     });
-    const dirty = { ...m, layoutDirty: true, channelPositions: { "channel:raw": { x: 99, y: 99 } } };
+    const dirty = { ...m, layoutDirty: true, derivedPositions: { "channel:raw": { x: 99, y: 99 } } };
     const out = toDefinition(dirty) as { layout: { nodes: Record<string, { x: number }> } };
     expect(out.layout.nodes["channel:raw"].x).not.toBe(99);
   });

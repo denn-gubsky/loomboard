@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { HANDLE, type FlowNodeData } from "../lib/flow";
+import { promptFields } from "../lib/bindings";
 
 // One component for every handler kind, rather than one per kind.
 //
@@ -29,6 +30,8 @@ export function StateNode({ data, selected }: NodeProps) {
   const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings } = d;
 
   const canRead = !node.opaque && node.kind === "starter";
+  // Kinds that carry a prompt can be fed a binding (lib/bindings.ts).
+  const takesBindings = !node.opaque && promptFields(node.kind).length > 0;
   const canPublish = !node.opaque && (node.kind === "starter" || node.kind === "channel");
 
   const errors = findings.filter((f) => f.level === "error");
@@ -69,6 +72,18 @@ export function StateNode({ data, selected }: NodeProps) {
           gets set (lib/channelWiring.ts). An unconditional pair would put two
           dead dots on every agent tile, implying a connection the kind cannot
           make. */}
+      {/* Bindings feed in from below, beside the loop handle rather than on
+          it, so a binding edge and a pushback loop never share a path. */}
+      {takesBindings && (
+        <Handle
+          id={HANDLE.targetBind}
+          type="target"
+          position={Position.Bottom}
+          className="lb-wf-handle lb-wf-handle--binding"
+          style={{ left: "25%" }}
+          isConnectable={false}
+        />
+      )}
       {(channels.source || canRead) && (
         <Handle
           id={HANDLE.targetTop}

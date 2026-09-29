@@ -131,6 +131,23 @@ export {
 export type { ConnectionKind, WireAttempt, Wiring } from "./lib/channelWiring";
 export { withGrant } from "./lib/channels";
 
+// Binding nodes (P3): the Documents and Memory a team's prompts pull in. The
+// scanner mirrors loomcycle's placeholder grammar; testdata/binding-cases.json
+// is run through both.
+export {
+  bindingFindings,
+  bindingNodes,
+  bindingNodeId,
+  bindingUses,
+  documentDelivery,
+  promptFields,
+  scanBindings,
+  MEMORY_VARIANTS,
+} from "./lib/bindings";
+export type { Binding, BindingKind, BindingNodeView, BindingUse, PromptField } from "./lib/bindings";
+export { toBindingEdges, toBindingFlowNodes, BINDING_HANDLE } from "./lib/flow";
+export type { BindingFlowData, BindingFlowNode } from "./lib/flow";
+
 export { Palette } from "./Palette";
 export type { PaletteProps } from "./Palette";
 

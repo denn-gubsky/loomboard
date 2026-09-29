@@ -133,7 +133,7 @@ export function placeChannel(
   return {
     ...model,
     layoutDirty: true,
-    channelPositions: { ...(model.channelPositions ?? {}), [id]: { x, y: Math.round(y) } },
+    derivedPositions: { ...(model.derivedPositions ?? {}), [id]: { x, y: Math.round(y) } },
     channelsRemoved: model.channelsRemoved?.filter((k) => k !== id),
   };
 }
@@ -142,12 +142,12 @@ export function placeChannel(
  *  it exists because a node names it. */
 export function removeChannel(model: CanvasModel, view: ChannelNodeView): CanvasModel {
   if (view.wired) return model;
-  const positions = { ...(model.channelPositions ?? {}) };
+  const positions = { ...(model.derivedPositions ?? {}) };
   delete positions[view.id];
   return {
     ...model,
     layoutDirty: true,
-    channelPositions: positions,
+    derivedPositions: positions,
     channelsRemoved: [...new Set([...(model.channelsRemoved ?? []), view.id])],
   };
 }

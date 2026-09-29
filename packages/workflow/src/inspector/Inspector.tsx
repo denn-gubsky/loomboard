@@ -5,6 +5,7 @@ import { KNOWN_KINDS, handlerOf } from "../lib/model";
 import type { Finding } from "../lib/validate";
 import { channelBacklog, type ChannelNodeView } from "../lib/channelNodes";
 import type { ChannelSide } from "../lib/channels";
+import { MEMORY_VARIANTS, type BindingNodeView } from "../lib/bindings";
 import { HANDLER_OMIT_IN_LIST, fieldsForKind, teamHandlerRegistry } from "./registry";
 
 export interface InspectorProps {
@@ -24,6 +25,8 @@ export interface InspectorProps {
   channel?: ChannelNodeView | null;
   /** Grant the sides a channel needs in the team ACL. Absent: no button. */
   onGrantChannel?: (channel: string, sides: ChannelSide[]) => void;
+  /** A selected binding node, shown read-only. */
+  binding?: BindingNodeView | null;
 }
 
 /** The node inspector: the state id and kind rendered by hand, everything else
@@ -48,6 +51,7 @@ export function Inspector({
   onWalkHooksChange,
   channel,
   onGrantChannel,
+  binding,
 }: InspectorProps) {
   const value = useMemo<DefValue>(() => {
     if (!node) return {};
@@ -70,6 +74,7 @@ export function Inspector({
     return [...HANDLER_OMIT_IN_LIST, ...hidden];
   }, [node]);
 
+  if (!node && binding) return <BindingPanel view={binding} />;
   if (!node && channel) return <ChannelPanel view={channel} disabled={disabled} onGrant={onGrantChannel} />;
 
   if (!node) {
@@ -320,6 +325,47 @@ function ChannelPanel({
           from the canvas.
         </p>
       )}
+    </aside>
+  );
+}
+
+/** A binding's details. Read-only: a binding IS a placeholder in a prompt,
+ *  so it is added or removed by editing that prompt — the panel names which
+ *  fields hold it. */
+function BindingPanel({ view }: { view: BindingNodeView }) {
+  const row = (label: string, value: string) => (
+    <div className="lb-wf-field">
+      <span className="lb-wf-field__label">{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+  const placeholder = `{{${view.kind}:${view.ref}}}`;
+  return (
+    <aside className="lb-wf-inspector lb-wf-inspector--binding">
+      <h3 className="lb-wf-team__title">
+        {view.kind === "document" ? "Document" : "Memory"} <code>{view.ref}</code>
+      </h3>
+      <p className="lb-wf-team__hint">
+        Resolved by the runtime into the prompt of every node that names it — the agent receives
+        it and cannot decline to read it.
+      </p>
+      {row("Placeholder", placeholder)}
+      {row("Read by", view.readers.map((r) => `${r.state} (${r.field})`).join(", "))}
+      {view.kind === "document" &&
+        row(
+          "Delivered as",
+          view.delivery === "directive"
+            ? "a directive naming the tool and path — the agent reads the live document. Add #Heading to inline one section instead."
+            : "the content, inlined into the prompt",
+        )}
+      {view.templated && row("Resolved", "per run — the ref contains ${…}, so what it names is decided when the walk runs")}
+      {view.unknownVariant && (
+        <div className="lb-wf-finding lb-wf-finding--error">
+          Not a memory section this runtime knows, so it renders empty. Known sections:{" "}
+          {MEMORY_VARIANTS.join(", ")}.
+        </div>
+      )}
+      <p className="lb-wf-team__hint">To remove it, delete the placeholder from those prompts.</p>
     </aside>
   );
 }

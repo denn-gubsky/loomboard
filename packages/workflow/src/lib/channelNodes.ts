@@ -70,7 +70,7 @@ function isXY(v: unknown): v is XY {
  *  unsaved drag first, then the definition's layout. */
 function storedPosition(model: CanvasModel, id: string): XY | undefined {
   if (model.channelsRemoved?.includes(id)) return undefined;
-  const moved = model.channelPositions?.[id];
+  const moved = model.derivedPositions?.[id];
   if (moved) return moved;
   const layout = model.source.layout;
   const nodes =
@@ -93,7 +93,7 @@ function placedKeys(model: CanvasModel): string[] {
       : undefined;
   const keys = new Set([
     ...Object.keys(typeof saved === "object" && saved !== null ? saved : {}),
-    ...Object.keys(model.channelPositions ?? {}),
+    ...Object.keys(model.derivedPositions ?? {}),
   ]);
   return [...keys].filter((k) => k.startsWith(CHANNEL_NODE_PREFIX) && !states.has(k) && !removed.has(k));
 }

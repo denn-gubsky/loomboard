@@ -489,3 +489,46 @@ describe("WorkflowCanvas — the node palette (RFC CZ C11/C12)", () => {
     expect(trigger.textContent).toMatch(/referenced/);
   });
 });
+
+describe("WorkflowCanvas — binding nodes (RFC CZ P3)", () => {
+  const withBindings = {
+    entry: "plan",
+    states: [
+      {
+        state: "plan",
+        handler: {
+          kind: "agent",
+          agent: "architect",
+          system_prompt: "Follow {{document:/specs/launch#Risks}} and {{memory:core_block}}.",
+        },
+      },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [{ from: "plan", to: "done", on: "success" }],
+  };
+  const layer = () =>
+    stubLayer({
+      getActiveTeamDef: async () => ({ def_id: "d", name: "sdlc", version: 1, definition: withBindings }),
+    });
+
+  it("draws a node for each Document and Memory a prompt pulls in", async () => {
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    const doc = await screen.findByTestId("binding-document-/specs/launch#Risks");
+    expect(doc.textContent).toMatch(/inlined into the prompt/);
+    expect(await screen.findByTestId("binding-memory-core_block")).toBeTruthy();
+  });
+
+  it("says an unknown memory section renders empty — a save does not refuse it", async () => {
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    expect(await screen.findByText(/names \{\{memory:core_block\}\}, which this runtime does not know/)).toBeTruthy();
+    // info, not an error: the runtime accepts it, so Save stays available.
+    expect((screen.getByRole("button", { name: "Save new version" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("shows a selected binding's details, read-only", async () => {
+    render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
+    fireEvent.click(await screen.findByTestId("binding-document-/specs/launch#Risks"));
+    const panel = (await screen.findByText(/cannot decline to read it/)).closest("aside")!;
+    expect(panel.textContent).toMatch(/plan \(system_prompt\)/);
+  });
+});

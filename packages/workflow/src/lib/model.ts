@@ -106,10 +106,12 @@ export interface CanvasModel {
    *  and the key leaves the definition. A wrapper, because "untouched" and
    *  "cleared" must not both be `undefined`. Content: it forks on save. */
   walkHooksPatch?: { hooks?: JsonObject };
-  /** Channel-node positions the operator dragged, keyed by channel node id
-   *  (`channel:<name>`). Presentation, like every other position: written to
-   *  `layout.nodes` only when the layout is dirty, excluded from the hash. */
-  channelPositions?: Record<string, XY>;
+  /** Positions the operator dragged for DERIVED nodes — channels
+   *  (`channel:<name>`) and bindings (`binding:…`), nodes that exist because a
+   *  state's config names them rather than in `states[]`. Presentation, like
+   *  every other position: written to `layout.nodes` only when the layout is
+   *  dirty, excluded from the hash. */
+  derivedPositions?: Record<string, XY>;
   /** Channel-node layout keys the operator removed (a placed channel nothing
    *  was wired to). Dropped from `layout.nodes` on save. */
   channelsRemoved?: string[];
@@ -118,6 +120,15 @@ export interface CanvasModel {
 /** The layout key prefix channel nodes use (lib/channelNodes.ts re-exports
  *  it). Defined here because toDefinition must recognise the keys. */
 export const CHANNEL_LAYOUT_PREFIX = "channel:";
+/** The layout key prefix binding nodes use (lib/bindings.ts). */
+export const BINDING_LAYOUT_PREFIX = "binding:";
+/** Every prefix whose `layout.nodes` keys belong to a derived node, not a
+ *  state — kept across a save that rebuilds the layout from the states. */
+export const DERIVED_LAYOUT_PREFIXES = [CHANNEL_LAYOUT_PREFIX, BINDING_LAYOUT_PREFIX] as const;
+
+export function isDerivedLayoutKey(key: string): boolean {
+  return DERIVED_LAYOUT_PREFIXES.some((p) => key.startsWith(p));
+}
 
 /** The workflow's own channel allowlist. The Starter is its single subject, so
  *  the authority lives here rather than on each agent in a wave. */
@@ -248,15 +259,16 @@ export function toDefinition(model: CanvasModel): JsonObject {
         y: Math.round(n.position.y),
       };
     }
-    // Channel-node positions share the map under a reserved prefix. Kept from
-    // the saved layout — they belong to no state, so rebuilding from the
-    // states alone would drop every one — unless a state now owns the key.
+    // Derived-node positions (channels, bindings) share the map under reserved
+    // prefixes. Kept from the saved layout — they belong to no state, so
+    // rebuilding from the states alone would drop every one — unless a state
+    // now owns the key.
     const stateIds = new Set(model.nodes.map((n) => n.id));
     const removed = new Set(model.channelsRemoved ?? []);
     for (const [key, v] of Object.entries(prevNodes)) {
-      if (key.startsWith(CHANNEL_LAYOUT_PREFIX) && !stateIds.has(key) && !removed.has(key)) nodes[key] = v;
+      if (isDerivedLayoutKey(key) && !stateIds.has(key) && !removed.has(key)) nodes[key] = v;
     }
-    for (const [key, p] of Object.entries(model.channelPositions ?? {})) {
+    for (const [key, p] of Object.entries(model.derivedPositions ?? {})) {
       if (stateIds.has(key)) continue; // never overwrite a state's own entry
       const old = prevNodes[key];
       nodes[key] = { ...(isObj(old) ? old : {}), x: Math.round(p.x), y: Math.round(p.y) };
