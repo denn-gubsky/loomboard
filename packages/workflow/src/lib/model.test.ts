@@ -171,6 +171,28 @@ describe("toDefinition", () => {
     expect(out.layout.nodes.start).toEqual({ x: 99, y: 5 });
   });
 
+  it("writes positions as INTEGERS, because the runtime decodes them as ints", () => {
+    // Regression: xyflow reports a drag at zoom 0.575 as e.g. 337.357, and
+    // teamgraph.NodePos{X, Y int} refuses a fraction while decoding, so every
+    // save after a drag failed with "cannot unmarshal number … of type int".
+    const m = fromDefinition(MINIMAL);
+    const moved = {
+      ...m,
+      layoutDirty: true,
+      nodes: m.nodes.map((n, i) => (i === 0 ? { ...n, position: { x: 337.357, y: -34.5 } } : n)),
+    };
+    const out = toDefinition(moved) as { layout: { nodes: Record<string, { x: number; y: number }> } };
+    const p = out.layout.nodes[m.nodes[0].id];
+    expect(Number.isInteger(p.x) && Number.isInteger(p.y)).toBe(true);
+    expect(p).toEqual({ x: 337, y: -34 });
+  });
+
+  it("keeps a node's stored size when it is moved", () => {
+    const m = fromDefinition({ ...MINIMAL, layout: { nodes: { [MINIMAL.states[0].state]: { x: 0, y: 0, w: 240, h: 90 } } } });
+    const out = toDefinition({ ...m, layoutDirty: true }) as { layout: { nodes: Record<string, unknown> } };
+    expect(out.layout.nodes[MINIMAL.states[0].state]).toMatchObject({ w: 240, h: 90 });
+  });
+
   it("leaves an existing layout untouched when nothing was moved", () => {
     const m = fromDefinition(FORWARD_COMPAT);
     const out = toDefinition(m) as unknown as typeof FORWARD_COMPAT;
