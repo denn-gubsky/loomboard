@@ -46,6 +46,10 @@ export interface ChannelNodeView {
   position: XY;
   /** True when the position came from the layout rather than auto-placement. */
   placed: boolean;
+  /** True when some node names it. A PLACED channel nothing names yet is drawn
+   *  so it can be wired, and is the only kind of channel node that can be
+   *  removed — a wired one exists because of a node's config. */
+  wired: boolean;
   /** Per side IN USE: whether the team's ACL grants it. A side nobody uses is
    *  absent — it needs no grant. */
   grants: Partial<Record<ChannelSide, boolean>>;
@@ -65,6 +69,7 @@ function isXY(v: unknown): v is XY {
 /** The stored position for a channel node id, if any — the operator's
  *  unsaved drag first, then the definition's layout. */
 function storedPosition(model: CanvasModel, id: string): XY | undefined {
+  if (model.channelsRemoved?.includes(id)) return undefined;
   const moved = model.channelPositions?.[id];
   if (moved) return moved;
   const layout = model.source.layout;
@@ -75,6 +80,22 @@ function storedPosition(model: CanvasModel, id: string): XY | undefined {
   if (typeof nodes !== "object" || nodes === null) return undefined;
   const p = (nodes as Record<string, unknown>)[id];
   return isXY(p) ? { x: p.x, y: p.y } : undefined;
+}
+
+/** Layout keys that look like placed channels. */
+function placedKeys(model: CanvasModel): string[] {
+  const states = new Set(model.nodes.map((n) => n.id));
+  const removed = new Set(model.channelsRemoved ?? []);
+  const layout = model.source.layout;
+  const saved =
+    typeof layout === "object" && layout !== null && !Array.isArray(layout)
+      ? (layout as Record<string, unknown>).nodes
+      : undefined;
+  const keys = new Set([
+    ...Object.keys(typeof saved === "object" && saved !== null ? saved : {}),
+    ...Object.keys(model.channelPositions ?? {}),
+  ]);
+  return [...keys].filter((k) => k.startsWith(CHANNEL_NODE_PREFIX) && !states.has(k) && !removed.has(k));
 }
 
 /** The node id for a channel, unique against the model's state ids. */
@@ -99,6 +120,16 @@ export function channelNodes(model: CanvasModel, infos?: readonly ChannelInfo[])
     const e = byChannel.get(r.channel) ?? { publishers: new Set(), readers: new Set() };
     (r.side === "publish" ? e.publishers : e.readers).add(r.state);
     byChannel.set(r.channel, e);
+  }
+
+  // Placed channels: a `channel:` layout key (saved, or placed this session)
+  // that no state owns and nobody removed. Drawn even when nothing names the
+  // channel yet — that is how a channel is placed first and wired after.
+  for (const key of placedKeys(model)) {
+    const channel = key.slice(CHANNEL_NODE_PREFIX.length);
+    if (channel && channelNodeId(model, channel) === key && !byChannel.has(channel)) {
+      byChannel.set(channel, { publishers: new Set(), readers: new Set() });
+    }
   }
 
   const pos = new Map(model.nodes.map((n) => [n.id, n.position]));
@@ -135,6 +166,7 @@ export function channelNodes(model: CanvasModel, infos?: readonly ChannelInfo[])
       readers: [...readers].sort(),
       position,
       placed: !!stored,
+      wired: publishers.size + readers.size > 0,
       grants,
       info,
       declared: infos ? !!info : undefined,

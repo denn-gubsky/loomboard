@@ -117,6 +117,20 @@ export type {
 export { channelNodes, channelNodeId, channelBacklog, CHANNEL_NODE_PREFIX } from "./lib/channelNodes";
 export type { ChannelNodeView } from "./lib/channelNodes";
 
+// Wiring a channel by drag (M5c): what a connection to or from a channel node
+// means as an edit, and which drags are refused. Exported so a host's own
+// chrome applies the same rules rather than a second copy of them.
+export {
+  applyWire,
+  connectionKind,
+  placeChannel,
+  planWire,
+  removeChannel,
+  touchesChannel,
+} from "./lib/channelWiring";
+export type { ConnectionKind, WireAttempt, Wiring } from "./lib/channelWiring";
+export { withGrant } from "./lib/channels";
+
 export { Palette } from "./Palette";
 export type { PaletteProps } from "./Palette";
 

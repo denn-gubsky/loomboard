@@ -43,6 +43,10 @@ export interface PaletteEntry {
   kind?: string;
   /** True for a substrate object that lives outside this definition. */
   external?: boolean;
+  /** True for an entry that places a REFERENCE to something outside the
+   *  definition — a channel. It adds no state: it asks which existing channel
+   *  and draws it, to be wired by drag (lib/channelWiring.ts). */
+  reference?: boolean;
 }
 
 export const PALETTE: readonly PaletteEntry[] = [
@@ -103,6 +107,16 @@ export const PALETTE: readonly PaletteEntry[] = [
     hint: "Assigns ${var.*}. Its own node kind so an assignment is visible rather than hidden.",
   },
   {
+    id: "channelref",
+    label: "Channel",
+    group: "Data",
+    reference: true,
+    hint:
+      "An existing channel, drawn so it can be wired: drag a Starter's top handle into it to " +
+      "set the sink, or from it to a Starter to set the source. Referenced, never created — " +
+      "declare it in the Library or operator yaml.",
+  },
+  {
     id: "publish",
     label: "Publish to channel",
     group: "Data",
@@ -120,9 +134,9 @@ export const PALETTE: readonly PaletteEntry[] = [
   },
 ];
 
-/** Entries that place a node into the definition. */
+/** Entries that place a node into the definition's `states[]`. */
 export function placeableEntries(): PaletteEntry[] {
-  return PALETTE.filter((e) => !e.external);
+  return PALETTE.filter((e) => !e.external && !e.reference);
 }
 
 export function entriesInGroup(group: PaletteGroup): PaletteEntry[] {

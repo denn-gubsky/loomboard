@@ -110,6 +110,9 @@ export interface CanvasModel {
    *  (`channel:<name>`). Presentation, like every other position: written to
    *  `layout.nodes` only when the layout is dirty, excluded from the hash. */
   channelPositions?: Record<string, XY>;
+  /** Channel-node layout keys the operator removed (a placed channel nothing
+   *  was wired to). Dropped from `layout.nodes` on save. */
+  channelsRemoved?: string[];
 }
 
 /** The layout key prefix channel nodes use (lib/channelNodes.ts re-exports
@@ -249,8 +252,9 @@ export function toDefinition(model: CanvasModel): JsonObject {
     // the saved layout — they belong to no state, so rebuilding from the
     // states alone would drop every one — unless a state now owns the key.
     const stateIds = new Set(model.nodes.map((n) => n.id));
+    const removed = new Set(model.channelsRemoved ?? []);
     for (const [key, v] of Object.entries(prevNodes)) {
-      if (key.startsWith(CHANNEL_LAYOUT_PREFIX) && !stateIds.has(key)) nodes[key] = v;
+      if (key.startsWith(CHANNEL_LAYOUT_PREFIX) && !stateIds.has(key) && !removed.has(key)) nodes[key] = v;
     }
     for (const [key, p] of Object.entries(model.channelPositions ?? {})) {
       if (stateIds.has(key)) continue; // never overwrite a state's own entry
