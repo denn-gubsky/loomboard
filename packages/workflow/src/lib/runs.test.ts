@@ -61,6 +61,71 @@ describe("foldWalk", () => {
   });
 });
 
+// The listing writes the server's local offset with microseconds, the stream
+// UTC whole seconds. Regression: compared as strings, a listing row from a
+// server east of UTC always looked newer and rolled every streamed
+// transition back.
+describe("foldWalk — instants in the listing's and the stream's formats", () => {
+  const fold = (...rows: WalkRunRow[]) => rows.reduce((v, r) => foldWalk(v, [r]), emptyWalk(WALK)).members.get("m1")!;
+  // 09:37:14.827Z, spelled the way the listing spells it on a UTC+3 server.
+  const listed = row({ runId: "m1", state: "s", ts: "2026-10-01T12:37:14.827396+03:00" });
+  // 34 seconds LATER in absolute time, though lexically "09" < "12".
+  const held = row({ runId: "m1", awaited: "review", ts: "2026-10-01T09:37:48Z" });
+
+  it("keeps a LATER stream row over an earlier listing row east of UTC, in either order", () => {
+    expect(fold(held, listed).awaited).toBe("review");
+    expect(fold(listed, held).awaited).toBe("review");
+  });
+
+  it("keeps a LATER listing row over an earlier stream row, in either order", () => {
+    // West of UTC the string order inverts: "05" < "09", yet 05:37:50.5-04:00 is 09:37:50.5Z.
+    const relisted = row({ runId: "m1", ts: "2026-10-01T05:37:50.5-04:00" });
+    expect(fold(held, relisted).awaited).toBeUndefined();
+    expect(fold(relisted, held).awaited).toBeUndefined();
+  });
+
+  it("takes the newcomer at an equal instant spelled two ways", () => {
+    const sameListed = row({ runId: "m1", status: "running", ts: "2026-10-01T12:37:48.000000+03:00" });
+    expect(fold(held, sameListed).awaited).toBeUndefined();
+    expect(fold(sameListed, held).awaited).toBe("review");
+  });
+
+  it("takes the newcomer within one millisecond — microseconds are not compared", () => {
+    const a = row({ runId: "m1", awaited: "input", ts: "2026-10-01T12:37:14.827900+03:00" });
+    expect(fold(a, listed).awaited).toBeUndefined();
+  });
+
+  it("treats an unparseable instant as the oldest", () => {
+    const garbled = row({ runId: "m1", ts: "not a time" });
+    expect(fold(held, garbled).awaited).toBe("review");
+    expect(fold(garbled, held).awaited).toBe("review");
+    // Two unparseable instants tie, and a tie takes the newcomer.
+    expect(fold(garbled, row({ runId: "m1", awaited: "input", ts: "" })).awaited).toBe("input");
+  });
+
+  it("still never brings a terminal run back, however newer the other row", () => {
+    const done = row({ runId: "m1", status: "completed", ts: "2026-10-01T09:37:48Z" });
+    expect(fold(done, row({ runId: "m1", ts: "2026-10-01T12:40:00.000001+03:00" })).status).toBe("completed");
+  });
+});
+
+describe("foldWalk — a review hold's deadline", () => {
+  const fold = (...rows: WalkRunRow[]) => rows.reduce((v, r) => foldWalk(v, [r]), emptyWalk(WALK)).members.get("m1")!;
+  const DEADLINE = "2026-10-01T10:37:48Z";
+  // Only the stream carries hold_expires_at.
+  const frame = row({ runId: "m1", awaited: "review", holdExpiresAt: DEADLINE, ts: "2026-10-01T09:37:48Z" });
+
+  it("keeps the deadline when a newer listing row of the same hold omits it", () => {
+    const heartbeat = row({ runId: "m1", awaited: "review", ts: "2026-10-01T12:38:00.1+03:00" });
+    expect(fold(frame, heartbeat).holdExpiresAt).toBe(DEADLINE);
+  });
+
+  it("drops the deadline once the hold clears", () => {
+    const released = row({ runId: "m1", ts: "2026-10-01T12:38:00.1+03:00" });
+    expect(fold(frame, released).holdExpiresAt).toBeUndefined();
+  });
+});
+
 describe("rowPhase / statePulses / pulseLabel", () => {
   it("calls a run held for review HELD, and other waits WAITING", () => {
     expect(rowPhase(row({ runId: "a", awaited: "review" }))).toBe("held");

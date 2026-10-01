@@ -61,18 +61,40 @@ export function isTerminal(status: string): boolean {
   return TERMINAL.has(status);
 }
 
+// A row's instant as epoch milliseconds, for comparing rows from the two
+// sources. They are compared as TIMES, never as strings: the listing writes
+// the server's local offset with microseconds ("…12:37:14.827396+03:00"), the
+// stream UTC whole seconds ("…09:37:48Z"), so as strings a listing row on any
+// server east of UTC looks newer and rolls every streamed transition back.
+//
+// The fraction is cut (or padded) to exactly three digits first, so the input
+// is the ECMAScript date-time format every engine must parse — Go trims
+// trailing zeros, and accepting longer fractions is an engine extension the
+// Tauri webview need not share. Microseconds beyond the millisecond are
+// therefore ignored: two rows in the same millisecond tie. An unparseable
+// instant sorts as the oldest.
+function instantMs(ts: string): number {
+  const millis = ts.replace(
+    /(T\d{2}:\d{2}:\d{2})\.(\d+)/,
+    (_, hms: string, frac: string) => `${hms}.${frac.padEnd(3, "0").slice(0, 3)}`,
+  );
+  const ms = Date.parse(millis);
+  return Number.isNaN(ms) ? -Infinity : ms;
+}
+
 /** Fold rows into the view. A row replaces the one it has only when it is
  *  NOT older: the stream can deliver a transition before the hydration page
  *  that predates it, and the page must not roll the run back. Equal
- *  timestamps take the newcomer — and a terminal row is never replaced by a
- *  non-terminal one, because a run does not come back from completed. */
+ *  instants take the newcomer, whatever their spelling (as do two unparseable
+ *  ones) — and a terminal row is never replaced by a non-terminal one,
+ *  because a run does not come back from completed. */
 export function foldWalk(view: WalkView, rows: readonly WalkRunRow[]): WalkView {
   let walk = view.walk;
   let members: Map<string, WalkRunRow> | undefined;
   const newer = (prev: WalkRunRow | undefined, next: WalkRunRow) => {
     if (!prev) return true;
     if (isTerminal(prev.status) && !isTerminal(next.status)) return false;
-    return next.ts >= prev.ts;
+    return instantMs(next.ts) >= instantMs(prev.ts);
   };
   for (const r of rows) {
     if (r.runId === view.walkRunId) {
@@ -92,7 +114,10 @@ export function foldWalk(view: WalkView, rows: readonly WalkRunRow[]): WalkView 
  *  above all `awaited`: a hold that has cleared is reported by the field's
  *  ABSENCE, so merging "defined fields only" would keep a stale hold forever.
  *  Only the run's place in the graph, which never changes, is carried over
- *  when a frame omits it. */
+ *  when a frame omits it — and a review hold's deadline while the run is
+ *  STILL held: only the stream carries holdExpiresAt, so a heartbeat listing
+ *  landing mid-hold would otherwise drop it. Once the hold clears, so does
+ *  the deadline. */
 function withIdentity(next: WalkRunRow, prev: WalkRunRow): WalkRunRow {
   return {
     ...next,
@@ -100,6 +125,9 @@ function withIdentity(next: WalkRunRow, prev: WalkRunRow): WalkRunRow {
     stateVisit: next.stateVisit ?? prev.stateVisit,
     waveId: next.waveId ?? prev.waveId,
     waveIndex: next.waveIndex ?? prev.waveIndex,
+    holdExpiresAt:
+      next.holdExpiresAt ??
+      (next.awaited === "review" && prev.awaited === "review" ? prev.holdExpiresAt : undefined),
   };
 }
 
