@@ -8,6 +8,7 @@ import type {
   WorkflowDataLayer,
 } from "@loomboard/workflow";
 import { hookNamesOf } from "@loomboard/workflow";
+import { watchWalk } from "./walkWatch";
 
 // loomboard's binding of @loomboard/workflow's injected data layer to
 // @loomcycle/client.
@@ -79,6 +80,11 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
     // finished trace with no run id and no way to say why.
     runTeamDetached: async (target): Promise<DetachedRun> =>
       client.runTeam({ ...target, mode: "detach" }),
+
+    // Hydrate from listWalkRuns, then stream the walk's transitions — under
+    // the caller's own user, which is where a walk's runs are filed since
+    // loomcycle 1.101 (gap G9; before it, every walk ran as `http-admin`).
+    watchWalk: (walkRunId, onRows, onError) => watchWalk(client, selfUserId, walkRunId, onRows, onError),
 
     // A walk's run has no turns, so cancelTurn ENDS it and every run it
     // spawned (loomcycle #1341). Not caught: a 409 from an older runtime must
