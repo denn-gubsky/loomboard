@@ -493,6 +493,19 @@
   stroke-width: 1;
   opacity: 0.6;
 }
+.loomboard-workflow .lb-wf-edge--follows .react-flow__edge-text {
+  fill: var(--lb-wf-muted);
+}
+/* A toolbar switch (the Transitions toggle). */
+.loomboard-workflow .lb-wf-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--lb-wf-muted);
+  cursor: pointer;
+  user-select: none;
+}
 .loomboard-workflow .lb-wf-edge--data .react-flow__edge-text {
   fill: var(--lb-wf-data);
   font-size: 10px;

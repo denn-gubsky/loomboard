@@ -23,6 +23,7 @@ import {
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
+  visibleEdges,
 } from "./lib/flow";
 import { bindingFindings, bindingNodes } from "./lib/bindings";
 import {
@@ -313,12 +314,18 @@ function WorkflowCanvasInner({
   // one. Data edges come second so a control edge wins the z-order where they
   // overlap: the walk's own graph is what an operator is editing, and the
   // channel wiring is context for it (decision C1).
+  // Transitions can be switched off so the data row reads alone; they stay in
+  // the definition either way. On by default: they are the walk's own graph.
+  const [showTransitions, setShowTransitions] = useState(true);
   const flowEdges = useMemo(
     () =>
       model
-        ? [...toFlowEdges(model, findings), ...toDataEdges(channelViews, agentViews), ...toBindingEdges(bindingViews)]
+        ? visibleEdges(
+            [...toFlowEdges(model, findings), ...toDataEdges(channelViews, agentViews), ...toBindingEdges(bindingViews)],
+            showTransitions,
+          )
         : [],
-    [model, findings, channelViews, bindingViews, agentViews],
+    [model, findings, channelViews, bindingViews, agentViews, showTransitions],
   );
 
   const selected = useMemo(
@@ -741,6 +748,15 @@ function WorkflowCanvasInner({
             Back to Edit
           </button>
         )}
+
+        <label className="lb-wf-toggle" title="Show or hide the transitions between states — the walk's order. Hiding them changes nothing in the definition.">
+          <input
+            type="checkbox"
+            checked={showTransitions}
+            onChange={(e) => setShowTransitions(e.target.checked)}
+          />
+          Transitions
+        </label>
 
         <span className="lb-wf-toolbar__spacer" />
         <span className={`lb-wf-phase lb-wf-phase--${session.phase}`}>{statusLabel(session)}</span>

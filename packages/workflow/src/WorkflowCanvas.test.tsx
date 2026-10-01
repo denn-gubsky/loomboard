@@ -685,6 +685,18 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     expect(await screen.findByText("research_chunk_7")).toBeTruthy();
   });
 
+  it("lets the operator switch transitions off — on by default, and not an edit", async () => {
+    const onSaved = vi.fn();
+    render(<WorkflowCanvas dataLayer={base()} teamName="sdlc" onSaved={onSaved} />);
+    const toggle = (await screen.findByRole("checkbox", { name: /Transitions/ })) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    fireEvent.click(toggle);
+    expect(toggle.checked).toBe(false);
+    // Presentation only: the graph is untouched, so nothing new to save.
+    expect(screen.getByTestId("node-edit")).toBeTruthy();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
   it("shows the walk's RESULT on the End node it finished at — read from the walk's run", async () => {
     let push: (rows: WalkRunRow[]) => void = () => undefined;
     const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {

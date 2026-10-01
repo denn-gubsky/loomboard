@@ -318,6 +318,22 @@ export function followsData(model: CanvasModel, from: string, to: string): boole
   return !!sink && handlerChannels(b).source === sink;
 }
 
+/** A transition's label: the step it takes, `research → edit`, plus its
+ *  route when that is not plain `success` (`review → code · pushback:redo`).
+ *  Named for the states because a transition beside a data row is otherwise
+ *  easy to misread as a second data path — it says WHEN the next state runs,
+ *  not what reaches it. */
+export function transitionLabel(e: CanvasEdge): string {
+  const step = `${e.from} → ${e.to}`;
+  return e.on === "success" ? step : `${step} · ${e.on}`;
+}
+
+/** The edges to draw: everything, or — with transitions switched off — only
+ *  the derived ones (data, dispatch, bindings), so the data row reads alone. */
+export function visibleEdges(edges: readonly FlowEdge[], showTransitions: boolean): FlowEdge[] {
+  return showTransitions ? [...edges] : edges.filter((e) => e.data.kind !== "control");
+}
+
 export function toFlowEdges(model: CanvasModel, findings: Finding[]): FlowEdge[] {
   const inRow = new Set(model.nodes.filter(dispatchesAgent).map((n) => n.id));
   return model.edges.map((e, i) => {
@@ -339,10 +355,7 @@ export function toFlowEdges(model: CanvasModel, findings: Finding[]): FlowEdge[]
       sourceHandle: fromAgent ? AGENT_HANDLE.control : fromBottom ? HANDLE.sourceBottom : HANDLE.sourceRight,
       targetHandle: toBottom ? HANDLE.targetBottom : HANDLE.targetLeft,
       ...(fromBottom || toBottom ? { type: "smoothstep" as const } : {}),
-      // `success` is the overwhelmingly common label and drawing it on every
-      // edge is noise; the arrowhead now says "and then". Named routes DO
-      // carry meaning and are always labelled.
-      label: e.on === "success" ? "" : e.on,
+      label: transitionLabel(e),
       className: edgeClass(e.on) + (follows ? " lb-wf-edge--follows" : ""),
       markerEnd: { type: ARROW, width: 18, height: 18, color: ARROW_COLOR },
       data: {

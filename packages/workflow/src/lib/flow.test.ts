@@ -12,6 +12,7 @@ import {
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
+  visibleEdges,
 } from "./flow";
 import { fromDefinition } from "./model";
 import { channelNodes } from "./channelNodes";
@@ -97,13 +98,21 @@ describe("toFlowNodes", () => {
 describe("toFlowEdges", () => {
   const edges = toFlowEdges(model, validateModel(model));
 
-  it("hides the success label and shows named routes", () => {
-    // `success` on every edge is noise — the arrow already says "and then".
-    expect(edges.find((e) => e.id === "code success review")!.label).toBe("");
-    expect(edges.find((e) => e.id === "review pushback:redo code")!.label).toBe("pushback:redo");
+  it("labels every transition with the step it takes, and a named route with its route", () => {
+    // Unlabelled, a transition beside a data row read as a second data path.
+    expect(edges.find((e) => e.id === "code success review")!.label).toBe("code → review");
+    expect(edges.find((e) => e.id === "review pushback:redo code")!.label).toBe("review → code · pushback:redo");
     expect(edges.find((e) => e.id === "code conditional:ready ship")!.label).toBe(
-      "conditional:ready",
+      "code → ship · conditional:ready",
     );
+  });
+
+  it("drops only the transitions when they are switched off", () => {
+    const all = [...edges, ...toDataEdges(channelNodes(model))];
+    expect(visibleEdges(all, true)).toHaveLength(all.length);
+    const off = visibleEdges(all, false);
+    expect(off.every((e) => e.data.kind !== "control")).toBe(true);
+    expect(off).toHaveLength(all.length - edges.length);
   });
 
   it("tags every edge as control flow", () => {
