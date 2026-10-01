@@ -7,6 +7,7 @@ import type {
   TeamSummary,
   WorkflowDataLayer,
 } from "@loomboard/workflow";
+import { queryChunks, queryDocuments } from "./workflowApi";
 import { hookNamesOf } from "@loomboard/workflow";
 import { watchWalk } from "./walkWatch";
 
@@ -144,6 +145,18 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
         source: c.source,
       }));
     },
+
+    // The Input node's pickers (x-loomcycle-picker): the board's own Document
+    // wrappers, so the canvas package stays SDK-free.
+    listDocuments: async ({ scope, underPath }) =>
+      (await queryDocuments(client, scope, underPath)).documents.map((d) => ({ id: d.document_id, title: d.title })),
+    listChunks: async (documentId, { scope }) =>
+      (await queryChunks(client, scope, documentId)).chunks.map((c) => ({
+        id: c.id,
+        title: c.title,
+        position: c.position,
+        parent_id: c.parent_id ?? null,
+      })),
 
     // The canvas resolves `scope` from the channel's own declaration and hands
     // it here; this adapter only supplies what that scope requires. A

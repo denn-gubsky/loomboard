@@ -42,8 +42,9 @@ function doc<T>(client: LoomcycleClient, input: Record<string, unknown>): Promis
 export function queryDocuments(
   client: LoomcycleClient,
   scope: BoardScope,
+  underPath?: string,
 ): Promise<{ documents: DocRow[] }> {
-  return doc(client, { op: "query_documents", scope });
+  return doc(client, { op: "query_documents", scope, ...(underPath ? { under_path: underPath } : {}) });
 }
 
 export function queryChunks(
