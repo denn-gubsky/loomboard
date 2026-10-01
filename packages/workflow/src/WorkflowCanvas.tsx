@@ -30,6 +30,7 @@ import {
   emptyWalk,
   foldWalk,
   isTerminal,
+  lastState,
   pulseLabel,
   rowsForState,
   statePulses,
@@ -272,8 +273,7 @@ function WorkflowCanvasInner({
   // The End node the result belongs on: where the last state that ran leads.
   const endedAt = useMemo(() => {
     if (!model || !result || result.walkRunId !== walk?.walkRunId) return undefined;
-    const last = [...walk.members.values()].filter((r) => r.state).sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)).pop();
-    return resultTerminal(model, last?.state);
+    return resultTerminal(model, lastState(walk));
   }, [model, result, walk]);
 
   // The team's output channels (M3b). Keyed by what the panel uses, so an

@@ -4,6 +4,7 @@ import {
   foldWalk,
   pulseLabel,
   rowPhase,
+  lastState,
   rowsForState,
   statePulses,
   visitNumbers,
@@ -202,5 +203,30 @@ describe("walkSignal — what the walk's OWN run means for the session", () => {
   it("says nothing when nothing about the walk changed", () => {
     expect(walkSignal(live, live)).toBeNull();
     expect(walkSignal(live, row({ runId: WALK, ts: "2026-10-01T11:00:00Z" }))).toBeNull();
+  });
+});
+
+describe("lastState — the state the walk ran last, by instant", () => {
+  it("orders by TIME, not by spelling — a +03:00 listing row is not newer than a later UTC frame", () => {
+    // As strings "…12:37:14.827396+03:00" sorts after "…09:40:00Z", but it
+    // is 09:37:14Z — before the edit row.
+    const v = foldWalk(emptyWalk(WALK), [
+      row({ runId: "r", state: "research", status: "completed", ts: "2026-10-01T12:37:14.827396+03:00" }),
+      row({ runId: "e", state: "edit", status: "completed", ts: "2026-10-01T09:40:00Z" }),
+    ]);
+    expect(lastState(v)).toBe("edit");
+  });
+
+  it("is undefined before any member ran", () => {
+    expect(lastState(emptyWalk(WALK))).toBeUndefined();
+  });
+
+  it("breaks a visit and wave tie in rowsForState by instant too", () => {
+    const v = foldWalk(emptyWalk(WALK), [
+      // 09:40Z is LATER than 12:36+03:00 (09:36Z), but sorts first as a string.
+      row({ runId: "late", state: "s", ts: "2026-10-01T09:40:00Z" }),
+      row({ runId: "early", state: "s", ts: "2026-10-01T12:36:00+03:00" }),
+    ]);
+    expect(rowsForState(v, "s").map((r) => r.runId)).toEqual(["early", "late"]);
   });
 });
