@@ -12,16 +12,18 @@ import { Inspector } from "./inspector/Inspector";
 import { PublishComposer } from "./PublishComposer";
 import { Palette } from "./Palette";
 import { newStateRaw, type PaletteEntry } from "./lib/palette";
-import { autoLayout, needsAutoLayout } from "./lib/layout";
+import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
 import {
   edgeId,
   mergeMeasured,
+  toAgentFlowNodes,
   toBindingEdges,
   toBindingFlowNodes,
   toChannelFlowNodes,
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
+  visibleEdges,
 } from "./lib/flow";
 import { bindingFindings, bindingNodes } from "./lib/bindings";
 import {
@@ -35,13 +37,15 @@ import {
   type WalkRunRow,
   type WalkView,
 } from "./lib/runs";
-import { outputChannels } from "./lib/output";
+import { outputChannels, resultTerminal, walkResult, type ResultItem } from "./lib/output";
 import { OutputPanel } from "./OutputPanel";
 import { RunsPanel } from "./inspector/RunsPanel";
 import { BindingNode } from "./nodes/BindingNode";
 import { channelNodes } from "./lib/channelNodes";
+import { agentNodes, agentOwner, dispatchesAgent } from "./lib/agentNodes";
+import { AgentNode } from "./nodes/AgentNode";
 import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
-import { applyWire, connectionKind, placeChannel, planWire, removeChannel } from "./lib/channelWiring";
+import { applyWire, connectionKind, placeChannel, planWire, removeChannel, transitionSource } from "./lib/channelWiring";
 import { ChannelNode } from "./nodes/ChannelNode";
 import {
   fromDefinition,
@@ -70,7 +74,7 @@ import { StateNode } from "./nodes/StateNode";
 import { handlerChannels } from "./lib/model";
 import type { ChannelInfo, SavedTeam, WorkflowCanvasProps } from "./types";
 
-const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode };
+const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode, agent: AgentNode };
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -135,6 +139,25 @@ function WorkflowCanvasInner({
     lastWalkRow.current = next;
     if (signal) dispatchSession(signal);
   }, [walk?.walk]);
+
+  // What a COMPLETED walk produced, for its End node: read from the walk's
+  // own run (RFC DI — the run holds the output), once it has finished.
+  const [result, setResult] = useState<{ walkRunId: string; items: ResultItem[] }>();
+  const walkDone = walk?.walk?.status === "completed" ? walk.walkRunId : undefined;
+  useEffect(() => {
+    if (!walkDone || !dataLayer.readRun) {
+      setResult(undefined);
+      return;
+    }
+    let cancelled = false;
+    dataLayer
+      .readRun(walkDone)
+      .then((d) => !cancelled && setResult({ walkRunId: walkDone, items: walkResult(d.finalText) }))
+      .catch((e) => console.warn("[canvas] reading the walk's result failed:", e));
+    return () => {
+      cancelled = true;
+    };
+  }, [dataLayer, walkDone]);
   const editable = !readonly && canEditGraph(session);
 
   // ---- load ----
@@ -153,10 +176,7 @@ function WorkflowCanvasInner({
         let next = fromDefinition(detail.definition);
         // Auto-layout on open, but do NOT mark the model dirty: merely opening
         // a team that has no stored layout must never fork it.
-        if (needsAutoLayout(next)) {
-          const pos = autoLayout(next);
-          next = { ...next, nodes: next.nodes.map((n) => ({ ...n, position: pos[n.id] ?? n.position })) };
-        }
+        if (needsAutoLayout(next)) next = withLayout(next, autoLayout(next), false);
         parentDefId.current = detail.def_id;
         loadedName.current = detail.name;
         // The promoted pointer, for C7's "a publish runs the PROMOTED version"
@@ -242,7 +262,19 @@ function WorkflowCanvasInner({
   const channelViews = useMemo(() => (model ? channelNodes(model, channels) : []), [model, channels]);
   // The Documents and Memory the prompts pull in, as nodes feeding them (P3).
   const bindingViews = useMemo(() => (model ? bindingNodes(model) : []), [model]);
+  // Each Starter's agent, as the node between it and its sink (C2 amended).
+  const agentViews = useMemo(() => (model ? agentNodes(model) : []), [model]);
+  // For onNodesChange, which must not re-create on every model change: an
+  // agent node's selection is its Starter's.
+  const agentViewsRef = useRef(agentViews);
+  agentViewsRef.current = agentViews;
   const pulses = useMemo(() => (walk ? statePulses(walk) : undefined), [walk]);
+  // The End node the result belongs on: where the last state that ran leads.
+  const endedAt = useMemo(() => {
+    if (!model || !result || result.walkRunId !== walk?.walkRunId) return undefined;
+    const last = [...walk.members.values()].filter((r) => r.state).sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)).pop();
+    return resultTerminal(model, last?.state);
+  }, [model, result, walk]);
 
   // The team's output channels (M3b). Keyed by what the panel uses, so an
   // ordinary graph edit — which rebuilds every view — does not re-peek them.
@@ -259,25 +291,41 @@ function WorkflowCanvasInner({
     () =>
       model
         ? [
+            // A Starter's runs are its agent's: counted on the agent node.
             ...toFlowNodes(model, findings, selectedId, measured).map((n) =>
-              pulses?.has(n.id) ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.id)), held: pulses.get(n.id)!.held } } : n,
+              pulses?.has(n.id) && !dispatchesAgent(n.data.node)
+                ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.id)), held: pulses.get(n.id)!.held } }
+                : n.id === endedAt && result
+                  ? { ...n, data: { ...n.data, result: result.items } }
+                  : n,
+            ),
+            ...toAgentFlowNodes(agentViews, selectedId, measured).map((n) =>
+              pulses?.has(n.data.view.state)
+                ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.data.view.state)), held: pulses.get(n.data.view.state)!.held } }
+                : n,
             ),
             ...toChannelFlowNodes(channelViews, selectedId, measured),
             ...toBindingFlowNodes(bindingViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews, bindingViews, pulses],
+    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses, endedAt, result],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
   // overlap: the walk's own graph is what an operator is editing, and the
   // channel wiring is context for it (decision C1).
+  // Transitions can be switched off so the data row reads alone; they stay in
+  // the definition either way. On by default: they are the walk's own graph.
+  const [showTransitions, setShowTransitions] = useState(true);
   const flowEdges = useMemo(
     () =>
       model
-        ? [...toFlowEdges(model, findings), ...toDataEdges(channelViews), ...toBindingEdges(bindingViews)]
+        ? visibleEdges(
+            [...toFlowEdges(model, findings), ...toDataEdges(channelViews, agentViews), ...toBindingEdges(bindingViews)],
+            showTransitions,
+          )
         : [],
-    [model, findings, channelViews, bindingViews],
+    [model, findings, channelViews, bindingViews, agentViews, showTransitions],
   );
 
   const selected = useMemo(
@@ -304,7 +352,7 @@ function WorkflowCanvasInner({
       // operator selects a node to read its runs (M3b). It used to sit behind
       // the gate below, so nothing could be selected while a walk ran.
       for (const c of changes) {
-        if (c.type === "select" && c.selected) setSelectedId(c.id);
+        if (c.type === "select" && c.selected) setSelectedId(agentOwner(agentViewsRef.current, c.id) ?? c.id);
       }
 
       if (!editable) return;
@@ -323,8 +371,8 @@ function WorkflowCanvasInner({
             if (states.has(c.id)) {
               nodes = nodes.map((n) => (n.id === c.id ? { ...n, position: pos } : n));
             } else {
-              // A channel node: its position is presentation too, kept beside
-              // the states' in layout.nodes under its `channel:` key.
+              // A derived node (channel, agent): its position is presentation
+              // too, kept beside the states' in layout.nodes under its key.
               derivedPositions = { ...(derivedPositions ?? {}), [c.id]: pos };
             }
           }
@@ -346,24 +394,24 @@ function WorkflowCanvasInner({
         // never a transition. Classified against the model being updated, not
         // a render-time copy, so a fast second drag cannot act on stale views.
         const views = channelNodes(m, channels);
-        const kind = connectionKind(m, views, c);
+        const agents = agentNodes(m);
+        const kind = connectionKind(m, views, c, agents);
         if (kind === "invalid") return m;
         if (kind === "wire") {
-          const w = planWire(m, views, c);
+          const w = planWire(m, views, c, agents);
           return w ? applyWire(m, w) : m;
         }
+        // A drag from an agent node is its Starter's transition.
+        const from = transitionSource(agents, c.source);
         // A state's outbound labels must be unique, so a second edge from the
         // same source defaults to a distinct pushback rather than a duplicate
         // `success` the validator would immediately refuse.
-        const used = new Set(m.edges.filter((e) => e.from === c.source).map((e) => e.on));
+        const used = new Set(m.edges.filter((e) => e.from === from).map((e) => e.on));
         const on = used.has("success") ? `pushback:${c.target}` : "success";
         if (used.has(on)) return m;
         return {
           ...m,
-          edges: [
-            ...m.edges,
-            { from: c.source!, to: c.target!, on, raw: { from: c.source!, to: c.target!, on } },
-          ],
+          edges: [...m.edges, { from, to: c.target!, on, raw: { from, to: c.target!, on } }],
         };
       });
     },
@@ -425,8 +473,8 @@ function WorkflowCanvasInner({
   // Feedback while dragging: xyflow greys out a target the drop would refuse.
   const isValidConnection = useCallback(
     (c: { source: string | null; target: string | null; sourceHandle?: string | null; targetHandle?: string | null }) =>
-      !!model && connectionKind(model, channelViews, c) !== "invalid",
-    [model, channelViews],
+      !!model && connectionKind(model, channelViews, c, agentViews) !== "invalid",
+    [model, channelViews, agentViews],
   );
 
   const onPatch = useCallback(
@@ -524,15 +572,7 @@ function WorkflowCanvasInner({
 
   const relayout = useCallback(() => {
     if (!editable) return;
-    setModel((m) => {
-      if (!m) return m;
-      const pos = autoLayout(m);
-      return {
-        ...m,
-        layoutDirty: true,
-        nodes: m.nodes.map((n) => ({ ...n, position: pos[n.id] ?? n.position })),
-      };
-    });
+    setModel((m) => (m ? withLayout(m, autoLayout(m), true) : m));
   }, [editable]);
 
   // ---- save ----
@@ -709,6 +749,15 @@ function WorkflowCanvasInner({
           </button>
         )}
 
+        <label className="lb-wf-toggle" title="Show or hide the transitions between states — the walk's order. Hiding them changes nothing in the definition.">
+          <input
+            type="checkbox"
+            checked={showTransitions}
+            onChange={(e) => setShowTransitions(e.target.checked)}
+          />
+          Transitions
+        </label>
+
         <span className="lb-wf-toolbar__spacer" />
         <span className={`lb-wf-phase lb-wf-phase--${session.phase}`}>{statusLabel(session)}</span>
         {/* The walk's id follows the session, not a one-shot notice: a notice
@@ -766,6 +815,10 @@ function WorkflowCanvasInner({
             nodesConnectable={editable}
             elementsSelectable
             fitView
+            // A channel pipeline is one long row (channel, Starter, agent per
+            // stage); the default 0.5 floor left fit-view unable to show all
+            // of it beside the palette and inspector.
+            minZoom={0.2}
             proOptions={{ hideAttribution: false }}
           >
             <Background />
@@ -783,6 +836,7 @@ function WorkflowCanvasInner({
               nodeClassName={(n) => {
                 if (n.type === "channel") return "is-channelref";
                 if (n.type === "binding") return "is-binding";
+                if (n.type === "agent") return "is-agentref";
                 const d = n.data as unknown as { node?: { kind?: string; opaque?: boolean } };
                 if (d?.node?.opaque) return "is-opaque";
                 return `is-${d?.node?.kind || "unset"}`;

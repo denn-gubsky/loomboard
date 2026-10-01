@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COLUMN_WIDTH, autoLayout, needsAutoLayout } from "./layout";
+import { COLUMN_WIDTH, autoLayout, needsAutoLayout, withLayout } from "./layout";
 import { fromDefinition } from "./model";
 
 const linear = fromDefinition({
@@ -86,6 +86,86 @@ describe("autoLayout", () => {
     expect(pos.orphan.x).toBeGreaterThan(pos.b.x);
   });
 
+  // The pcparts test team, as it runs on TrueNAS: two Starters joined by a
+  // hand-off channel. The layout the operator asked for is one row in the
+  // order things happen.
+  const pipeline = fromDefinition({
+    entry: "research",
+    states: [
+      {
+        state: "research",
+        handler: {
+          kind: "starter",
+          source: { channel: "in" },
+          fanout: { agent: "marketing/researcher", per: "message", max: 1 },
+          sink: { channel: "handoff" },
+        },
+      },
+      {
+        state: "edit",
+        handler: {
+          kind: "starter",
+          source: { channel: "handoff" },
+          fanout: { agent: "marketing/article-editor", per: "message", max: 1 },
+          sink: { channel: "out" },
+        },
+      },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [
+      { from: "research", to: "edit", on: "success" },
+      { from: "edit", to: "done", on: "success" },
+    ],
+  });
+
+  it("lays a Starter pipeline out as ONE row: channel, Starter, agent, channel, … then End", () => {
+    const pos = autoLayout(pipeline);
+    const row = ["channel:in", "research", "agent:research", "channel:handoff", "edit", "agent:edit", "channel:out", "done"];
+    expect(row.map((id) => pos[id]?.x)).toEqual(row.map((_, i) => i * COLUMN_WIDTH));
+    expect(row.map((id) => pos[id]?.y)).toEqual(row.map(() => 0));
+  });
+
+  it("places a Starter after the channel that feeds it, not after the transition into it", () => {
+    // research → edit is one hop of control flow, but edit reads what
+    // research's agent publishes: data is the longer path, and it wins.
+    const pos = autoLayout(pipeline);
+    expect(pos.edit.x).toBeGreaterThan(pos["channel:handoff"].x);
+  });
+
+  it("places what follows a Starter after its agent, not beside it", () => {
+    const pos = autoLayout(
+      fromDefinition({
+        entry: "s",
+        states: [
+          { state: "s", handler: { kind: "starter", source: { channel: "in" }, fanout: { agent: "w" } } },
+          { state: "review", handler: { kind: "agent", agent: "r" } },
+          { state: "done", handler: { kind: "terminal" } },
+        ],
+        transitions: [
+          { from: "s", to: "review", on: "success" },
+          { from: "review", to: "done", on: "success" },
+        ],
+      }),
+    );
+    expect(pos.review.x).toBeGreaterThan(pos["agent:s"].x);
+    expect(pos.review.y).toBe(0);
+  });
+
+  it("lays out a Starter that republishes to the channel it reads — a data loop — without dragging it", () => {
+    const pos = autoLayout(
+      fromDefinition({
+        entry: "s",
+        states: [
+          { state: "s", handler: { kind: "starter", source: { channel: "q" }, fanout: { agent: "w" }, sink: { channel: "q" } } },
+          { state: "done", handler: { kind: "terminal" } },
+        ],
+        transitions: [{ from: "s", to: "done", on: "success" }],
+      }),
+    );
+    // The loop's channel stays BEFORE the Starter it feeds.
+    expect([pos["channel:q"].x, pos.s.x, pos["agent:s"].x]).toEqual([0, COLUMN_WIDTH, COLUMN_WIDTH * 2]);
+  });
+
   it("is deterministic — the same graph lays out identically every time", () => {
     expect(autoLayout(linear)).toEqual(autoLayout(linear));
   });
@@ -120,5 +200,24 @@ describe("needsAutoLayout", () => {
       layout: { nodes: { a: { x: 1, y: 2 } } },
     });
     expect(needsAutoLayout(m)).toBe(false);
+  });
+});
+
+describe("withLayout", () => {
+  const m = fromDefinition({
+    entry: "s",
+    states: [
+      { state: "s", handler: { kind: "starter", source: { channel: "in" }, fanout: { agent: "w" } } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [{ from: "s", to: "done", on: "success" }],
+  });
+
+  it("moves the states AND the derived nodes, without dirtying a layout applied on open", () => {
+    const next = withLayout(m, autoLayout(m), false);
+    expect(next.nodes.find((n) => n.id === "s")!.position).toEqual({ x: COLUMN_WIDTH, y: 0 });
+    expect(next.derivedPositions).toEqual({ "channel:in": { x: 0, y: 0 }, "agent:s": { x: COLUMN_WIDTH * 2, y: 0 } });
+    expect(next.layoutDirty).toBe(false);
+    expect(withLayout(m, autoLayout(m), true).layoutDirty).toBe(true);
   });
 });

@@ -19,7 +19,7 @@
 
 import type { ChannelInfo } from "../types";
 import { channelAllowed, channelRefs, grantList, type ChannelSide } from "./channels";
-import { CHANNEL_LAYOUT_PREFIX, type CanvasModel, type XY } from "./model";
+import { CHANNEL_LAYOUT_PREFIX, storedDerivedPosition, type CanvasModel, type XY } from "./model";
 
 /** Layout key and node id prefix. teamgraph's Layout.Nodes is a free
  *  map[string]NodePos, so this is a legal key that no validator reads. */
@@ -66,20 +66,11 @@ function isXY(v: unknown): v is XY {
   return typeof p.x === "number" && typeof p.y === "number";
 }
 
-/** The stored position for a channel node id, if any — the operator's
- *  unsaved drag first, then the definition's layout. */
+/** The stored position for a channel node id, if any. A channel the operator
+ *  removed has none, even while the saved layout still lists it. */
 function storedPosition(model: CanvasModel, id: string): XY | undefined {
   if (model.channelsRemoved?.includes(id)) return undefined;
-  const moved = model.derivedPositions?.[id];
-  if (moved) return moved;
-  const layout = model.source.layout;
-  const nodes =
-    typeof layout === "object" && layout !== null && !Array.isArray(layout)
-      ? (layout as Record<string, unknown>).nodes
-      : undefined;
-  if (typeof nodes !== "object" || nodes === null) return undefined;
-  const p = (nodes as Record<string, unknown>)[id];
-  return isXY(p) ? { x: p.x, y: p.y } : undefined;
+  return storedDerivedPosition(model, id);
 }
 
 /** Layout keys that look like placed channels. */

@@ -27,12 +27,15 @@ const KIND_LABEL: Record<string, string> = {
 
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
-  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings, pulse, held } = d;
+  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings, pulse, held, result } = d;
 
-  const canRead = !node.opaque && node.kind === "starter";
+  // A Starter sits IN the data row (C2 amended): it reads on its left and
+  // dispatches its agent on its right, so its control handles are the bottom
+  // pair only.
+  const inRow = !node.opaque && node.kind === "starter";
   // Kinds that carry a prompt can be fed a binding (lib/bindings.ts).
   const takesBindings = !node.opaque && promptFields(node.kind).length > 0;
-  const canPublish = !node.opaque && (node.kind === "starter" || node.kind === "channel");
+  const publishes = !node.opaque && node.kind === "channel";
 
   const errors = findings.filter((f) => f.level === "error");
   const infos = findings.filter((f) => f.level === "info");
@@ -54,12 +57,14 @@ export function StateNode({ data, selected }: NodeProps) {
           back through the nodes it connects; a DATA edge runs over the top.
           Separate sides are what keep a control and a data edge between the
           same two nodes from stacking into one path. See lib/flow.ts. */}
-      <Handle
-        id={HANDLE.targetLeft}
-        type="target"
-        position={Position.Left}
-        className="lb-wf-handle"
-      />
+      {!inRow && (
+        <Handle
+          id={HANDLE.targetLeft}
+          type="target"
+          position={Position.Left}
+          className="lb-wf-handle"
+        />
+      )}
       <Handle
         id={HANDLE.targetBottom}
         type="target"
@@ -67,11 +72,10 @@ export function StateNode({ data, selected }: NodeProps) {
         className="lb-wf-handle lb-wf-handle--loop"
       />
       {/* The data-flow handles exist only on the kinds that CAN carry a
-          channel — a Starter reads and publishes, a publish node publishes —
-          even before one is set, because dragging to a channel node is how it
-          gets set (lib/channelWiring.ts). An unconditional pair would put two
-          dead dots on every agent tile, implying a connection the kind cannot
-          make. */}
+          channel — a Starter reads, a publish node publishes — even before one
+          is set, because dragging to a channel node is how it gets set
+          (lib/channelWiring.ts). An unconditional pair would put dead dots on
+          every agent tile, implying a connection the kind cannot make. */}
       {/* Bindings feed in from below, beside the loop handle rather than on
           it, so a binding edge and a pushback loop never share a path. */}
       {takesBindings && (
@@ -84,11 +88,11 @@ export function StateNode({ data, selected }: NodeProps) {
           isConnectable={false}
         />
       )}
-      {(channels.source || canRead) && (
+      {inRow && (
         <Handle
-          id={HANDLE.targetTop}
+          id={HANDLE.dataIn}
           type="target"
-          position={Position.Top}
+          position={Position.Left}
           className="lb-wf-handle lb-wf-handle--data"
         />
       )}
@@ -113,7 +117,8 @@ export function StateNode({ data, selected }: NodeProps) {
         </div>
       ) : (
         <div className="lb-wf-node__body">
-          {agents.length > 0 && (
+          {/* A Starter's agent has a node of its own, right of it. */}
+          {!inRow && agents.length > 0 && (
             <div className="lb-wf-node__agents">
               {agents.map((a) => (
                 <span key={a} className="lb-wf-node__agent" title={a}>
@@ -131,11 +136,12 @@ export function StateNode({ data, selected }: NodeProps) {
           {node.kind === "agent" && consolidator && (
             <div className="lb-wf-node__meta">judged by {consolidator}</div>
           )}
-          {/* The Starter's face is its dispatcher summary (decision C2): what
-              it reads, how wide the wave is, and where results go. One node,
-              not a container — the wave is a runtime fact, so the face states
-              the RULE rather than a run count it cannot know. */}
-          {channels.source && (
+          {/* The Starter's face is its dispatch RULE (C2, C3): how wide the
+              wave is. What it reads and where results go are the channel nodes
+              either side of it in the row, so the face does not repeat them;
+              the wave is a runtime fact, so it states the rule rather than a
+              run count it cannot know. */}
+          {!inRow && channels.source && (
             <div className="lb-wf-node__channel lb-wf-node__channel--in" title={`reads ${channels.source}`}>
               ← {channels.source}
             </div>
@@ -149,7 +155,7 @@ export function StateNode({ data, selected }: NodeProps) {
               {pulse}
             </div>
           )}
-          {channels.sink && (
+          {!inRow && channels.sink && (
             <div className="lb-wf-node__channel lb-wf-node__channel--out" title={`publishes to ${channels.sink}`}>
               → {channels.sink}
             </div>
@@ -171,6 +177,27 @@ export function StateNode({ data, selected }: NodeProps) {
           {hooks.length > 0 && (
             <div className="lb-wf-node__meta lb-wf-node__hooks" title={hooks.join("\n")}>
               {hooks.length} hook{hooks.length === 1 ? "" : "s"}
+            </div>
+          )}
+          {/* An End node shows what the walk that finished here produced —
+              read from the walk's run, which holds the output (RFC DI).
+              Model output: plain text, never markup. */}
+          {node.kind === "terminal" && result && result.length > 0 && (
+            <div className="lb-wf-node__result" data-testid={`result-${node.id}`}>
+              <div className="lb-wf-node__meta">result</div>
+              {result.map((r, i) => (
+                <div key={r.runId ?? i} className="lb-wf-node__result-item">
+                  {(r.agent || r.ok !== undefined) && (
+                    <div className="lb-wf-node__meta">
+                      {r.agent ?? ""}
+                      {r.ok === false ? " · failed" : ""}
+                    </div>
+                  )}
+                  <pre className="lb-wf-node__result-text" title={r.text}>
+                    {r.text}
+                  </pre>
+                </div>
+              ))}
             </div>
           )}
           {node.kind === "input" && (
@@ -198,9 +225,20 @@ export function StateNode({ data, selected }: NodeProps) {
         </div>
       )}
 
-      {(channels.sink || canPublish) && (
+      {/* The Starter's dispatch to its agent node: derived from its fan-out,
+          so not a handle to drag from. The sink is wired from the agent. */}
+      {inRow && (
         <Handle
-          id={HANDLE.sourceTop}
+          id={HANDLE.dataOut}
+          type="source"
+          position={Position.Right}
+          className="lb-wf-handle lb-wf-handle--data"
+          isConnectable={false}
+        />
+      )}
+      {publishes && (
+        <Handle
+          id={HANDLE.dataOut}
           type="source"
           position={Position.Top}
           className="lb-wf-handle lb-wf-handle--data"
@@ -210,7 +248,9 @@ export function StateNode({ data, selected }: NodeProps) {
       {/* A terminal state accepts inbound edges only; teamgraph refuses an
           outbound one, so withholding BOTH source handles makes that rule a
           property of the UI rather than an error message after the fact. */}
-      {node.kind !== "terminal" && (
+      {/* A Starter has no outbound control handle of its own: its
+          transitions leave from its agent node, where its runs end. */}
+      {node.kind !== "terminal" && !inRow && (
         <>
           <Handle
             id={HANDLE.sourceRight}

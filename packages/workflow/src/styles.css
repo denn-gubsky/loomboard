@@ -392,6 +392,35 @@
   fill: var(--lb-wf-data);
 }
 
+/* A Starter's AGENT node (lib/agentNodes.ts): the step that runs, in the data
+ * row between its Starter and its sink. Squared like a state, bordered in the
+ * Starter's accent so the pair reads as one thing. */
+.loomboard-workflow .lb-wf-node--agentref {
+  min-width: 170px;
+  border-color: var(--lb-wf-accent);
+}
+.loomboard-workflow .react-flow__minimap-node.is-agentref {
+  fill: var(--lb-wf-accent);
+}
+/* An End node's result: what the walk that finished there produced. Capped,
+ * because an answer can be long; the full text is in the title and on the
+ * output panel. */
+.loomboard-workflow .lb-wf-node__result {
+  margin-top: 4px;
+  border-top: 1px solid var(--lb-wf-border);
+  padding-top: 4px;
+  max-width: 260px;
+}
+.loomboard-workflow .lb-wf-node__result-text {
+  margin: 2px 0 0;
+  max-height: 6em;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* A BINDING node (lib/bindings.ts): a Document or Memory a prompt pulls in.
  * Below the states, squared and muted — content fed in, not wiring (channels
  * are the rounded pills above) and not a step of the walk. */
@@ -444,14 +473,38 @@
 [data-theme="dark"] .loomboard-workflow:not([data-theme="light"]) {
   --lb-wf-data: #a78bfa;
 }
-.loomboard-workflow .lb-wf-edge--data .react-flow__edge-path {
+/* The DATA row is how a channel team actually runs — channel → Starter →
+ * agent → channel — so it is drawn solid; the dispatch from a Starter to its
+ * agent is part of the same row. */
+.loomboard-workflow .lb-wf-edge--data .react-flow__edge-path,
+.loomboard-workflow .lb-wf-edge--dispatch .react-flow__edge-path {
   stroke: var(--lb-wf-data);
-  stroke-dasharray: 2 4;
-  stroke-width: 1.5;
+  stroke-width: 2;
 }
 /* Derived, so it must not look draggable or deletable. */
-.loomboard-workflow .lb-wf-edge--data {
+.loomboard-workflow .lb-wf-edge--data,
+.loomboard-workflow .lb-wf-edge--dispatch {
   pointer-events: none;
+}
+/* A transition that only restates the data row: still the walk's own edge,
+ * still selectable and deletable, but quiet — under the row, thin and grey. */
+.loomboard-workflow .lb-wf-edge--follows .react-flow__edge-path {
+  stroke: var(--lb-wf-muted);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+.loomboard-workflow .lb-wf-edge--follows .react-flow__edge-text {
+  fill: var(--lb-wf-muted);
+}
+/* A toolbar switch (the Transitions toggle). */
+.loomboard-workflow .lb-wf-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--lb-wf-muted);
+  cursor: pointer;
+  user-select: none;
 }
 .loomboard-workflow .lb-wf-edge--data .react-flow__edge-text {
   fill: var(--lb-wf-data);

@@ -1,18 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+  AGENT_HANDLE,
   HANDLE,
   edgeClass,
   edgeId,
   fanoutSummary,
+  followsData,
   hookLabels,
   isBackward,
   mergeMeasured,
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
+  visibleEdges,
 } from "./flow";
 import { fromDefinition } from "./model";
 import { channelNodes } from "./channelNodes";
+import { agentNodes } from "./agentNodes";
 import { validateModel } from "./validate";
 
 const model = fromDefinition({
@@ -94,13 +98,21 @@ describe("toFlowNodes", () => {
 describe("toFlowEdges", () => {
   const edges = toFlowEdges(model, validateModel(model));
 
-  it("hides the success label and shows named routes", () => {
-    // `success` on every edge is noise — the arrow already says "and then".
-    expect(edges.find((e) => e.id === "code success review")!.label).toBe("");
-    expect(edges.find((e) => e.id === "review pushback:redo code")!.label).toBe("pushback:redo");
+  it("labels every transition with the step it takes, and a named route with its route", () => {
+    // Unlabelled, a transition beside a data row read as a second data path.
+    expect(edges.find((e) => e.id === "code success review")!.label).toBe("code → review");
+    expect(edges.find((e) => e.id === "review pushback:redo code")!.label).toBe("review → code · pushback:redo");
     expect(edges.find((e) => e.id === "code conditional:ready ship")!.label).toBe(
-      "conditional:ready",
+      "code → ship · conditional:ready",
     );
+  });
+
+  it("drops only the transitions when they are switched off", () => {
+    const all = [...edges, ...toDataEdges(channelNodes(model))];
+    expect(visibleEdges(all, true)).toHaveLength(all.length);
+    const off = visibleEdges(all, false);
+    expect(off.every((e) => e.data.kind !== "control")).toBe(true);
+    expect(off).toHaveLength(all.length - edges.length);
   });
 
   it("tags every edge as control flow", () => {
@@ -275,20 +287,28 @@ describe("toDataEdges", () => {
   });
 
   const views = channelNodes(wired);
-  const edges = toDataEdges(views);
+  const agents = agentNodes(wired);
+  const edges = toDataEdges(views, agents);
   const ch = (name: string) => views.find((v) => v.channel === name)!.id;
 
-  it("routes every publisher INTO the channel node and the channel OUT to every reader", () => {
+  it("routes data through the row: channel → Starter → its agent → channel", () => {
     const pairs = edges.map((e) => `${e.source}→${e.target}`).sort();
     expect(pairs).toEqual(
       [
-        `intake→${ch("raw")}`,
+        // Each Starter dispatches its agent…
+        "intake→agent:intake",
+        "triage→agent:triage",
+        "work→agent:work",
+        // …the AGENT publishes, since its runs produced the results…
+        `agent:intake→${ch("raw")}`,
+        `agent:triage→${ch("triaged")}`,
+        // …a publish node, which runs no agent, publishes itself…
         `shout→${ch("raw")}`,
+        `orphan→${ch("nobody-reads-this")}`,
+        // …and every reader is fed by its channel.
         `${ch("raw")}→triage`,
-        `triage→${ch("triaged")}`,
         `${ch("triaged")}→work`,
         `${ch("inbox")}→intake`,
-        `orphan→${ch("nobody-reads-this")}`,
       ].sort(),
     );
   });
@@ -310,15 +330,35 @@ describe("toDataEdges", () => {
     expect(edges.some((e) => e.source === "orphan")).toBe(true);
   });
 
-  it("routes data over the states' top handles so it cannot stack on a control edge", () => {
-    // triage → work exists as a transition AND as data via `triaged`. The data
-    // path leaves triage's top handle, so the two never share a path (C1/C9).
-    const out = edges.find((e) => e.source === "triage")!;
+  it("keeps a Starter's data on its sides and its control under the row, so they never stack", () => {
+    // triage → work exists as a transition AND as data via `triaged` — the
+    // case that matters (C1/C9). Data runs through the sides, the transition
+    // between the bottom pair.
+    const dispatch = edges.find((e) => e.source === "triage")!;
     const into = edges.find((e) => e.target === "work")!;
-    const control = toFlowEdges(wired, []).find((e) => e.source === "triage" && e.target === "work")!;
-    expect(out.sourceHandle).toBe(HANDLE.sourceTop);
-    expect(into.targetHandle).toBe(HANDLE.targetTop);
-    expect(control.sourceHandle).not.toBe(HANDLE.sourceTop);
+    const control = toFlowEdges(wired, []).find((e) => e.id === "triage success work")!;
+    expect(dispatch.sourceHandle).toBe(HANDLE.dataOut);
+    expect(into.targetHandle).toBe(HANDLE.dataIn);
+    expect([control.sourceHandle, control.targetHandle]).toEqual([AGENT_HANDLE.control, HANDLE.targetBottom]);
+  });
+
+  it("draws a Starter's transitions from its AGENT — the runs hold the outcome, the Starter only dispatches", () => {
+    // Regression: `edit → done` was drawn from the Starter itself, a leftover
+    // of the design where the Starter ran the agents and collected their
+    // output. The edge is still the Starter's transition (id and `from`).
+    const control = toFlowEdges(wired, []).find((e) => e.id === "triage success work")!;
+    expect(control.source).toBe("agent:triage");
+    expect(control.target).toBe("work");
+  });
+
+  it("draws a transition that only restates the data path quietly, and a pushback loudly", () => {
+    // triage publishes `triaged`, which work reads: the walk's step along it
+    // is already on screen as the data row.
+    const control = toFlowEdges(wired, []).find((e) => e.id === "triage success work")!;
+    expect(control.className).toContain("lb-wf-edge--follows");
+    expect(followsData(wired, "triage", "work")).toBe(true);
+    // intake → work shares no channel: not a restatement of anything.
+    expect(followsData(wired, "intake", "work")).toBe(false);
   });
 
   it("gives a data edge an id that cannot collide with a transition's", () => {
@@ -329,7 +369,9 @@ describe("toDataEdges", () => {
 
   it("names the channel on the NODE, not on every edge", () => {
     for (const e of edges) expect(e.label).toBe("");
-    for (const e of edges) expect(e.data.channel).toBeTruthy();
+    // Every edge through a channel knows it; a dispatch touches none.
+    const viaChannel = (e: (typeof edges)[number]) => e.source.startsWith("channel:") || e.target.startsWith("channel:");
+    for (const e of edges) expect(!!e.data.channel).toBe(viaChannel(e));
   });
 
   it("marks derived edges undeletable", () => {
@@ -349,8 +391,8 @@ describe("toDataEdges", () => {
       transitions: [],
     });
     // Drawn rather than suppressed: a real and usually unintended loop.
-    const e = toDataEdges(channelNodes(loop)).map((x) => `${x.source}→${x.target}`);
-    expect(e).toEqual(["s→channel:q", "channel:q→s"]);
+    const e = toDataEdges(channelNodes(loop), agentNodes(loop)).map((x) => `${x.source}→${x.target}`);
+    expect(e).toEqual(["s→agent:s", "agent:s→channel:q", "channel:q→s"]);
   });
 });
 

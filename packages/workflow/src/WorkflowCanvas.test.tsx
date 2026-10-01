@@ -265,22 +265,25 @@ describe("WorkflowCanvas — the Starter (RFC CZ P4)", () => {
     await waitFor(() => expect(screen.queryByText(/uses channel "sdlc-plans" as its sink/)).toBeNull());
   });
 
-  it("draws a Starter as a dispatcher: what it reads, how wide, where results go", async () => {
+  it("draws a Starter IN the data row: its channel before it, its agent after it, the rule on its face", async () => {
+    // C2 amended: the pipeline is channel → Starter → agent → channel, so what
+    // the Starter reads and dispatches are nodes of their own beside it.
     render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
     const intake = await screen.findByTestId("node-intake");
     expect(intake.className).toContain("lb-wf-node--starter");
     expect(intake.className).not.toContain("lb-wf-node--opaque");
-    expect(intake.textContent).toContain("sdlc-intake");
-    expect(intake.textContent).toContain("architect");
     expect(intake.textContent).toContain("one run per message · max 8");
-    expect(intake.textContent).toContain("sdlc-plans");
+    expect(intake.textContent).not.toContain("architect");
+    expect((await screen.findByTestId("agent-intake")).textContent).toContain("architect");
+    expect(screen.getByTestId("channel-sdlc-intake")).toBeTruthy();
+    expect(screen.getByTestId("channel-sdlc-plans")).toBeTruthy();
   });
 
   it("reads a Starter's agents from fanout, not from the handler's top level", async () => {
     // The runtime refuses a top-level `agent` on a starter, so `fanout.agent`
     // is the only place the name can legitimately live.
     render(<WorkflowCanvas dataLayer={layer()} teamName="sdlc" />);
-    expect((await screen.findByTestId("node-plan")).textContent).toContain("coder");
+    expect((await screen.findByTestId("agent-plan")).textContent).toContain("coder");
   });
 
   it("renders a publish-only channel node as an action, not an agent", async () => {
@@ -680,5 +683,73 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     fireEvent.click(await screen.findByTestId("node-research"));
     fireEvent.click(await screen.findByRole("button", { name: /completed.*marketing\/researcher/ }));
     expect(await screen.findByText("research_chunk_7")).toBeTruthy();
+  });
+
+  it("lets the operator switch transitions off — on by default, and not an edit", async () => {
+    const onSaved = vi.fn();
+    render(<WorkflowCanvas dataLayer={base()} teamName="sdlc" onSaved={onSaved} />);
+    const toggle = (await screen.findByRole("checkbox", { name: /Transitions/ })) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    fireEvent.click(toggle);
+    expect(toggle.checked).toBe(false);
+    // Presentation only: the graph is untouched, so nothing new to save.
+    expect(screen.getByTestId("node-edit")).toBeTruthy();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("shows the walk's RESULT on the End node it finished at — read from the walk's run", async () => {
+    let push: (rows: WalkRunRow[]) => void = () => undefined;
+    const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {
+      push = onRows;
+      return () => undefined;
+    });
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    const finalText = JSON.stringify({
+      results: [{ index: 0, agent: "e", run_id: "m2", ok: true, output: "[sub-agent agent_id=a_1]\narticle_chunk_42" }],
+    });
+    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText }));
+    render(<WorkflowCanvas dataLayer={base({ watchWalk, runTeamDetached, readRun })} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(watchWalk).toHaveBeenCalled());
+    const walkRow = (status: string, ts: string): WalkRunRow => ({ runId: "r_walk", agentId: "w", agent: "team:sdlc", status, ts });
+    act(() =>
+      push([
+        walkRow("running", "2026-10-01T10:00:00Z"),
+        { runId: "m1", agentId: "a", agent: "r", status: "completed", ts: "2026-10-01T10:01:00Z", state: "research" },
+        { runId: "m2", agentId: "b", agent: "e", status: "completed", ts: "2026-10-01T10:02:00Z", state: "edit" },
+      ]),
+    );
+    // Not before the walk has finished: there is no result yet.
+    expect(screen.queryByTestId("result-done")).toBeNull();
+    act(() => push([walkRow("completed", "2026-10-01T10:03:00Z")]));
+    const result = await screen.findByTestId("result-done");
+    expect(readRun).toHaveBeenCalledWith("r_walk");
+    expect(result.textContent).toContain("article_chunk_42");
+    expect(result.textContent).not.toContain("[sub-agent");
+  });
+
+  it("opens a Starter's runs from its AGENT node, and counts them there", async () => {
+    // The agent node is the Starter's fan-out, not a state: selecting it must
+    // select the Starter, or the inspector would have nothing to show.
+    let push: (rows: WalkRunRow[]) => void = () => undefined;
+    const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {
+      push = onRows;
+      return () => undefined;
+    });
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    render(<WorkflowCanvas dataLayer={base({ watchWalk, runTeamDetached })} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(watchWalk).toHaveBeenCalled());
+    act(() =>
+      push([
+        { runId: "r_walk", agentId: "w", agent: "team:sdlc", status: "running", ts: "2026-10-01T10:00:00Z" },
+        { runId: "m1", agentId: "a", agent: "marketing/researcher", status: "completed", ts: "2026-10-01T10:01:00Z", state: "research" },
+      ]),
+    );
+    const agent = await screen.findByTestId("agent-research");
+    expect(agent.textContent).toContain("1/1 done");
+    expect(screen.getByTestId("node-research").textContent).not.toContain("1/1 done");
+    fireEvent.click(agent);
+    expect(await screen.findByRole("button", { name: /completed.*marketing\/researcher/ })).toBeTruthy();
   });
 });
