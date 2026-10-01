@@ -526,6 +526,10 @@
 .loomboard-workflow .lb-wf-phase--ended {
   color: var(--lb-wf-fg);
 }
+.loomboard-workflow .lb-wf-walk-id {
+  font-size: 11px;
+  color: var(--lb-wf-muted);
+}
 /* A read-only graph should LOOK read-only, or the first failed drag is the
  * only feedback that the mode changed. */
 .loomboard-workflow .lb-wf-graph.is-locked .react-flow__node {
