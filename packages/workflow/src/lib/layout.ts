@@ -27,7 +27,7 @@
 import { agentNodeId, dispatchesAgent } from "./agentNodes";
 import { channelNodeId } from "./channelNodes";
 import { channelRefs } from "./channels";
-import type { CanvasModel, XY } from "./model";
+import { isDerivedLayoutKey, type CanvasModel, type XY } from "./model";
 
 /** Horizontal gap between layers, in px. Wide enough for a channel node. */
 export const COLUMN_WIDTH = 280;
@@ -178,6 +178,22 @@ export function autoLayout(model: CanvasModel): Record<string, XY> {
     });
   }
   return out;
+}
+
+/** Apply an autoLayout result: states' positions to their nodes, derived
+ *  nodes' (channels, agents) as derived positions. `dirty` says whether the
+ *  layout is now the operator's to save — true for the Auto-layout button,
+ *  false for the layout a team with none gets on open (decision 5: opening
+ *  never forks). */
+export function withLayout(model: CanvasModel, pos: Record<string, XY>, dirty: boolean): CanvasModel {
+  const states = new Set(model.nodes.map((n) => n.id));
+  const derived = Object.fromEntries(Object.entries(pos).filter(([id]) => !states.has(id) && isDerivedLayoutKey(id)));
+  return {
+    ...model,
+    nodes: model.nodes.map((n) => ({ ...n, position: pos[n.id] ?? n.position })),
+    derivedPositions: { ...(model.derivedPositions ?? {}), ...derived },
+    layoutDirty: model.layoutDirty || dirty,
+  };
 }
 
 /** True when no node carries a stored position — i.e. the definition has no

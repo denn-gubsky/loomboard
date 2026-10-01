@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COLUMN_WIDTH, autoLayout, needsAutoLayout } from "./layout";
+import { COLUMN_WIDTH, autoLayout, needsAutoLayout, withLayout } from "./layout";
 import { fromDefinition } from "./model";
 
 const linear = fromDefinition({
@@ -181,5 +181,24 @@ describe("needsAutoLayout", () => {
       layout: { nodes: { a: { x: 1, y: 2 } } },
     });
     expect(needsAutoLayout(m)).toBe(false);
+  });
+});
+
+describe("withLayout", () => {
+  const m = fromDefinition({
+    entry: "s",
+    states: [
+      { state: "s", handler: { kind: "starter", source: { channel: "in" }, fanout: { agent: "w" } } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [{ from: "s", to: "done", on: "success" }],
+  });
+
+  it("moves the states AND the derived nodes, without dirtying a layout applied on open", () => {
+    const next = withLayout(m, autoLayout(m), false);
+    expect(next.nodes.find((n) => n.id === "s")!.position).toEqual({ x: COLUMN_WIDTH, y: 0 });
+    expect(next.derivedPositions).toEqual({ "channel:in": { x: 0, y: 0 }, "agent:s": { x: COLUMN_WIDTH * 2, y: 0 } });
+    expect(next.layoutDirty).toBe(false);
+    expect(withLayout(m, autoLayout(m), true).layoutDirty).toBe(true);
   });
 });

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { channelNodes } from "./channelNodes";
 import { withGrant } from "./channels";
 import { applyWire, connectionKind, placeChannel, planWire, removeChannel } from "./channelWiring";
-import { HANDLE } from "./flow";
+import { agentNodes } from "./agentNodes";
+import { AGENT_HANDLE, HANDLE } from "./flow";
 import { fromDefinition, handlerOf, toDefinition, type CanvasModel } from "./model";
 
 const base = () =>
@@ -31,24 +32,29 @@ const placed = (m: CanvasModel, name: string) => {
 };
 
 describe("planWire — what a drag to or from a channel means", () => {
-  it("Starter top-out → channel sets the Starter's sink", () => {
+  it("agent out → channel sets its STARTER's sink — the results leave from the agent", () => {
     const { m, views, id } = placed(base(), "results");
-    const w = planWire(m, views, { source: "intake", target: id, sourceHandle: HANDLE.sourceTop });
+    const w = planWire(m, views, { source: "agent:intake", target: id, sourceHandle: AGENT_HANDLE.out }, agentNodes(m));
     expect(w).toEqual({ state: "intake", field: "sink", channel: "results" });
+  });
+
+  it("does not wire a sink from the Starter itself — its data-out is the dispatch", () => {
+    const { m, views, id } = placed(base(), "results");
+    expect(planWire(m, views, { source: "intake", target: id, sourceHandle: HANDLE.dataOut }, agentNodes(m))).toBeNull();
   });
 
   it("publish node → channel sets its channel", () => {
     const { m, views, id } = placed(base(), "alerts");
-    expect(planWire(m, views, { source: "shout", target: id, sourceHandle: HANDLE.sourceTop })).toEqual({
+    expect(planWire(m, views, { source: "shout", target: id, sourceHandle: HANDLE.dataOut })).toEqual({
       state: "shout",
       field: "channel",
       channel: "alerts",
     });
   });
 
-  it("channel → Starter top-in sets the Starter's source", () => {
+  it("channel → Starter data-in sets the Starter's source", () => {
     const { m, views, id } = placed(base(), "tickets");
-    expect(planWire(m, views, { source: id, target: "intake", targetHandle: HANDLE.targetTop })).toEqual({
+    expect(planWire(m, views, { source: id, target: "intake", targetHandle: HANDLE.dataIn })).toEqual({
       state: "intake",
       field: "source",
       channel: "tickets",
@@ -58,20 +64,22 @@ describe("planWire — what a drag to or from a channel means", () => {
   it("refuses what the runtime cannot express", () => {
     const { m, views, id } = placed(base(), "x");
     // An agent reads and publishes no channel — the Starter is the ACL subject.
-    expect(planWire(m, views, { source: "work", target: id, sourceHandle: HANDLE.sourceTop })).toBeNull();
-    expect(planWire(m, views, { source: id, target: "work", targetHandle: HANDLE.targetTop })).toBeNull();
+    expect(planWire(m, views, { source: "work", target: id, sourceHandle: HANDLE.dataOut })).toBeNull();
+    expect(planWire(m, views, { source: id, target: "work", targetHandle: HANDLE.dataIn })).toBeNull();
     // A publish node does not read.
-    expect(planWire(m, views, { source: id, target: "shout", targetHandle: HANDLE.targetTop })).toBeNull();
+    expect(planWire(m, views, { source: id, target: "shout", targetHandle: HANDLE.dataIn })).toBeNull();
+    // An agent node publishes only from its out handle.
+    expect(planWire(m, views, { source: "agent:intake", target: id, sourceHandle: AGENT_HANDLE.in }, agentNodes(m))).toBeNull();
     // Only the DATA handles wire: a control handle never does.
     expect(planWire(m, views, { source: "intake", target: id, sourceHandle: HANDLE.sourceRight })).toBeNull();
     expect(planWire(m, views, { source: id, target: "intake", targetHandle: HANDLE.targetLeft })).toBeNull();
   });
 
   it("refuses two states — that is a transition, not a wire", () => {
-    // Even onto a Starter's top handle, where a channel → Starter wire would
+    // Even onto a Starter's data-in, where a channel → Starter wire would
     // land: with no channel at either end there is no channel to set.
     const m = base();
-    expect(planWire(m, channelNodes(m), { source: "work", target: "intake", targetHandle: HANDLE.targetTop })).toBeNull();
+    expect(planWire(m, channelNodes(m), { source: "work", target: "intake", targetHandle: HANDLE.dataIn })).toBeNull();
   });
 
   it("refuses channel → channel", () => {
@@ -104,18 +112,25 @@ describe("applyWire", () => {
 
 describe("connectionKind", () => {
   it("never treats a drag on a DATA handle as a transition", () => {
-    // Regression guard: a Starter now always shows its top handles, and a drag
+    // Regression guard: a Starter always shows its data handles, and a drag
     // from one to an agent's left handle used to become a `success` edge.
     const m = base();
     const views = channelNodes(m);
-    expect(connectionKind(m, views, { source: "intake", target: "work", sourceHandle: HANDLE.sourceTop, targetHandle: HANDLE.targetLeft })).toBe("invalid");
-    expect(connectionKind(m, views, { source: "intake", target: "work", sourceHandle: HANDLE.sourceRight, targetHandle: HANDLE.targetLeft })).toBe("transition");
+    expect(connectionKind(m, views, { source: "intake", target: "work", sourceHandle: HANDLE.dataOut, targetHandle: HANDLE.targetLeft })).toBe("invalid");
+    expect(connectionKind(m, views, { source: "intake", target: "work", sourceHandle: HANDLE.sourceBottom, targetHandle: HANDLE.targetLeft })).toBe("transition");
+  });
+
+  it("never transitions to or from an agent node — it is not a state", () => {
+    const m = base();
+    const agents = agentNodes(m);
+    expect(connectionKind(m, channelNodes(m), { source: "agent:intake", target: "work", sourceHandle: AGENT_HANDLE.out, targetHandle: HANDLE.targetLeft }, agents)).toBe("invalid");
+    expect(connectionKind(m, channelNodes(m), { source: "work", target: "agent:intake", sourceHandle: HANDLE.sourceRight, targetHandle: AGENT_HANDLE.in }, agents)).toBe("invalid");
   });
 
   it("classifies an accepted channel drag as a wire, and a refused one as invalid", () => {
     const { m, views, id } = placed(base(), "results");
-    expect(connectionKind(m, views, { source: "intake", target: id, sourceHandle: HANDLE.sourceTop })).toBe("wire");
-    expect(connectionKind(m, views, { source: "work", target: id, sourceHandle: HANDLE.sourceTop })).toBe("invalid");
+    expect(connectionKind(m, views, { source: "agent:intake", target: id, sourceHandle: AGENT_HANDLE.out }, agentNodes(m))).toBe("wire");
+    expect(connectionKind(m, views, { source: "work", target: id, sourceHandle: HANDLE.dataOut })).toBe("invalid");
   });
 });
 

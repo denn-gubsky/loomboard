@@ -12,10 +12,11 @@ import { Inspector } from "./inspector/Inspector";
 import { PublishComposer } from "./PublishComposer";
 import { Palette } from "./Palette";
 import { newStateRaw, type PaletteEntry } from "./lib/palette";
-import { autoLayout, needsAutoLayout } from "./lib/layout";
+import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
 import {
   edgeId,
   mergeMeasured,
+  toAgentFlowNodes,
   toBindingEdges,
   toBindingFlowNodes,
   toChannelFlowNodes,
@@ -40,6 +41,8 @@ import { OutputPanel } from "./OutputPanel";
 import { RunsPanel } from "./inspector/RunsPanel";
 import { BindingNode } from "./nodes/BindingNode";
 import { channelNodes } from "./lib/channelNodes";
+import { agentNodes, agentOwner, dispatchesAgent } from "./lib/agentNodes";
+import { AgentNode } from "./nodes/AgentNode";
 import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
 import { applyWire, connectionKind, placeChannel, planWire, removeChannel } from "./lib/channelWiring";
 import { ChannelNode } from "./nodes/ChannelNode";
@@ -70,7 +73,7 @@ import { StateNode } from "./nodes/StateNode";
 import { handlerChannels } from "./lib/model";
 import type { ChannelInfo, SavedTeam, WorkflowCanvasProps } from "./types";
 
-const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode };
+const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode, agent: AgentNode };
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -153,10 +156,7 @@ function WorkflowCanvasInner({
         let next = fromDefinition(detail.definition);
         // Auto-layout on open, but do NOT mark the model dirty: merely opening
         // a team that has no stored layout must never fork it.
-        if (needsAutoLayout(next)) {
-          const pos = autoLayout(next);
-          next = { ...next, nodes: next.nodes.map((n) => ({ ...n, position: pos[n.id] ?? n.position })) };
-        }
+        if (needsAutoLayout(next)) next = withLayout(next, autoLayout(next), false);
         parentDefId.current = detail.def_id;
         loadedName.current = detail.name;
         // The promoted pointer, for C7's "a publish runs the PROMOTED version"
@@ -242,6 +242,12 @@ function WorkflowCanvasInner({
   const channelViews = useMemo(() => (model ? channelNodes(model, channels) : []), [model, channels]);
   // The Documents and Memory the prompts pull in, as nodes feeding them (P3).
   const bindingViews = useMemo(() => (model ? bindingNodes(model) : []), [model]);
+  // Each Starter's agent, as the node between it and its sink (C2 amended).
+  const agentViews = useMemo(() => (model ? agentNodes(model) : []), [model]);
+  // For onNodesChange, which must not re-create on every model change: an
+  // agent node's selection is its Starter's.
+  const agentViewsRef = useRef(agentViews);
+  agentViewsRef.current = agentViews;
   const pulses = useMemo(() => (walk ? statePulses(walk) : undefined), [walk]);
 
   // The team's output channels (M3b). Keyed by what the panel uses, so an
@@ -259,14 +265,22 @@ function WorkflowCanvasInner({
     () =>
       model
         ? [
+            // A Starter's runs are its agent's: counted on the agent node.
             ...toFlowNodes(model, findings, selectedId, measured).map((n) =>
-              pulses?.has(n.id) ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.id)), held: pulses.get(n.id)!.held } } : n,
+              pulses?.has(n.id) && !dispatchesAgent(n.data.node)
+                ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.id)), held: pulses.get(n.id)!.held } }
+                : n,
+            ),
+            ...toAgentFlowNodes(agentViews, selectedId, measured).map((n) =>
+              pulses?.has(n.data.view.state)
+                ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.data.view.state)), held: pulses.get(n.data.view.state)!.held } }
+                : n,
             ),
             ...toChannelFlowNodes(channelViews, selectedId, measured),
             ...toBindingFlowNodes(bindingViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews, bindingViews, pulses],
+    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
@@ -275,9 +289,9 @@ function WorkflowCanvasInner({
   const flowEdges = useMemo(
     () =>
       model
-        ? [...toFlowEdges(model, findings), ...toDataEdges(channelViews), ...toBindingEdges(bindingViews)]
+        ? [...toFlowEdges(model, findings), ...toDataEdges(channelViews, agentViews), ...toBindingEdges(bindingViews)]
         : [],
-    [model, findings, channelViews, bindingViews],
+    [model, findings, channelViews, bindingViews, agentViews],
   );
 
   const selected = useMemo(
@@ -304,7 +318,7 @@ function WorkflowCanvasInner({
       // operator selects a node to read its runs (M3b). It used to sit behind
       // the gate below, so nothing could be selected while a walk ran.
       for (const c of changes) {
-        if (c.type === "select" && c.selected) setSelectedId(c.id);
+        if (c.type === "select" && c.selected) setSelectedId(agentOwner(agentViewsRef.current, c.id) ?? c.id);
       }
 
       if (!editable) return;
@@ -323,8 +337,8 @@ function WorkflowCanvasInner({
             if (states.has(c.id)) {
               nodes = nodes.map((n) => (n.id === c.id ? { ...n, position: pos } : n));
             } else {
-              // A channel node: its position is presentation too, kept beside
-              // the states' in layout.nodes under its `channel:` key.
+              // A derived node (channel, agent): its position is presentation
+              // too, kept beside the states' in layout.nodes under its key.
               derivedPositions = { ...(derivedPositions ?? {}), [c.id]: pos };
             }
           }
@@ -346,10 +360,11 @@ function WorkflowCanvasInner({
         // never a transition. Classified against the model being updated, not
         // a render-time copy, so a fast second drag cannot act on stale views.
         const views = channelNodes(m, channels);
-        const kind = connectionKind(m, views, c);
+        const agents = agentNodes(m);
+        const kind = connectionKind(m, views, c, agents);
         if (kind === "invalid") return m;
         if (kind === "wire") {
-          const w = planWire(m, views, c);
+          const w = planWire(m, views, c, agents);
           return w ? applyWire(m, w) : m;
         }
         // A state's outbound labels must be unique, so a second edge from the
@@ -425,8 +440,8 @@ function WorkflowCanvasInner({
   // Feedback while dragging: xyflow greys out a target the drop would refuse.
   const isValidConnection = useCallback(
     (c: { source: string | null; target: string | null; sourceHandle?: string | null; targetHandle?: string | null }) =>
-      !!model && connectionKind(model, channelViews, c) !== "invalid",
-    [model, channelViews],
+      !!model && connectionKind(model, channelViews, c, agentViews) !== "invalid",
+    [model, channelViews, agentViews],
   );
 
   const onPatch = useCallback(
@@ -524,15 +539,7 @@ function WorkflowCanvasInner({
 
   const relayout = useCallback(() => {
     if (!editable) return;
-    setModel((m) => {
-      if (!m) return m;
-      const pos = autoLayout(m);
-      return {
-        ...m,
-        layoutDirty: true,
-        nodes: m.nodes.map((n) => ({ ...n, position: pos[n.id] ?? n.position })),
-      };
-    });
+    setModel((m) => (m ? withLayout(m, autoLayout(m), true) : m));
   }, [editable]);
 
   // ---- save ----
@@ -766,6 +773,10 @@ function WorkflowCanvasInner({
             nodesConnectable={editable}
             elementsSelectable
             fitView
+            // A channel pipeline is one long row (channel, Starter, agent per
+            // stage); the default 0.5 floor left fit-view unable to show all
+            // of it beside the palette and inspector.
+            minZoom={0.2}
             proOptions={{ hideAttribution: false }}
           >
             <Background />
@@ -783,6 +794,7 @@ function WorkflowCanvasInner({
               nodeClassName={(n) => {
                 if (n.type === "channel") return "is-channelref";
                 if (n.type === "binding") return "is-binding";
+                if (n.type === "agent") return "is-agentref";
                 const d = n.data as unknown as { node?: { kind?: string; opaque?: boolean } };
                 if (d?.node?.opaque) return "is-opaque";
                 return `is-${d?.node?.kind || "unset"}`;

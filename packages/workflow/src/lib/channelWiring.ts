@@ -5,9 +5,13 @@
 // node naming a channel (lib/channelNodes.ts), so drawing one is really
 // setting that name — and only three settings are expressible:
 //
-//   Starter  ── top-out ──▶ [channel]   sets the Starter's `sink.channel`
-//   publish  ── top-out ──▶ [channel]   sets the channel node's `channel`
-//   [channel] ── out ──▶ top-in ── Starter   sets the Starter's `source.channel`
+//   [agent]  ── out ──▶ [channel]          sets its Starter's `sink.channel`
+//   publish  ── data-out ──▶ [channel]     sets the channel node's `channel`
+//   [channel] ── out ──▶ data-in ── Starter   sets the Starter's `source.channel`
+//
+// The sink is wired from the AGENT node because that is where a Starter's
+// results leave on the graph (C2 amended); the Starter's own data-out is the
+// dispatch to its agent, which is derived and not a wire.
 //
 // Everything else is refused, not approximated: an agent state reads and
 // publishes no channel (the Starter is the team's single ACL subject), a
@@ -19,7 +23,8 @@
 //
 // Pure: no React, no network.
 
-import { HANDLE } from "./flow";
+import { agentOwner, type AgentNodeView } from "./agentNodes";
+import { AGENT_HANDLE, HANDLE } from "./flow";
 import {
   CHANNEL_CLEARANCE,
   CHANNEL_LIFT,
@@ -57,6 +62,7 @@ export function planWire(
   model: CanvasModel,
   views: readonly ChannelNodeView[],
   c: WireAttempt,
+  agents: readonly AgentNodeView[] = [],
 ): Wiring | null {
   const from = views.find((v) => v.id === c.source);
   const to = views.find((v) => v.id === c.target);
@@ -66,17 +72,21 @@ export function planWire(
   if (!from && !to) return null;
 
   if (to) {
-    // state → channel: a publish. Only from the state's data (top) handle.
+    // agent → channel: its Starter's sink. Only from the agent's out handle.
+    const owner = c.source ? agentOwner(agents, c.source) : undefined;
+    if (owner) {
+      return c.sourceHandle === AGENT_HANDLE.out ? { state: owner, field: "sink", channel: to.channel } : null;
+    }
+    // publish node → channel. A Starter's own data-out is its dispatch.
     const n = model.nodes.find((x) => x.id === c.source);
-    if (!n || n.opaque || c.sourceHandle !== HANDLE.sourceTop) return null;
-    if (n.kind === "starter") return { state: n.id, field: "sink", channel: to.channel };
+    if (!n || n.opaque || c.sourceHandle !== HANDLE.dataOut) return null;
     if (n.kind === "channel") return { state: n.id, field: "channel", channel: to.channel };
     return null;
   }
 
-  // channel → state: a read. Only a Starter reads, and only on its top handle.
+  // channel → state: a read. Only a Starter reads, and only on its data-in.
   const n = model.nodes.find((x) => x.id === c.target);
-  if (!n || n.opaque || c.targetHandle !== HANDLE.targetTop) return null;
+  if (!n || n.opaque || c.targetHandle !== HANDLE.dataIn) return null;
   if (n.kind === "starter") return { state: n.id, field: "source", channel: from!.channel };
   return null;
 }
@@ -98,16 +108,19 @@ export function applyWire(model: CanvasModel, w: Wiring): CanvasModel {
 export type ConnectionKind = "wire" | "transition" | "invalid";
 
 /** How the canvas treats a drag. A control transition runs between the
- *  control handles only — a drag that starts or ends on a DATA handle (a
- *  node's top pair) is never a transition, or dragging from a Starter's
- *  top handle to an agent would silently add a `success` edge. */
+ *  control handles only — a drag that starts or ends on a DATA handle, or on
+ *  an agent node, is never a transition, or dragging from a Starter's
+ *  dispatch handle to an agent state would silently add a `success` edge. */
 export function connectionKind(
   model: CanvasModel,
   views: readonly ChannelNodeView[],
   c: WireAttempt,
+  agents: readonly AgentNodeView[] = [],
 ): ConnectionKind {
-  if (touchesChannel(c, views)) return planWire(model, views, c) ? "wire" : "invalid";
-  if (c.sourceHandle === HANDLE.sourceTop || c.targetHandle === HANDLE.targetTop) return "invalid";
+  if (touchesChannel(c, views)) return planWire(model, views, c, agents) ? "wire" : "invalid";
+  // An agent node is not a state: nothing transitions to or from it.
+  if ((c.source && agentOwner(agents, c.source)) || (c.target && agentOwner(agents, c.target))) return "invalid";
+  if (c.sourceHandle === HANDLE.dataOut || c.targetHandle === HANDLE.dataIn) return "invalid";
   return "transition";
 }
 

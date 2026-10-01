@@ -45,7 +45,7 @@ export function ChannelNode({ data, selected }: NodeProps) {
       </div>
       <div className="lb-wf-node__body">
         {!view.wired && (
-          <div className="lb-wf-node__meta" title="Drag from a Starter's or publish node's top handle into this channel, or from this channel to a Starter's top handle">
+          <div className="lb-wf-node__meta" title="Drag from an agent's right handle or a publish node's top handle into this channel, or from this channel to a Starter's left handle">
             not wired yet
           </div>
         )}

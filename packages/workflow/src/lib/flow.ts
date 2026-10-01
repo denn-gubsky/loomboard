@@ -22,6 +22,7 @@ import { handlerAgents, handlerChannels, handlerOf } from "./model";
 import type { Finding } from "./validate";
 import type { ChannelNodeView } from "./channelNodes";
 import type { BindingNodeView } from "./bindings";
+import { dispatchesAgent, type AgentNodeView } from "./agentNodes";
 
 /** Which relation an edge represents. `control` is a transition the operator
  *  drew; `data` is derived from channel wiring and is never draggable. */
@@ -105,31 +106,34 @@ export interface FlowEdge {
   deletable?: boolean;
 }
 
-// Handle ids, shared with StateNode so the two cannot drift.
+// Handle ids, shared with the node components so the two cannot drift.
 //
-// A left-to-right layout needs FOUR handles, not two. With only
+// A left-to-right layout needs FOUR control handles, not two. With only
 // target-left / source-right, a backward edge (every pushback loop — the
 // characteristic shape of a team graph) has to leave the source's RIGHT side
 // and re-enter the target's LEFT side, which sends it curving back through
 // the nodes it connects, and stacks it on top of the forward edge running
-// between the same pair so only one label is legible.
+// between the same pair so only one label is legible. Routing backward edges
+// through the BOTTOM handles separates them from the forward edge entirely.
 //
-// Routing backward edges through the BOTTOM handles instead separates them
-// from the forward edge entirely and reads the way a loop-back should.
-//
-// The TOP pair carries DATA edges. They get their own side rather than
-// sharing the control handles because the two relations routinely connect the
-// SAME pair of nodes — a Starter publishing to the channel the next Starter
-// reads is also, usually, the next state in the walk. Sharing handles would
-// stack the two edges on one path, which is precisely the conflation C1 says
-// not to do.
+// DATA handles are named by role, not side, because the side depends on the
+// kind (C9 amended). A Starter sits IN the data row — channel → Starter →
+// agent → channel — so it reads on its LEFT and dispatches to its agent on
+// its RIGHT, and its control handles move to the bottom pair: a transition
+// between Starters runs under the row, never along the data path it usually
+// parallels. A publish node keeps its data handle on top. Either way a data
+// edge and a control edge between the same two nodes never share a path,
+// which is the conflation C1 says not to do.
 export const HANDLE = {
   targetLeft: "t-left",
   sourceRight: "s-right",
   sourceBottom: "s-bottom",
   targetBottom: "t-bottom",
-  sourceTop: "s-top",
-  targetTop: "t-top",
+  /** Where a Starter reads its channel (its left side). */
+  dataIn: "d-in",
+  /** Where a Starter dispatches its agent (its right side), or a publish node
+   *  publishes (its top). */
+  dataOut: "d-out",
   /** Where a binding (a Document / Memory its prompt names) feeds in: the
    *  bottom, offset from the loop handle so a binding edge cannot stack on a
    *  pushback loop. Only on kinds that carry a prompt. */
@@ -300,21 +304,38 @@ export function isBackward(model: CanvasModel, from: string, to: string): boolea
   return b.position.x < a.position.x;
 }
 
+/** True when a transition only restates the data path: its target reads the
+ *  channel its source publishes to. The walk does move along it, but the data
+ *  row already says so, so it is drawn quietly under the row. */
+export function followsData(model: CanvasModel, from: string, to: string): boolean {
+  const a = model.nodes.find((n) => n.id === from);
+  const b = model.nodes.find((n) => n.id === to);
+  if (!a || !b || a.opaque || b.opaque) return false;
+  const sink = handlerChannels(a).sink;
+  return !!sink && handlerChannels(b).source === sink;
+}
+
 export function toFlowEdges(model: CanvasModel, findings: Finding[]): FlowEdge[] {
+  const inRow = new Set(model.nodes.filter(dispatchesAgent).map((n) => n.id));
   return model.edges.map((e, i) => {
     const backward = isBackward(model, e.from, e.to);
+    // A Starter's sides carry its data, so its control handles are the bottom
+    // pair; a backward edge uses them on every kind.
+    const fromBottom = backward || inRow.has(e.from);
+    const toBottom = backward || inRow.has(e.to);
+    const follows = followsData(model, e.from, e.to);
     return {
       id: edgeId(e),
       source: e.from,
       target: e.to,
-      sourceHandle: backward ? HANDLE.sourceBottom : HANDLE.sourceRight,
-      targetHandle: backward ? HANDLE.targetBottom : HANDLE.targetLeft,
-      ...(backward ? { type: "smoothstep" as const } : {}),
+      sourceHandle: fromBottom ? HANDLE.sourceBottom : HANDLE.sourceRight,
+      targetHandle: toBottom ? HANDLE.targetBottom : HANDLE.targetLeft,
+      ...(fromBottom || toBottom ? { type: "smoothstep" as const } : {}),
       // `success` is the overwhelmingly common label and drawing it on every
       // edge is noise; the arrowhead now says "and then". Named routes DO
       // carry meaning and are always labelled.
       label: e.on === "success" ? "" : e.on,
-      className: edgeClass(e.on),
+      className: edgeClass(e.on) + (follows ? " lb-wf-edge--follows" : ""),
       markerEnd: { type: ARROW, width: 18, height: 18, color: ARROW_COLOR },
       data: {
         kind: "control" as const,
@@ -332,9 +353,8 @@ export function dataEdgeId(from: string, to: string): string {
   return `data:${from} > ${to}`;
 }
 
-/** Handle ids on a channel node. In on the left, out on the right: a channel
- *  sits ABOVE the states it connects, so a publisher's top handle rises into
- *  its left side and its right side drops into a reader's top handle. */
+/** Handle ids on a channel node: in on the left, out on the right, so in the
+ *  data row a channel passes left to right like everything else in it. */
 export const CHANNEL_HANDLE = { in: "ch-in", out: "ch-out" } as const;
 
 export interface ChannelFlowData {
@@ -377,8 +397,11 @@ export function toChannelFlowNodes(
   }));
 }
 
-/** Derive the DATA edges, routed through channel nodes: one edge per
- *  (publisher → channel) and one per (channel → reader).
+/** Derive the DATA edges, routed through channel nodes and agent nodes:
+ *  (channel → Starter) for what it reads, (Starter → its agent) for the
+ *  dispatch, and (agent → channel) for what the agent's runs publish — the
+ *  RESULTS leave from the agent, because the agent is what produced them. A
+ *  publish node, which runs no agent, publishes from its own handle.
  *
  *  Not stored anywhere — recomputed from the nodes' channel config every time,
  *  because that config is the only truth. They are not required to agree with
@@ -392,9 +415,15 @@ export function toChannelFlowNodes(
  *  nothing publishes to, still gets its node and its one side, so a dangling
  *  sink is visible instead of silently edge-less. A Starter that republishes
  *  to the channel it reads draws both edges: a real, usually unintended loop. */
-export function toDataEdges(views: readonly ChannelNodeView[]): FlowEdge[] {
+export function toDataEdges(views: readonly ChannelNodeView[], agents: readonly AgentNodeView[] = []): FlowEdge[] {
   const out: FlowEdge[] = [];
-  const edge = (source: string, target: string, sourceHandle: string, targetHandle: string, channel: string): FlowEdge => ({
+  const edge = (
+    source: string,
+    target: string,
+    sourceHandle: string,
+    targetHandle: string,
+    channel?: string,
+  ): FlowEdge => ({
     id: dataEdgeId(source, target),
     source,
     target,
@@ -403,16 +432,71 @@ export function toDataEdges(views: readonly ChannelNodeView[]): FlowEdge[] {
     type: "smoothstep" as const,
     // The channel node names the channel, so the edge does not repeat it.
     label: "",
-    className: "lb-wf-edge lb-wf-edge--data",
+    className: channel ? "lb-wf-edge lb-wf-edge--data" : "lb-wf-edge lb-wf-edge--dispatch",
     markerEnd: { type: ARROW, width: 14, height: 14, color: ARROW_COLOR },
     deletable: false,
-    data: { kind: "data" as const, on: "", channel, findings: [] },
+    data: { kind: "data" as const, on: "", ...(channel ? { channel } : {}), findings: [] },
   });
+  const agentOf = new Map(agents.map((a) => [a.state, a.id]));
+  for (const a of agents) out.push(edge(a.state, a.id, HANDLE.dataOut, AGENT_HANDLE.in));
   for (const v of views) {
-    for (const p of v.publishers) out.push(edge(p, v.id, HANDLE.sourceTop, CHANNEL_HANDLE.in, v.channel));
-    for (const r of v.readers) out.push(edge(v.id, r, CHANNEL_HANDLE.out, HANDLE.targetTop, v.channel));
+    for (const p of v.publishers) {
+      const agent = agentOf.get(p);
+      out.push(
+        agent
+          ? edge(agent, v.id, AGENT_HANDLE.out, CHANNEL_HANDLE.in, v.channel)
+          : edge(p, v.id, HANDLE.dataOut, CHANNEL_HANDLE.in, v.channel),
+      );
+    }
+    for (const r of v.readers) out.push(edge(v.id, r, CHANNEL_HANDLE.out, HANDLE.dataIn, v.channel));
   }
   return out;
+}
+
+/** Handle ids on an agent node: the dispatch arrives on the left, results
+ *  leave on the right — and a drag from there to a channel sets the Starter's
+ *  sink (lib/channelWiring.ts). */
+export const AGENT_HANDLE = { in: "a-in", out: "a-out" } as const;
+
+export interface AgentFlowData {
+  view: AgentNodeView;
+  /** While a walk is live or its trace is on screen: the runs of this agent,
+   *  e.g. "3/8 done · 1 held" — they are the Starter's runs, shown where they
+   *  run (lib/runs.ts). */
+  pulse?: string;
+  held?: number;
+  [k: string]: unknown;
+}
+
+export interface AgentFlowNode {
+  id: string;
+  type: "agent";
+  position: { x: number; y: number };
+  data: AgentFlowData;
+  selected?: boolean;
+  measured?: { width: number; height: number };
+  /** Derived from the Starter's fan-out: removed by removing the Starter. */
+  deletable: false;
+  connectable: true;
+}
+
+/** Agent nodes for xyflow. One is SELECTED with its Starter: selecting either
+ *  edits the same state, and the pair should read as one thing. */
+export function toAgentFlowNodes(
+  views: readonly AgentNodeView[],
+  selectedId?: string | null,
+  measured?: Measured,
+): AgentFlowNode[] {
+  return views.map((v) => ({
+    id: v.id,
+    type: "agent" as const,
+    position: v.position,
+    selected: !!selectedId && (v.state === selectedId || v.id === selectedId),
+    deletable: false as const,
+    connectable: true as const,
+    data: { view: v },
+    ...(measured?.[v.id] ? { measured: measured[v.id] } : {}),
+  }));
 }
 
 /** A binding node's one handle: its top, rising into the states it feeds. */
