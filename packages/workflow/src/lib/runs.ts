@@ -114,7 +114,10 @@ export function foldWalk(view: WalkView, rows: readonly WalkRunRow[]): WalkView 
  *  above all `awaited`: a hold that has cleared is reported by the field's
  *  ABSENCE, so merging "defined fields only" would keep a stale hold forever.
  *  Only the run's place in the graph, which never changes, is carried over
- *  when a frame omits it. */
+ *  when a frame omits it — and a review hold's deadline while the run is
+ *  STILL held: only the stream carries holdExpiresAt, so a heartbeat listing
+ *  landing mid-hold would otherwise drop it. Once the hold clears, so does
+ *  the deadline. */
 function withIdentity(next: WalkRunRow, prev: WalkRunRow): WalkRunRow {
   return {
     ...next,
@@ -122,6 +125,9 @@ function withIdentity(next: WalkRunRow, prev: WalkRunRow): WalkRunRow {
     stateVisit: next.stateVisit ?? prev.stateVisit,
     waveId: next.waveId ?? prev.waveId,
     waveIndex: next.waveIndex ?? prev.waveIndex,
+    holdExpiresAt:
+      next.holdExpiresAt ??
+      (next.awaited === "review" && prev.awaited === "review" ? prev.holdExpiresAt : undefined),
   };
 }
 

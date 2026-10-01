@@ -109,6 +109,23 @@ describe("foldWalk — instants in the listing's and the stream's formats", () =
   });
 });
 
+describe("foldWalk — a review hold's deadline", () => {
+  const fold = (...rows: WalkRunRow[]) => rows.reduce((v, r) => foldWalk(v, [r]), emptyWalk(WALK)).members.get("m1")!;
+  const DEADLINE = "2026-10-01T10:37:48Z";
+  // Only the stream carries hold_expires_at.
+  const frame = row({ runId: "m1", awaited: "review", holdExpiresAt: DEADLINE, ts: "2026-10-01T09:37:48Z" });
+
+  it("keeps the deadline when a newer listing row of the same hold omits it", () => {
+    const heartbeat = row({ runId: "m1", awaited: "review", ts: "2026-10-01T12:38:00.1+03:00" });
+    expect(fold(frame, heartbeat).holdExpiresAt).toBe(DEADLINE);
+  });
+
+  it("drops the deadline once the hold clears", () => {
+    const released = row({ runId: "m1", ts: "2026-10-01T12:38:00.1+03:00" });
+    expect(fold(frame, released).holdExpiresAt).toBeUndefined();
+  });
+});
+
 describe("rowPhase / statePulses / pulseLabel", () => {
   it("calls a run held for review HELD, and other waits WAITING", () => {
     expect(rowPhase(row({ runId: "a", awaited: "review" }))).toBe("held");
