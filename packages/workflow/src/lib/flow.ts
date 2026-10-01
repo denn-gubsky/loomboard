@@ -22,7 +22,7 @@ import { handlerAgents, handlerChannels, handlerOf } from "./model";
 import type { Finding } from "./validate";
 import type { ChannelNodeView } from "./channelNodes";
 import type { BindingNodeView } from "./bindings";
-import { dispatchesAgent, type AgentNodeView } from "./agentNodes";
+import { agentNodeId, dispatchesAgent, type AgentNodeView } from "./agentNodes";
 
 /** Which relation an edge represents. `control` is a transition the operator
  *  drew; `data` is derived from channel wiring and is never draggable. */
@@ -321,14 +321,19 @@ export function toFlowEdges(model: CanvasModel, findings: Finding[]): FlowEdge[]
     const backward = isBackward(model, e.from, e.to);
     // A Starter's sides carry its data, so its control handles are the bottom
     // pair; a backward edge uses them on every kind.
-    const fromBottom = backward || inRow.has(e.from);
     const toBottom = backward || inRow.has(e.to);
     const follows = followsData(model, e.from, e.to);
+    // A Starter's transitions LEAVE FROM ITS AGENT. The state's outcome is
+    // its runs' results — the Starter only dispatches (RFC DJ) and the run
+    // holds the output (RFC DI) — so "and then" starts where the work ended.
+    // The edge is still the Starter's transition: same id, same `from`.
+    const fromAgent = inRow.has(e.from);
+    const fromBottom = backward || fromAgent;
     return {
       id: edgeId(e),
-      source: e.from,
+      source: fromAgent ? agentNodeId(model, e.from) : e.from,
       target: e.to,
-      sourceHandle: fromBottom ? HANDLE.sourceBottom : HANDLE.sourceRight,
+      sourceHandle: fromAgent ? AGENT_HANDLE.control : fromBottom ? HANDLE.sourceBottom : HANDLE.sourceRight,
       targetHandle: toBottom ? HANDLE.targetBottom : HANDLE.targetLeft,
       ...(fromBottom || toBottom ? { type: "smoothstep" as const } : {}),
       // `success` is the overwhelmingly common label and drawing it on every
@@ -455,8 +460,9 @@ export function toDataEdges(views: readonly ChannelNodeView[], agents: readonly 
 
 /** Handle ids on an agent node: the dispatch arrives on the left, results
  *  leave on the right — and a drag from there to a channel sets the Starter's
- *  sink (lib/channelWiring.ts). */
-export const AGENT_HANDLE = { in: "a-in", out: "a-out" } as const;
+ *  sink (lib/channelWiring.ts). `control`, on the bottom, is where the
+ *  Starter's transitions leave: a drag from it to a state adds one. */
+export const AGENT_HANDLE = { in: "a-in", out: "a-out", control: "a-ctl" } as const;
 
 export interface AgentFlowData {
   view: AgentNodeView;

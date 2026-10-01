@@ -92,8 +92,10 @@ export function autoLayout(model: CanvasModel): Record<string, XY> {
     // A Starter's results leave from its AGENT, which is what produced them.
     else link(agentOf.get(r.state) ?? r.state, ch);
   }
+  // A Starter's transitions leave from its agent, as on the canvas — so what
+  // follows a Starter is placed after the agent that does its work.
   for (const e of model.edges) {
-    if (reachable.has(e.from) && reachable.has(e.to)) link(e.from, e.to);
+    if (reachable.has(e.from) && reachable.has(e.to)) link(agentOf.get(e.from) ?? e.from, e.to);
   }
 
   // Back edges by DFS, from the walk's front door first so its own direction

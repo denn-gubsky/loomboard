@@ -108,9 +108,10 @@ export function applyWire(model: CanvasModel, w: Wiring): CanvasModel {
 export type ConnectionKind = "wire" | "transition" | "invalid";
 
 /** How the canvas treats a drag. A control transition runs between the
- *  control handles only — a drag that starts or ends on a DATA handle, or on
- *  an agent node, is never a transition, or dragging from a Starter's
- *  dispatch handle to an agent state would silently add a `success` edge. */
+ *  control handles only — a drag that starts or ends on a DATA handle is never
+ *  a transition, or dragging from a Starter's dispatch handle to an agent
+ *  state would silently add a `success` edge. A Starter's transitions are
+ *  dragged from its AGENT node's control handle (see transitionSource). */
 export function connectionKind(
   model: CanvasModel,
   views: readonly ChannelNodeView[],
@@ -118,10 +119,20 @@ export function connectionKind(
   agents: readonly AgentNodeView[] = [],
 ): ConnectionKind {
   if (touchesChannel(c, views)) return planWire(model, views, c, agents) ? "wire" : "invalid";
-  // An agent node is not a state: nothing transitions to or from it.
-  if ((c.source && agentOwner(agents, c.source)) || (c.target && agentOwner(agents, c.target))) return "invalid";
+  // An agent node is not a state: nothing transitions INTO it, and the only
+  // way out is its control handle, which is its Starter's transition.
+  if (c.target && agentOwner(agents, c.target)) return "invalid";
+  if (c.source && agentOwner(agents, c.source)) {
+    return c.sourceHandle === AGENT_HANDLE.control ? "transition" : "invalid";
+  }
   if (c.sourceHandle === HANDLE.dataOut || c.targetHandle === HANDLE.dataIn) return "invalid";
   return "transition";
+}
+
+/** The state a new transition leaves from: a drag from an agent node's
+ *  control handle is its Starter's. */
+export function transitionSource(agents: readonly AgentNodeView[], id: string): string {
+  return agentOwner(agents, id) ?? id;
 }
 
 /** Place a reference to an existing channel (decision C11: referenced, never

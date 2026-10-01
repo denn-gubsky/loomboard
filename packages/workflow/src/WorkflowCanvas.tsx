@@ -44,7 +44,7 @@ import { channelNodes } from "./lib/channelNodes";
 import { agentNodes, agentOwner, dispatchesAgent } from "./lib/agentNodes";
 import { AgentNode } from "./nodes/AgentNode";
 import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
-import { applyWire, connectionKind, placeChannel, planWire, removeChannel } from "./lib/channelWiring";
+import { applyWire, connectionKind, placeChannel, planWire, removeChannel, transitionSource } from "./lib/channelWiring";
 import { ChannelNode } from "./nodes/ChannelNode";
 import {
   fromDefinition,
@@ -367,18 +367,17 @@ function WorkflowCanvasInner({
           const w = planWire(m, views, c, agents);
           return w ? applyWire(m, w) : m;
         }
+        // A drag from an agent node is its Starter's transition.
+        const from = transitionSource(agents, c.source);
         // A state's outbound labels must be unique, so a second edge from the
         // same source defaults to a distinct pushback rather than a duplicate
         // `success` the validator would immediately refuse.
-        const used = new Set(m.edges.filter((e) => e.from === c.source).map((e) => e.on));
+        const used = new Set(m.edges.filter((e) => e.from === from).map((e) => e.on));
         const on = used.has("success") ? `pushback:${c.target}` : "success";
         if (used.has(on)) return m;
         return {
           ...m,
-          edges: [
-            ...m.edges,
-            { from: c.source!, to: c.target!, on, raw: { from: c.source!, to: c.target!, on } },
-          ],
+          edges: [...m.edges, { from, to: c.target!, on, raw: { from, to: c.target!, on } }],
         };
       });
     },

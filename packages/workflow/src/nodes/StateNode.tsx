@@ -227,16 +227,16 @@ export function StateNode({ data, selected }: NodeProps) {
       {/* A terminal state accepts inbound edges only; teamgraph refuses an
           outbound one, so withholding BOTH source handles makes that rule a
           property of the UI rather than an error message after the fact. */}
-      {node.kind !== "terminal" && (
+      {/* A Starter has no outbound control handle of its own: its
+          transitions leave from its agent node, where its runs end. */}
+      {node.kind !== "terminal" && !inRow && (
         <>
-          {!inRow && (
-            <Handle
-              id={HANDLE.sourceRight}
-              type="source"
-              position={Position.Right}
-              className="lb-wf-handle"
-            />
-          )}
+          <Handle
+            id={HANDLE.sourceRight}
+            type="source"
+            position={Position.Right}
+            className="lb-wf-handle"
+          />
           <Handle
             id={HANDLE.sourceBottom}
             type="source"

@@ -132,6 +132,25 @@ describe("autoLayout", () => {
     expect(pos.edit.x).toBeGreaterThan(pos["channel:handoff"].x);
   });
 
+  it("places what follows a Starter after its agent, not beside it", () => {
+    const pos = autoLayout(
+      fromDefinition({
+        entry: "s",
+        states: [
+          { state: "s", handler: { kind: "starter", source: { channel: "in" }, fanout: { agent: "w" } } },
+          { state: "review", handler: { kind: "agent", agent: "r" } },
+          { state: "done", handler: { kind: "terminal" } },
+        ],
+        transitions: [
+          { from: "s", to: "review", on: "success" },
+          { from: "review", to: "done", on: "success" },
+        ],
+      }),
+    );
+    expect(pos.review.x).toBeGreaterThan(pos["agent:s"].x);
+    expect(pos.review.y).toBe(0);
+  });
+
   it("lays out a Starter that republishes to the channel it reads — a data loop — without dragging it", () => {
     const pos = autoLayout(
       fromDefinition({

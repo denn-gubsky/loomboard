@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AGENT_HANDLE,
   HANDLE,
   edgeClass,
   edgeId,
@@ -326,16 +327,25 @@ describe("toDataEdges", () => {
     // between the bottom pair.
     const dispatch = edges.find((e) => e.source === "triage")!;
     const into = edges.find((e) => e.target === "work")!;
-    const control = toFlowEdges(wired, []).find((e) => e.source === "triage" && e.target === "work")!;
+    const control = toFlowEdges(wired, []).find((e) => e.id === "triage success work")!;
     expect(dispatch.sourceHandle).toBe(HANDLE.dataOut);
     expect(into.targetHandle).toBe(HANDLE.dataIn);
-    expect([control.sourceHandle, control.targetHandle]).toEqual([HANDLE.sourceBottom, HANDLE.targetBottom]);
+    expect([control.sourceHandle, control.targetHandle]).toEqual([AGENT_HANDLE.control, HANDLE.targetBottom]);
+  });
+
+  it("draws a Starter's transitions from its AGENT — the runs hold the outcome, the Starter only dispatches", () => {
+    // Regression: `edit → done` was drawn from the Starter itself, a leftover
+    // of the design where the Starter ran the agents and collected their
+    // output. The edge is still the Starter's transition (id and `from`).
+    const control = toFlowEdges(wired, []).find((e) => e.id === "triage success work")!;
+    expect(control.source).toBe("agent:triage");
+    expect(control.target).toBe("work");
   });
 
   it("draws a transition that only restates the data path quietly, and a pushback loudly", () => {
     // triage publishes `triaged`, which work reads: the walk's step along it
     // is already on screen as the data row.
-    const control = toFlowEdges(wired, []).find((e) => e.source === "triage" && e.target === "work")!;
+    const control = toFlowEdges(wired, []).find((e) => e.id === "triage success work")!;
     expect(control.className).toContain("lb-wf-edge--follows");
     expect(followsData(wired, "triage", "work")).toBe(true);
     // intake → work shares no channel: not a restatement of anything.

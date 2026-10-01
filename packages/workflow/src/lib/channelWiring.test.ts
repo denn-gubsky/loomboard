@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { channelNodes } from "./channelNodes";
 import { withGrant } from "./channels";
-import { applyWire, connectionKind, placeChannel, planWire, removeChannel } from "./channelWiring";
+import { applyWire, connectionKind, placeChannel, planWire, removeChannel, transitionSource } from "./channelWiring";
 import { agentNodes } from "./agentNodes";
 import { AGENT_HANDLE, HANDLE } from "./flow";
 import { fromDefinition, handlerOf, toDefinition, type CanvasModel } from "./model";
@@ -120,11 +120,16 @@ describe("connectionKind", () => {
     expect(connectionKind(m, views, { source: "intake", target: "work", sourceHandle: HANDLE.sourceBottom, targetHandle: HANDLE.targetLeft })).toBe("transition");
   });
 
-  it("never transitions to or from an agent node — it is not a state", () => {
+  it("transitions out of an agent node only from its control handle — as its Starter's — and never into one", () => {
     const m = base();
     const agents = agentNodes(m);
-    expect(connectionKind(m, channelNodes(m), { source: "agent:intake", target: "work", sourceHandle: AGENT_HANDLE.out, targetHandle: HANDLE.targetLeft }, agents)).toBe("invalid");
-    expect(connectionKind(m, channelNodes(m), { source: "work", target: "agent:intake", sourceHandle: HANDLE.sourceRight, targetHandle: AGENT_HANDLE.in }, agents)).toBe("invalid");
+    const views = channelNodes(m);
+    expect(connectionKind(m, views, { source: "agent:intake", target: "work", sourceHandle: AGENT_HANDLE.control, targetHandle: HANDLE.targetLeft }, agents)).toBe("transition");
+    expect(transitionSource(agents, "agent:intake")).toBe("intake");
+    expect(transitionSource(agents, "work")).toBe("work");
+    // The results handle wires a sink, never a transition.
+    expect(connectionKind(m, views, { source: "agent:intake", target: "work", sourceHandle: AGENT_HANDLE.out, targetHandle: HANDLE.targetLeft }, agents)).toBe("invalid");
+    expect(connectionKind(m, views, { source: "work", target: "agent:intake", sourceHandle: HANDLE.sourceRight, targetHandle: AGENT_HANDLE.in }, agents)).toBe("invalid");
   });
 
   it("classifies an accepted channel drag as a wire, and a refused one as invalid", () => {
