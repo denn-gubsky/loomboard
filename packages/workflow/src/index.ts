@@ -160,6 +160,10 @@ export {
   walkSignal,
 } from "./lib/runs";
 export type { RowPhase, StatePulse, WalkRunRow, WalkSignal, WalkView } from "./lib/runs";
+
+// A team's output (M3b): channels it publishes to and does not read.
+export { latestMessages, messageText, outputChannels } from "./lib/output";
+export type { ChannelMessage } from "./lib/output";
 export type { BindingFlowData, BindingFlowNode } from "./lib/flow";
 
 export { Palette } from "./Palette";
@@ -194,6 +198,8 @@ export type {
   ChannelInfo,
   DetachedRun,
   PublishOutcome,
+  RunDetail,
+  RunPrompt,
   SavedTeam,
   TeamDefDetail,
   TeamRunResult,
