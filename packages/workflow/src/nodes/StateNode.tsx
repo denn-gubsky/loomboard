@@ -27,7 +27,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
-  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings } = d;
+  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings, pulse, held } = d;
 
   const canRead = !node.opaque && node.kind === "starter";
   // Kinds that carry a prompt can be fed a binding (lib/bindings.ts).
@@ -141,6 +141,14 @@ export function StateNode({ data, selected }: NodeProps) {
             </div>
           )}
           {fanout && <div className="lb-wf-node__meta">{fanout}</div>}
+          {pulse && (
+            <div
+              className={`lb-wf-node__pulse${held ? " lb-wf-node__pulse--held" : ""}`}
+              data-testid={`pulse-${node.id}`}
+            >
+              {pulse}
+            </div>
+          )}
           {channels.sink && (
             <div className="lb-wf-node__channel lb-wf-node__channel--out" title={`publishes to ${channels.sink}`}>
               → {channels.sink}
