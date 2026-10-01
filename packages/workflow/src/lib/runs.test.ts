@@ -6,6 +6,7 @@ import {
   rowPhase,
   rowsForState,
   statePulses,
+  visitNumbers,
   walkSignal,
   type WalkRunRow,
 } from "./runs";
@@ -91,6 +92,24 @@ describe("rowsForState", () => {
       row({ runId: "z", state: "elsewhere" }),
     ]);
     expect(rowsForState(v, "s").map((r) => r.runId)).toEqual(["a", "c", "b"]);
+  });
+});
+
+describe("visitNumbers", () => {
+  it("numbers a state's OWN visits — state_visit is the walk's ordinal, not the state's", () => {
+    // Live: research ran as walk visit 1, edit as walk visit 2 — edit's FIRST
+    // and only visit, which a raw "visit 2" label misread as a revisit.
+    expect(visitNumbers([row({ runId: "e", state: "edit", stateVisit: 2 })])).toEqual(new Map([["e", 1]]));
+    const n = visitNumbers([
+      row({ runId: "a", state: "s", stateVisit: 3, waveIndex: 0 }),
+      row({ runId: "b", state: "s", stateVisit: 3, waveIndex: 1 }),
+      row({ runId: "c", state: "s", stateVisit: 7 }),
+    ]);
+    expect([...n]).toEqual([["a", 1], ["b", 1], ["c", 2]]);
+  });
+
+  it("leaves a row without a visit unnumbered", () => {
+    expect(visitNumbers([row({ runId: "x", state: "s" })]).has("x")).toBe(false);
   });
 });
 

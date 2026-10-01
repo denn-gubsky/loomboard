@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { rowPhase, type WalkRunRow } from "../lib/runs";
+import { rowPhase, visitNumbers, type WalkRunRow } from "../lib/runs";
 import type { RunDetail, RunPrompt } from "../types";
 
 // The runs a selected state started in this walk (RFC CZ M3b, C13).
@@ -20,6 +20,8 @@ export interface RunsPanelProps {
 
 export function RunsPanel({ rows, readRun, readRunPrompt }: RunsPanelProps) {
   const [open, setOpen] = useState<string | null>(null);
+  const visits = visitNumbers(rows);
+  const revisited = new Set(visits.values()).size > 1;
   if (!rows.length) {
     return (
       <section className="lb-wf-runs">
@@ -35,7 +37,7 @@ export function RunsPanel({ rows, readRun, readRunPrompt }: RunsPanelProps) {
         {rows.map((r) => {
           const phase = rowPhase(r);
           const where = [
-            r.stateVisit && r.stateVisit > 1 ? `visit ${r.stateVisit}` : "",
+            revisited && visits.has(r.runId) ? `visit ${visits.get(r.runId)}` : "",
             r.waveIndex !== undefined ? `#${r.waveIndex + 1}` : "",
           ]
             .filter(Boolean)

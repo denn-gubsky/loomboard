@@ -34,6 +34,14 @@ describe("RunsPanel", () => {
     expect(screen.getByText(/held for review by cite-sources · rejected if unruled by 2026-10-02/)).toBeTruthy();
   });
 
+  it("labels a revisit by the STATE's own count, and a single visit not at all", () => {
+    const { rerender } = render(<RunsPanel rows={[row({ runId: "e", stateVisit: 2 })]} />);
+    expect(screen.queryByText(/visit/)).toBeNull();
+    rerender(<RunsPanel rows={[row({ runId: "a", stateVisit: 2 }), row({ runId: "b", stateVisit: 5 })]} />);
+    expect(screen.getByText("visit 1")).toBeTruthy();
+    expect(screen.getByText("visit 2")).toBeTruthy();
+  });
+
   it("reads a run's answer from the RUN when its row is opened", async () => {
     const readRun = vi.fn(async (runId: string): Promise<RunDetail> => ({
       runId,
