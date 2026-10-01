@@ -221,3 +221,24 @@ describe("withLayout", () => {
     expect(withLayout(m, autoLayout(m), true).layoutDirty).toBe(true);
   });
 });
+
+describe("autoLayout — the Input node", () => {
+  it("puts an Input before the channel its Start publishes to: [Input] → [channel] → (Starter)", () => {
+    const pos = autoLayout(
+      fromDefinition({
+        entry: "form",
+        states: [
+          { state: "form", handler: { kind: "input" } },
+          { state: "research", handler: { kind: "starter", source: { channel: "pcparts-in" }, fanout: { agent: "r", max: 1 } } },
+          { state: "done", handler: { kind: "terminal" } },
+        ],
+        transitions: [
+          { from: "form", to: "research", on: "success" },
+          { from: "research", to: "done", on: "success" },
+        ],
+      }),
+    );
+    expect([pos.form.x, pos["channel:pcparts-in"].x, pos.research.x]).toEqual([0, COLUMN_WIDTH, COLUMN_WIDTH * 2]);
+    expect([pos.form.y, pos["channel:pcparts-in"].y]).toEqual([0, 0]);
+  });
+});

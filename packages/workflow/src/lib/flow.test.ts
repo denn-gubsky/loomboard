@@ -12,6 +12,7 @@ import {
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
+  toStartEdges,
   visibleEdges,
 } from "./flow";
 import { fromDefinition } from "./model";
@@ -477,5 +478,35 @@ describe("hookLabels (RFC DK-P4c)", () => {
 
   it("is empty for a node with no hooks", () => {
     expect(hookLabels(nodeWith({ kind: "agent", agent: "a" }))).toEqual([]);
+  });
+});
+
+describe("toStartEdges — what the Input node's Start does", () => {
+  const m = fromDefinition({
+    entry: "form",
+    states: [
+      { state: "form", handler: { kind: "input" } },
+      { state: "research", handler: { kind: "starter", source: { channel: "pcparts-in" }, fanout: { agent: "r", max: 1 } } },
+    ],
+    transitions: [{ from: "form", to: "research", on: "success" }],
+  });
+
+  it("draws Start publishing the form to the channel the next Starter reads", () => {
+    const [e] = toStartEdges(m, channelNodes(m));
+    expect([e.source, e.target, e.label]).toEqual(["form", "channel:pcparts-in", "Start publishes"]);
+    expect(e.deletable).toBe(false);
+  });
+
+  it("treats Input → Starter as following that data, so it is drawn quietly", () => {
+    expect(followsData(m, "form", "research")).toBe(true);
+  });
+
+  it("draws nothing when the Input leads to an agent — Start only runs", () => {
+    const agentTeam = fromDefinition({
+      entry: "form",
+      states: [{ state: "form", handler: { kind: "input" } }, { state: "w", handler: { kind: "agent", agent: "w" } }],
+      transitions: [{ from: "form", to: "w", on: "success" }],
+    });
+    expect(toStartEdges(agentTeam, channelNodes(agentTeam))).toEqual([]);
   });
 });

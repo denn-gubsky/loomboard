@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  contentKey,
   fromDefinition,
   handlerAgents,
   handlerOf,
@@ -365,5 +366,27 @@ describe("walk hooks (RFC DK-P4c)", () => {
     expect("hooks" in toDefinition(m)).toBe(false);
     const empty = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: {} } };
     expect("hooks" in toDefinition(empty)).toBe(false);
+  });
+});
+
+describe("contentKey", () => {
+  const def = {
+    entry: "a",
+    states: [{ state: "a", handler: { kind: "agent", agent: "x" } }, { state: "b", handler: { kind: "terminal" } }],
+    transitions: [{ from: "a", to: "b", on: "success" }],
+  };
+
+  it("ignores layout, colours and key order — they do not change what runs", () => {
+    const m = fromDefinition(def);
+    const moved = { ...fromDefinition({ ...def, layout: { nodes: { a: { x: 5, y: 5 } } }, colors: { a: "#f00" } }), layoutDirty: true };
+    const reordered = fromDefinition({ transitions: def.transitions, states: def.states, entry: "a" });
+    expect(contentKey(moved)).toBe(contentKey(m));
+    expect(contentKey(reordered)).toBe(contentKey(m));
+  });
+
+  it("changes when the content does", () => {
+    const m = fromDefinition(def);
+    const edited = { ...m, nodes: m.nodes.map((n) => (n.id === "a" ? patchHandler(n, { agent: "y" }) : n)) };
+    expect(contentKey(edited)).not.toBe(contentKey(m));
   });
 });

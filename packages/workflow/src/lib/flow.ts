@@ -24,6 +24,7 @@ import type { ChannelNodeView } from "./channelNodes";
 import type { BindingNodeView } from "./bindings";
 import { agentNodeId, dispatchesAgent, type AgentNodeView } from "./agentNodes";
 import type { ResultItem } from "./output";
+import { startPlan } from "./inputForm";
 
 /** Which relation an edge represents. `control` is a transition the operator
  *  drew; `data` is derived from channel wiring and is never draggable. */
@@ -314,8 +315,35 @@ export function followsData(model: CanvasModel, from: string, to: string): boole
   const a = model.nodes.find((n) => n.id === from);
   const b = model.nodes.find((n) => n.id === to);
   if (!a || !b || a.opaque || b.opaque) return false;
-  const sink = handlerChannels(a).sink;
+  // An Input node's "sink" is the channel Start publishes its form to.
+  const plan = startPlan(model);
+  const sink = plan?.input === a.id ? plan.publishTo : handlerChannels(a).sink;
   return !!sink && handlerChannels(b).source === sink;
+}
+
+/** The Input node's Start edge: the channel its form is published to before
+ *  the walk starts (browser-side until loomcycle G15 Ask A). Drawn because it
+ *  is what Start DOES — dashed, since it is the canvas acting, not the
+ *  definition. */
+export function toStartEdges(model: CanvasModel, views: readonly ChannelNodeView[]): FlowEdge[] {
+  const plan = startPlan(model);
+  const channel = plan?.publishTo ? views.find((v) => v.channel === plan.publishTo) : undefined;
+  if (!plan || !channel) return [];
+  return [
+    {
+      id: dataEdgeId(plan.input, channel.id),
+      source: plan.input,
+      target: channel.id,
+      sourceHandle: HANDLE.dataOut,
+      targetHandle: CHANNEL_HANDLE.in,
+      type: "smoothstep" as const,
+      label: "Start publishes",
+      className: "lb-wf-edge lb-wf-edge--start",
+      markerEnd: { type: ARROW, width: 14, height: 14, color: ARROW_COLOR },
+      deletable: false,
+      data: { kind: "data" as const, on: "", channel: channel.channel, findings: [] },
+    },
+  ];
 }
 
 /** A transition's label: the step it takes, `research → edit`, plus its
