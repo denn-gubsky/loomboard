@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import type { TeamDefDetail, WorkflowDataLayer } from "./types";
+import type { WalkRunRow } from "./lib/runs";
 
 // Render smoke tests.
 //
@@ -530,5 +531,85 @@ describe("WorkflowCanvas — binding nodes (RFC CZ P3)", () => {
     fireEvent.click(await screen.findByTestId("binding-document-/specs/launch#Risks"));
     const panel = (await screen.findByText(/cannot decline to read it/)).closest("aside")!;
     expect(panel.textContent).toMatch(/plan \(system_prompt\)/);
+  });
+});
+
+describe("WorkflowCanvas — the live walk (RFC CZ M3)", () => {
+  type Rows = (rows: WalkRunRow[]) => void;
+  // A host whose watchWalk hands the test the row sink, so the test plays the
+  // runtime: it decides what the walk's runs do and when.
+  const harness = () => {
+    let push: Rows = () => undefined;
+    const stop = vi.fn();
+    const watchWalk = vi.fn((_id: string, onRows: Rows) => {
+      push = onRows;
+      return stop;
+    });
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    const layer = stubLayer({ watchWalk, runTeamDetached });
+    return { layer, watchWalk, stop, push: (rows: WalkRunRow[]) => act(() => push(rows)) };
+  };
+  const row = (o: Partial<WalkRunRow> & { runId: string }): WalkRunRow => ({
+    agentId: "a",
+    agent: "x",
+    status: "running",
+    ts: "2026-10-01T10:00:00Z",
+    ...o,
+  });
+
+  it("watches the walk it started, by run id", async () => {
+    const h = harness();
+    render(<WorkflowCanvas dataLayer={h.layer} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(h.watchWalk).toHaveBeenCalled());
+    expect(h.watchWalk.mock.calls[0][0]).toBe("r_walk");
+  });
+
+  it("shows each state's live runs on its node", async () => {
+    const h = harness();
+    render(<WorkflowCanvas dataLayer={h.layer} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(h.watchWalk).toHaveBeenCalled());
+    h.push([
+      row({ runId: "r_walk" }),
+      row({ runId: "m1", state: "code", status: "completed" }),
+      row({ runId: "m2", state: "code", awaited: "review" }),
+    ]);
+    expect((await screen.findByTestId("pulse-code")).textContent).toBe("1/2 done · 1 held");
+  });
+
+  it("ENDS the session when the walk's own run ends, so Back to Edit appears", async () => {
+    // Regression: nothing told the canvas a walk had finished, so it stayed
+    // "Running" — and Back to Edit unreachable — until a reload.
+    const h = harness();
+    render(<WorkflowCanvas dataLayer={h.layer} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(h.watchWalk).toHaveBeenCalled());
+    h.push([row({ runId: "r_walk" })]);
+    h.push([row({ runId: "r_walk", status: "completed", ts: "2026-10-01T10:05:00Z" })]);
+    expect(await screen.findByText("Finished")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to Edit" })).toBeTruthy();
+  });
+
+  it("parks the session while the walk waits at a breakpoint, and releases it", async () => {
+    const h = harness();
+    render(<WorkflowCanvas dataLayer={h.layer} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(h.watchWalk).toHaveBeenCalled());
+    h.push([row({ runId: "r_walk", awaited: "interrupted", ts: "2026-10-01T10:01:00Z" })]);
+    expect(await screen.findByText("Paused at a breakpoint")).toBeTruthy();
+    h.push([row({ runId: "r_walk", ts: "2026-10-01T10:02:00Z" })]);
+    expect(await screen.findByText("Debugging")).toBeTruthy();
+  });
+
+  it("stops watching when the operator goes back to Edit", async () => {
+    const h = harness();
+    render(<WorkflowCanvas dataLayer={h.layer} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(h.watchWalk).toHaveBeenCalled());
+    h.push([row({ runId: "r_walk", status: "completed" })]);
+    fireEvent.click(await screen.findByRole("button", { name: "Back to Edit" }));
+    expect(h.stop).toHaveBeenCalled();
+    expect(screen.queryByTestId("pulse-code")).toBeNull();
   });
 });

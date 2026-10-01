@@ -35,6 +35,11 @@ describe("RFC CZ team-debug contract — @loomcycle/client", () => {
     ["cancelTurn", "stop a live walk by its run id"],
     // C13: a member run is read from the Run itself (RFC DI).
     ["getAgent", "a run's result and spec"],
+    // G5 (loomcycle 1.101): a run by its RUN id — the only way to read a walk's
+    // own run, whose agent id `team:<name>` is shared by every walk of a team.
+    ["getRun", "one run by run id, including a walk's"],
+    // G4 (loomcycle 1.101): one walk's runs, paged — reloading a finished walk.
+    ["listWalkRuns", "the walk's own run and every member, oldest first"],
     ["getRunPrompt", "the exact prompt a run was sent"],
     // C14: the verdict on a member held for review (RFC DJ).
     ["reviewRun", "approve | reject with feedback | reject"],

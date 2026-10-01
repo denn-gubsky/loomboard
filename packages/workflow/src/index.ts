@@ -146,6 +146,20 @@ export {
 } from "./lib/bindings";
 export type { Binding, BindingKind, BindingNodeView, BindingUse, PromptField } from "./lib/bindings";
 export { toBindingEdges, toBindingFlowNodes, BINDING_HANDLE } from "./lib/flow";
+
+// The Run as the canvas's data source (M3): fold a walk's runs, as the host
+// maps them from the SDK, into what the canvas draws.
+export {
+  emptyWalk,
+  foldWalk,
+  isTerminal,
+  pulseLabel,
+  rowPhase,
+  rowsForState,
+  statePulses,
+  walkSignal,
+} from "./lib/runs";
+export type { RowPhase, StatePulse, WalkRunRow, WalkSignal, WalkView } from "./lib/runs";
 export type { BindingFlowData, BindingFlowNode } from "./lib/flow";
 
 export { Palette } from "./Palette";

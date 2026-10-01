@@ -24,6 +24,7 @@ import {
   toFlowNodes,
 } from "./lib/flow";
 import { bindingFindings, bindingNodes } from "./lib/bindings";
+import { emptyWalk, foldWalk, pulseLabel, statePulses, walkSignal, type WalkRunRow, type WalkView } from "./lib/runs";
 import { BindingNode } from "./nodes/BindingNode";
 import { channelNodes } from "./lib/channelNodes";
 import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
@@ -89,6 +90,38 @@ function WorkflowCanvasInner({
   // allow it, so every edit path below gates on `editable` rather than on
   // either one alone.
   const [session, dispatchSession] = useReducer(reduceSession, SESSION_INITIAL);
+
+  // ---- the live walk (M3) ----
+  // Folded from the host's watchWalk: the walk's own run plus every run it
+  // started. Kept after the walk ends, so the trace stays readable in the mode
+  // that produced it (C5), and dropped when the operator goes back to Edit.
+  const [walk, setWalk] = useState<WalkView>();
+  useEffect(() => {
+    const runId = session.runId;
+    if (!runId || !dataLayer.watchWalk) {
+      setWalk(undefined);
+      return;
+    }
+    setWalk(emptyWalk(runId));
+    return dataLayer.watchWalk(
+      runId,
+      (rows) => setWalk((v) => (v && v.walkRunId === runId ? foldWalk(v, rows) : v)),
+      // The watcher reconnects on its own; an error is worth a log, not a stop.
+      (e) => console.warn("[canvas] walk stream error (reconnecting):", e),
+    );
+  }, [dataLayer, session.runId]);
+
+  // The walk's OWN run drives the session: it ending ends the session (so
+  // Back to Edit appears — the canvas used to stay "Running" forever), and it
+  // waiting on an Interruption is the before_dispatch pause. A ref holds the
+  // previous row so each change is signalled once.
+  const lastWalkRow = useRef<WalkRunRow | undefined>(undefined);
+  useEffect(() => {
+    const next = walk?.walk;
+    const signal = walkSignal(lastWalkRow.current, next);
+    lastWalkRow.current = next;
+    if (signal) dispatchSession(signal);
+  }, [walk?.walk]);
   const editable = !readonly && canEditGraph(session);
 
   // ---- load ----
@@ -196,16 +229,19 @@ function WorkflowCanvasInner({
   const channelViews = useMemo(() => (model ? channelNodes(model, channels) : []), [model, channels]);
   // The Documents and Memory the prompts pull in, as nodes feeding them (P3).
   const bindingViews = useMemo(() => (model ? bindingNodes(model) : []), [model]);
+  const pulses = useMemo(() => (walk ? statePulses(walk) : undefined), [walk]);
   const flowNodes = useMemo(
     () =>
       model
         ? [
-            ...toFlowNodes(model, findings, selectedId, measured),
+            ...toFlowNodes(model, findings, selectedId, measured).map((n) =>
+              pulses?.has(n.id) ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.id)), held: pulses.get(n.id)!.held } } : n,
+            ),
             ...toChannelFlowNodes(channelViews, selectedId, measured),
             ...toBindingFlowNodes(bindingViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews, bindingViews],
+    [model, findings, selectedId, measured, channelViews, bindingViews, pulses],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they

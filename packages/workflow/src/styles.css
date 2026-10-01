@@ -240,6 +240,19 @@
 .loomboard-workflow .lb-wf-node__hooks {
   color: var(--lb-wf-accent);
 }
+/* A state's live runs (M3): what the walk is doing HERE. Monospace so the
+ * counts do not reflow as they tick. A hold is louder — it waits for a person,
+ * and an unnoticed hold waits forever. */
+.loomboard-workflow .lb-wf-node__pulse {
+  margin-top: 4px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--lb-wf-accent);
+}
+.loomboard-workflow .lb-wf-node__pulse--held {
+  color: var(--lb-wf-conditional);
+  font-weight: 600;
+}
 .loomboard-workflow .lb-wf-node__findings {
   margin-top: 6px;
 }

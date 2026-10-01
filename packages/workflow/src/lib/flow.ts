@@ -45,6 +45,12 @@ export interface FlowNodeData {
   /** The hooks this node adds to its runs, as `event: name` labels. */
   hooks: string[];
   isEntry: boolean;
+  /** While a walk is live or its trace is on screen: this state's runs, e.g.
+   *  "3/8 done · 1 held · 4 running" (lib/runs.ts). */
+  pulse?: string;
+  /** How many of this state's runs are held for review — drawn louder, since
+   *  a hold waits for a person. */
+  held?: number;
   /** Findings anchored to this state, worst level first. */
   findings: Finding[];
   [k: string]: unknown;
