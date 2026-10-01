@@ -18,6 +18,7 @@ import { belongsToWalk, rowFromAgent, rowFromEvent } from "./walkRows";
 // only hold a connection open.
 
 const RECONNECT_MS = 2000;
+const POLL_MS = 5000;
 const TERMINAL = new Set(["completed", "failed", "cancelled", "rejected"]);
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -31,14 +32,22 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+export interface WatchTiming {
+  reconnectMs?: number;
+  /** How often the walk's OWN run is read while it is live (see below). */
+  pollMs?: number;
+}
+
 export function watchWalk(
   client: LoomcycleClient,
   selfUserId: () => Promise<string>,
   walkRunId: string,
   onRows: (rows: WalkRunRow[]) => void,
   onError?: (e: unknown) => void,
-  reconnectMs = RECONNECT_MS,
+  timing: WatchTiming = {},
 ): () => void {
+  const reconnectMs = timing.reconnectMs ?? RECONNECT_MS;
+  const pollMs = timing.pollMs ?? POLL_MS;
   const ac = new AbortController();
   const { signal } = ac;
 
@@ -56,25 +65,70 @@ export function watchWalk(
     return ended;
   };
 
+  // The walk has ended: fold one last listing — so every member's final state
+  // lands even if its own frame was lost — and stop everything.
+  let finishing = false;
+  const finish = async () => {
+    if (finishing) return;
+    finishing = true;
+    try {
+      await hydrate();
+    } catch (e) {
+      if (!signal.aborted) onError?.(e);
+    }
+    ac.abort();
+  };
+
+  // WHY the walk's own run is POLLED (loomcycle v1.101.0): the run-state
+  // stream's walk filter matches `parent_context.walk_id`, which every MEMBER
+  // carries and the walk's own run does not — so the filtered stream never
+  // delivers the walk's OWN transitions: not its end, not its breakpoint
+  // pause. listWalkRuns does include it; the stream does not. Reported as
+  // gap G10. Until it is fixed, getRun(walk) is read every `pollMs`, and at
+  // once whenever a member settles — a walk ends milliseconds after its last
+  // member — so the end is seen within a beat rather than a poll interval.
+  let lastWalk = "";
+  const readWalk = async () => {
+    try {
+      const row = rowFromAgent(await client.getRun(walkRunId, { signal }));
+      const key = `${row.status}|${row.awaited ?? ""}|${row.ts}`;
+      if (key !== lastWalk) {
+        lastWalk = key;
+        onRows([row]);
+      }
+      if (TERMINAL.has(row.status)) await finish();
+    } catch (e) {
+      if (!signal.aborted) onError?.(e);
+    }
+  };
+
   void (async () => {
     const userId = await selfUserId().catch((e) => {
       onError?.(e);
       return undefined;
     });
     if (!userId) return;
+
+    // Poll the walk's own run for the life of the watch.
+    void (async () => {
+      while (!signal.aborted) {
+        await sleep(pollMs, signal);
+        if (!signal.aborted) await readWalk();
+      }
+    })();
+
     while (!signal.aborted) {
       try {
-        if (await hydrate()) return;
+        if (await hydrate()) return void (await finish());
         for await (const item of client.streamUserRunStates(userId, { walkId: walkRunId, signal })) {
           if (signal.aborted) return;
           if (item.kind !== "event" || !belongsToWalk(item.payload, walkRunId)) continue;
           onRows([rowFromEvent(item.payload)]);
           if (item.payload.run_id === walkRunId && TERMINAL.has(item.payload.status)) {
-            // One last listing, so the final state of every member is folded
-            // even if its own frame was lost; then stop.
-            await hydrate();
-            return;
+            // A server that does deliver the walk's own run (G10 fixed).
+            return void (await finish());
           }
+          if (TERMINAL.has(item.payload.status)) void readWalk();
         }
         // Clean end (the server's stream cap) → reconnect and re-hydrate.
       } catch (e) {
