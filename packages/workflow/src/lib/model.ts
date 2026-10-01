@@ -122,12 +122,26 @@ export interface CanvasModel {
 export const CHANNEL_LAYOUT_PREFIX = "channel:";
 /** The layout key prefix binding nodes use (lib/bindings.ts). */
 export const BINDING_LAYOUT_PREFIX = "binding:";
+/** The layout key prefix a Starter's agent node uses (lib/agentNodes.ts). */
+export const AGENT_LAYOUT_PREFIX = "agent:";
 /** Every prefix whose `layout.nodes` keys belong to a derived node, not a
  *  state — kept across a save that rebuilds the layout from the states. */
-export const DERIVED_LAYOUT_PREFIXES = [CHANNEL_LAYOUT_PREFIX, BINDING_LAYOUT_PREFIX] as const;
+export const DERIVED_LAYOUT_PREFIXES = [CHANNEL_LAYOUT_PREFIX, BINDING_LAYOUT_PREFIX, AGENT_LAYOUT_PREFIX] as const;
 
 export function isDerivedLayoutKey(key: string): boolean {
   return DERIVED_LAYOUT_PREFIXES.some((p) => key.startsWith(p));
+}
+
+/** A derived node's stored position — the operator's unsaved drag first, then
+ *  the definition's layout — or undefined when it has none and is placed by
+ *  rule. */
+export function storedDerivedPosition(model: CanvasModel, id: string): XY | undefined {
+  const moved = model.derivedPositions?.[id];
+  if (moved) return moved;
+  const layout = model.source.layout;
+  const nodes = isObj(layout) ? layout.nodes : undefined;
+  const p = isObj(nodes) ? nodes[id] : undefined;
+  return isObj(p) && typeof p.x === "number" && typeof p.y === "number" ? { x: p.x, y: p.y } : undefined;
 }
 
 /** The workflow's own channel allowlist. The Starter is its single subject, so
