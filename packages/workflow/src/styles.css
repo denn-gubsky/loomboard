@@ -402,6 +402,24 @@
 .loomboard-workflow .react-flow__minimap-node.is-agentref {
   fill: var(--lb-wf-accent);
 }
+/* An End node's result: what the walk that finished there produced. Capped,
+ * because an answer can be long; the full text is in the title and on the
+ * output panel. */
+.loomboard-workflow .lb-wf-node__result {
+  margin-top: 4px;
+  border-top: 1px solid var(--lb-wf-border);
+  padding-top: 4px;
+  max-width: 260px;
+}
+.loomboard-workflow .lb-wf-node__result-text {
+  margin: 2px 0 0;
+  max-height: 6em;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
 /* A BINDING node (lib/bindings.ts): a Document or Memory a prompt pulls in.
  * Below the states, squared and muted — content fed in, not wiring (channels

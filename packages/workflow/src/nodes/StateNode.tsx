@@ -27,7 +27,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
-  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings, pulse, held } = d;
+  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings, pulse, held, result } = d;
 
   // A Starter sits IN the data row (C2 amended): it reads on its left and
   // dispatches its agent on its right, so its control handles are the bottom
@@ -177,6 +177,27 @@ export function StateNode({ data, selected }: NodeProps) {
           {hooks.length > 0 && (
             <div className="lb-wf-node__meta lb-wf-node__hooks" title={hooks.join("\n")}>
               {hooks.length} hook{hooks.length === 1 ? "" : "s"}
+            </div>
+          )}
+          {/* An End node shows what the walk that finished here produced —
+              read from the walk's run, which holds the output (RFC DI).
+              Model output: plain text, never markup. */}
+          {node.kind === "terminal" && result && result.length > 0 && (
+            <div className="lb-wf-node__result" data-testid={`result-${node.id}`}>
+              <div className="lb-wf-node__meta">result</div>
+              {result.map((r, i) => (
+                <div key={r.runId ?? i} className="lb-wf-node__result-item">
+                  {(r.agent || r.ok !== undefined) && (
+                    <div className="lb-wf-node__meta">
+                      {r.agent ?? ""}
+                      {r.ok === false ? " · failed" : ""}
+                    </div>
+                  )}
+                  <pre className="lb-wf-node__result-text" title={r.text}>
+                    {r.text}
+                  </pre>
+                </div>
+              ))}
             </div>
           )}
           {node.kind === "input" && (

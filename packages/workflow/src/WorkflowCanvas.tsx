@@ -36,7 +36,7 @@ import {
   type WalkRunRow,
   type WalkView,
 } from "./lib/runs";
-import { outputChannels } from "./lib/output";
+import { outputChannels, resultTerminal, walkResult, type ResultItem } from "./lib/output";
 import { OutputPanel } from "./OutputPanel";
 import { RunsPanel } from "./inspector/RunsPanel";
 import { BindingNode } from "./nodes/BindingNode";
@@ -138,6 +138,25 @@ function WorkflowCanvasInner({
     lastWalkRow.current = next;
     if (signal) dispatchSession(signal);
   }, [walk?.walk]);
+
+  // What a COMPLETED walk produced, for its End node: read from the walk's
+  // own run (RFC DI — the run holds the output), once it has finished.
+  const [result, setResult] = useState<{ walkRunId: string; items: ResultItem[] }>();
+  const walkDone = walk?.walk?.status === "completed" ? walk.walkRunId : undefined;
+  useEffect(() => {
+    if (!walkDone || !dataLayer.readRun) {
+      setResult(undefined);
+      return;
+    }
+    let cancelled = false;
+    dataLayer
+      .readRun(walkDone)
+      .then((d) => !cancelled && setResult({ walkRunId: walkDone, items: walkResult(d.finalText) }))
+      .catch((e) => console.warn("[canvas] reading the walk's result failed:", e));
+    return () => {
+      cancelled = true;
+    };
+  }, [dataLayer, walkDone]);
   const editable = !readonly && canEditGraph(session);
 
   // ---- load ----
@@ -249,6 +268,12 @@ function WorkflowCanvasInner({
   const agentViewsRef = useRef(agentViews);
   agentViewsRef.current = agentViews;
   const pulses = useMemo(() => (walk ? statePulses(walk) : undefined), [walk]);
+  // The End node the result belongs on: where the last state that ran leads.
+  const endedAt = useMemo(() => {
+    if (!model || !result || result.walkRunId !== walk?.walkRunId) return undefined;
+    const last = [...walk.members.values()].filter((r) => r.state).sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)).pop();
+    return resultTerminal(model, last?.state);
+  }, [model, result, walk]);
 
   // The team's output channels (M3b). Keyed by what the panel uses, so an
   // ordinary graph edit — which rebuilds every view — does not re-peek them.
@@ -269,7 +294,9 @@ function WorkflowCanvasInner({
             ...toFlowNodes(model, findings, selectedId, measured).map((n) =>
               pulses?.has(n.id) && !dispatchesAgent(n.data.node)
                 ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.id)), held: pulses.get(n.id)!.held } }
-                : n,
+                : n.id === endedAt && result
+                  ? { ...n, data: { ...n.data, result: result.items } }
+                  : n,
             ),
             ...toAgentFlowNodes(agentViews, selectedId, measured).map((n) =>
               pulses?.has(n.data.view.state)
@@ -280,7 +307,7 @@ function WorkflowCanvasInner({
             ...toBindingFlowNodes(bindingViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses],
+    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses, endedAt, result],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they

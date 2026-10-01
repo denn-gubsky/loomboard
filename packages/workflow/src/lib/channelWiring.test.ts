@@ -82,6 +82,21 @@ describe("planWire — what a drag to or from a channel means", () => {
     expect(planWire(m, channelNodes(m), { source: "work", target: "intake", targetHandle: HANDLE.dataIn })).toBeNull();
   });
 
+  it("refuses channel → End — channels are for agents; the End node follows its agent", () => {
+    const m = fromDefinition({
+      entry: "s",
+      states: [
+        { state: "s", handler: { kind: "starter", source: { channel: "in" }, fanout: { agent: "w" }, sink: { channel: "out" } } },
+        { state: "done", handler: { kind: "terminal" } },
+      ],
+      transitions: [{ from: "s", to: "done", on: "success" }],
+    });
+    const views = channelNodes(m);
+    for (const targetHandle of [HANDLE.dataIn, HANDLE.targetLeft, HANDLE.targetBottom]) {
+      expect(connectionKind(m, views, { source: "channel:out", target: "done", targetHandle }, agentNodes(m))).toBe("invalid");
+    }
+  });
+
   it("refuses channel → channel", () => {
     const one = placed(base(), "a");
     const two = placed(one.m, "b");

@@ -685,6 +685,37 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     expect(await screen.findByText("research_chunk_7")).toBeTruthy();
   });
 
+  it("shows the walk's RESULT on the End node it finished at — read from the walk's run", async () => {
+    let push: (rows: WalkRunRow[]) => void = () => undefined;
+    const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {
+      push = onRows;
+      return () => undefined;
+    });
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    const finalText = JSON.stringify({
+      results: [{ index: 0, agent: "e", run_id: "m2", ok: true, output: "[sub-agent agent_id=a_1]\narticle_chunk_42" }],
+    });
+    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText }));
+    render(<WorkflowCanvas dataLayer={base({ watchWalk, runTeamDetached, readRun })} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(watchWalk).toHaveBeenCalled());
+    const walkRow = (status: string, ts: string): WalkRunRow => ({ runId: "r_walk", agentId: "w", agent: "team:sdlc", status, ts });
+    act(() =>
+      push([
+        walkRow("running", "2026-10-01T10:00:00Z"),
+        { runId: "m1", agentId: "a", agent: "r", status: "completed", ts: "2026-10-01T10:01:00Z", state: "research" },
+        { runId: "m2", agentId: "b", agent: "e", status: "completed", ts: "2026-10-01T10:02:00Z", state: "edit" },
+      ]),
+    );
+    // Not before the walk has finished: there is no result yet.
+    expect(screen.queryByTestId("result-done")).toBeNull();
+    act(() => push([walkRow("completed", "2026-10-01T10:03:00Z")]));
+    const result = await screen.findByTestId("result-done");
+    expect(readRun).toHaveBeenCalledWith("r_walk");
+    expect(result.textContent).toContain("article_chunk_42");
+    expect(result.textContent).not.toContain("[sub-agent");
+  });
+
   it("opens a Starter's runs from its AGENT node, and counts them there", async () => {
     // The agent node is the Starter's fan-out, not a state: selecting it must
     // select the Starter, or the inspector would have nothing to show.

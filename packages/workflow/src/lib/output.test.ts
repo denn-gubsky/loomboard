@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { channelNodes } from "./channelNodes";
 import { fromDefinition } from "./model";
-import { latestMessages, messageText, outputChannels } from "./output";
+import { latestMessages, messageText, outputChannels, resultTerminal, walkResult } from "./output";
 
 describe("outputChannels — derived, not configured", () => {
   const m = fromDefinition({
@@ -49,5 +49,60 @@ describe("latestMessages", () => {
   it("orders newest first and caps the count", () => {
     const msgs = ["10:00", "10:02", "10:01"].map((t, i) => ({ id: `m${i}`, publishedAt: `2026-10-01T${t}:00Z`, value: i }));
     expect(latestMessages(msgs, 2).map((m) => m.id)).toEqual(["m1", "m2"]);
+  });
+});
+
+describe("walkResult", () => {
+  it("lifts each agent run's answer out of a Starter's envelope, without the sub-agent marker", () => {
+    // The pcparts walk's real final text (TrueNAS, 2026-10-01).
+    const finalText = JSON.stringify({
+      results: [
+        {
+          index: 0,
+          agent: "marketing/article-editor",
+          run_id: "r_cd39",
+          ok: true,
+          output: "[sub-agent agent_id=a_42844ce23e069d9b]\n4089972de02c194228a14218c28610c2",
+        },
+      ],
+    });
+    expect(walkResult(finalText)).toEqual([
+      { agent: "marketing/article-editor", runId: "r_cd39", ok: true, text: "4089972de02c194228a14218c28610c2" },
+    ]);
+  });
+
+  it("shows a failed run's error, and plain text as itself", () => {
+    expect(walkResult(JSON.stringify({ results: [{ agent: "a", ok: false, error: "timed out" }] }))[0]).toMatchObject({ ok: false, text: "timed out" });
+    expect(walkResult("the agent state's plain answer")).toEqual([{ text: "the agent state's plain answer" }]);
+    expect(walkResult("")).toEqual([]);
+  });
+
+  it("keeps markup as text — it is model output", () => {
+    expect(walkResult('<img src=x onerror="x()">')[0].text).toBe('<img src=x onerror="x()">');
+  });
+});
+
+describe("resultTerminal", () => {
+  const m = fromDefinition({
+    entry: "a",
+    states: [
+      { state: "a", handler: { kind: "agent", agent: "x" } },
+      { state: "ok", handler: { kind: "terminal" } },
+      { state: "gave-up", handler: { kind: "terminal" } },
+    ],
+    transitions: [
+      { from: "a", to: "gave-up", on: "pushback:stop" },
+      { from: "a", to: "ok", on: "success" },
+    ],
+  });
+
+  it("picks the terminal the last state reached on success", () => {
+    expect(resultTerminal(m, "a")).toBe("ok");
+  });
+
+  it("falls back to the only terminal, and says nothing when it cannot tell", () => {
+    const one = fromDefinition({ entry: "a", states: [{ state: "a", handler: { kind: "agent", agent: "x" } }, { state: "done", handler: { kind: "terminal" } }], transitions: [{ from: "a", to: "done", on: "success" }] });
+    expect(resultTerminal(one, undefined)).toBe("done");
+    expect(resultTerminal(m, undefined)).toBeUndefined();
   });
 });

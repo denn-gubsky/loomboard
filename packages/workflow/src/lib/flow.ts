@@ -23,6 +23,7 @@ import type { Finding } from "./validate";
 import type { ChannelNodeView } from "./channelNodes";
 import type { BindingNodeView } from "./bindings";
 import { agentNodeId, dispatchesAgent, type AgentNodeView } from "./agentNodes";
+import type { ResultItem } from "./output";
 
 /** Which relation an edge represents. `control` is a transition the operator
  *  drew; `data` is derived from channel wiring and is never draggable. */
@@ -52,6 +53,8 @@ export interface FlowNodeData {
   /** How many of this state's runs are held for review — drawn louder, since
    *  a hold waits for a person. */
   held?: number;
+  /** End nodes only: what the walk that finished here produced. */
+  result?: ResultItem[];
   /** Findings anchored to this state, worst level first. */
   findings: Finding[];
   [k: string]: unknown;

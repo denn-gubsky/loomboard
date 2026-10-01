@@ -13,6 +13,7 @@
 // Pure: no React, no network.
 
 import type { ChannelNodeView } from "./channelNodes";
+import type { CanvasModel } from "./model";
 
 /** Channels the team publishes to and does not itself read. */
 export function outputChannels(views: readonly ChannelNodeView[]): ChannelNodeView[] {
@@ -50,4 +51,63 @@ export function latestMessages(messages: readonly ChannelMessage[], limit = 10):
   return [...messages]
     .sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : a.publishedAt > b.publishedAt ? -1 : 0))
     .slice(0, limit);
+}
+
+/** One entry of a walk's result, as the End node shows it. */
+export interface ResultItem {
+  agent?: string;
+  runId?: string;
+  ok?: boolean;
+  /** Untrusted model output: render as plain text. */
+  text: string;
+}
+
+// The runtime prefixes a member's final text with the parent-transcript
+// marker `[sub-agent agent_id=…]` (loomcycle gap G11). On an End node the
+// answer is what matters, so that one leading line is dropped for display.
+const SUB_AGENT_HEADER = /^\[sub-agent agent_id=[^\]\n]*\]\n/;
+
+/** What a finished walk produced. A walk's final text is the output of the
+ *  last state it ran (RFC DI: the run holds the output) — for a Starter, the
+ *  `{results:[…]}` envelope with one entry per agent run; for any other
+ *  state, plain text. */
+export function walkResult(finalText?: string): ResultItem[] {
+  const raw = (finalText ?? "").trim();
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const results =
+      typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+        ? (parsed as { results?: unknown }).results
+        : undefined;
+    if (Array.isArray(results)) {
+      return results.map((r) => {
+        const o = (typeof r === "object" && r !== null ? r : {}) as Record<string, unknown>;
+        const text = typeof o.output === "string" && o.output ? o.output : typeof o.error === "string" ? o.error : "";
+        return {
+          agent: typeof o.agent === "string" ? o.agent : undefined,
+          runId: typeof o.run_id === "string" ? o.run_id : undefined,
+          ok: typeof o.ok === "boolean" ? o.ok : undefined,
+          text: text.replace(SUB_AGENT_HEADER, ""),
+        };
+      });
+    }
+  } catch {
+    // Not JSON: an agent state's plain answer.
+  }
+  return [{ text: raw }];
+}
+
+/** The End node a finished walk reached, or undefined when the canvas cannot
+ *  tell. The runtime does not record it (a loomcycle gap), so it is inferred:
+ *  the terminal the LAST state that ran transitions to — `success` first —
+ *  or the team's only terminal. */
+export function resultTerminal(model: CanvasModel, lastState?: string): string | undefined {
+  const terminals = new Set(model.nodes.filter((n) => n.kind === "terminal").map((n) => n.id));
+  if (lastState) {
+    const out = model.edges.filter((e) => e.from === lastState && terminals.has(e.to));
+    const pick = out.find((e) => e.on === "success") ?? out[0];
+    if (pick) return pick.to;
+  }
+  return terminals.size === 1 ? [...terminals][0] : undefined;
 }
