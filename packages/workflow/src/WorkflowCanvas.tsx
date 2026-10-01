@@ -597,7 +597,6 @@ function WorkflowCanvasInner({
         return;
       }
       dispatchSession({ t: "start", runId: started.run_id, debug: false });
-      setStatus(`Running (${started.run_id}).`);
     } catch (e) {
       setError(`Could not start the run: ${msg(e)}`);
     } finally {
@@ -712,6 +711,13 @@ function WorkflowCanvasInner({
 
         <span className="lb-wf-toolbar__spacer" />
         <span className={`lb-wf-phase lb-wf-phase--${session.phase}`}>{statusLabel(session)}</span>
+        {/* The walk's id follows the session, not a one-shot notice: a notice
+            set at start said "Running" long after the walk had failed. */}
+        {session.runId && (
+          <code className="lb-wf-walk-id" data-testid="walk-id">
+            {session.runId}
+          </code>
+        )}
         {errorCount > 0 && (
           <span className="lb-wf-badge lb-wf-badge--error">
             {errorCount} {errorCount === 1 ? "problem" : "problems"}

@@ -591,6 +591,19 @@ describe("WorkflowCanvas — the live walk (RFC CZ M3)", () => {
     expect(screen.getByRole("button", { name: "Back to Edit" })).toBeTruthy();
   });
 
+  it("names the walk beside its phase, with no start notice left saying Running after it ends", async () => {
+    // Regression: the start set a "Running (r_walk)." notice nothing cleared,
+    // so a failed walk read "Run failed" and "Running (…)" side by side.
+    const h = harness();
+    render(<WorkflowCanvas dataLayer={h.layer} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(h.watchWalk).toHaveBeenCalled());
+    h.push([row({ runId: "r_walk", status: "failed", ts: "2026-10-01T10:05:00Z" })]);
+    expect(await screen.findByText("Run failed")).toBeTruthy();
+    expect(screen.queryByText(/Running/)).toBeNull();
+    expect(screen.getByTestId("walk-id").textContent).toBe("r_walk");
+  });
+
   it("parks the session while the walk waits at a breakpoint, and releases it", async () => {
     const h = harness();
     render(<WorkflowCanvas dataLayer={h.layer} teamName="sdlc" />);
