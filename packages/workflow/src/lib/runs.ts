@@ -24,7 +24,9 @@ export interface WalkRunRow {
   status: string;
   /** RFC3339 of this state; the newer row wins. */
   ts: string;
-  /** Members only: the state that started this run, and which visit of it. */
+  /** Members only: the state that started this run, and the WALK's ordinal of
+   *  that state visit (1 = the first state the walk ran) — not a per-state
+   *  count; visitNumbers turns it into one. */
   state?: string;
   stateVisit?: number;
   /** Starter members only. */
@@ -172,6 +174,17 @@ export function rowsForState(view: WalkView, state: string): WalkRunRow[] {
         (a.waveIndex ?? 0) - (b.waveIndex ?? 0) ||
         (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0),
     );
+}
+
+/** Each row's visit number WITHIN its state: the rank of its walk ordinal
+ *  among the distinct ordinals in `rows` (one state's rows). The runtime's
+ *  state_visit counts the walk's visits across all states, so a state the walk
+ *  reaches second carries 2 on its first visit. Rows without one are absent. */
+export function visitNumbers(rows: readonly WalkRunRow[]): Map<string, number> {
+  const ordinals = [...new Set(rows.flatMap((r) => (r.stateVisit ? [r.stateVisit] : [])))].sort((a, b) => a - b);
+  const out = new Map<string, number>();
+  for (const r of rows) if (r.stateVisit) out.set(r.runId, ordinals.indexOf(r.stateVisit) + 1);
+  return out;
 }
 
 /** What the walk's OWN run says about the session (C5 machine events):

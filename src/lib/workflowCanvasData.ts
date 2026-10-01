@@ -86,6 +86,41 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
     // loomcycle 1.101 (gap G9; before it, every walk ran as `http-admin`).
     watchWalk: (walkRunId, onRows, onError) => watchWalk(client, selfUserId, walkRunId, onRows, onError),
 
+    async readRun(runId) {
+      const a = await client.getRun(runId);
+      return {
+        runId: a.run_id,
+        status: a.status,
+        finalText: a.result?.final_text,
+        structured: a.result?.structured,
+        error: a.error ?? undefined,
+        stopReason: a.stop_reason ?? undefined,
+        startedAt: a.started_at,
+        completedAt: a.completed_at ?? undefined,
+        model: a.usage?.model,
+        inputTokens: a.usage?.input_tokens,
+        outputTokens: a.usage?.output_tokens,
+      };
+    },
+
+    async readRunPrompt(runId) {
+      const p = await client.getRunPrompt(runId);
+      const text = (blocks: { type: string; text?: string; media_type?: string }[]) =>
+        blocks.map((b) => (b.type === "text" ? (b.text ?? "") : `[${b.type}${b.media_type ? ` ${b.media_type}` : ""}]`)).join("\n\n");
+      return { system: text(p.system), input: text(p.input) };
+    },
+
+    // Peek, not subscribe: it never advances the cursor. The scope comes from
+    // the channel's own declaration, exactly as publish takes it.
+    async peekChannel(channel, { scope, max }) {
+      const { messages } = await client.peekChannel(channel, {
+        scope: scope as Parameters<typeof client.peekChannel>[1]["scope"],
+        maxMessages: max,
+        ...(scope === "user" ? { userId: await selfUserId() } : {}),
+      });
+      return (messages ?? []).map((m) => ({ id: m.id, publishedAt: m.published_at, value: m.value }));
+    },
+
     // A walk's run has no turns, so cancelTurn ENDS it and every run it
     // spawned (loomcycle #1341). Not caught: a 409 from an older runtime must
     // reach the canvas, which keeps the walk live and says why.

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { FoldedFieldList, HookEventsControl, type DefValue } from "@loomcycle/def-fields";
 import type { CanvasNode, Json, JsonObject, TeamChannels } from "../lib/model";
 import { KNOWN_KINDS, handlerOf } from "../lib/model";
@@ -27,6 +27,10 @@ export interface InspectorProps {
   onGrantChannel?: (channel: string, sides: ChannelSide[]) => void;
   /** A selected binding node, shown read-only. */
   binding?: BindingNodeView | null;
+  /** While a walk is on screen: the selected node's runs (M3b). Rendered
+   *  above the fields, because in Run mode they are what the operator came
+   *  to see. */
+  runs?: ReactNode;
 }
 
 /** The node inspector: the state id and kind rendered by hand, everything else
@@ -52,6 +56,7 @@ export function Inspector({
   channel,
   onGrantChannel,
   binding,
+  runs,
 }: InspectorProps) {
   const value = useMemo<DefValue>(() => {
     if (!node) return {};
@@ -137,6 +142,8 @@ export function Inspector({
           ))}
         </select>
       </label>
+
+      {runs}
 
       {node.opaque ? (
         // An opaque node is deliberately NOT editable field-by-field: this

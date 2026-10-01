@@ -613,3 +613,59 @@ describe("WorkflowCanvas — the live walk (RFC CZ M3)", () => {
     expect(screen.queryByTestId("pulse-code")).toBeNull();
   });
 });
+
+describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
+  const pipeline = {
+    entry: "research",
+    channels: { subscribe: ["parts-in", "research-out"], publish: ["research-out", "articles-out"] },
+    states: [
+      { state: "research", handler: { kind: "starter", source: { channel: "parts-in" }, fanout: { agent: "r", max: 2 }, sink: { channel: "research-out" } } },
+      { state: "edit", handler: { kind: "starter", source: { channel: "research-out" }, fanout: { agent: "e", max: 2 }, sink: { channel: "articles-out" } } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [
+      { from: "research", to: "edit", on: "success" },
+      { from: "edit", to: "done", on: "success" },
+    ],
+  };
+  const base = (o: Partial<WorkflowDataLayer> = {}) =>
+    stubLayer({
+      getActiveTeamDef: async () => ({ def_id: "d", name: "sdlc", version: 1, definition: pipeline }),
+      listChannels: async () => ["parts-in", "research-out", "articles-out"].map((name) => ({ name, scope: "tenant" })),
+      ...o,
+    });
+
+  it("shows the team's OUTPUT channel — what it publishes and does not read", async () => {
+    const peekChannel = vi.fn(async () => [
+      { id: "m1", publishedAt: "2026-10-01T10:00:00Z", value: { status: "ok", output: "article_chunk_42" } },
+    ]);
+    render(<WorkflowCanvas dataLayer={base({ peekChannel })} teamName="sdlc" />);
+    expect(await screen.findByTestId("output-articles-out")).toBeTruthy();
+    expect(await screen.findByText("article_chunk_42")).toBeTruthy();
+    // Internal wiring is not output.
+    expect(screen.queryByTestId("output-research-out")).toBeNull();
+    expect(peekChannel).toHaveBeenCalledWith("articles-out", expect.objectContaining({ scope: "tenant" }));
+  });
+
+  it("lists a selected node's runs while a walk is on screen", async () => {
+    let push: (rows: WalkRunRow[]) => void = () => undefined;
+    const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {
+      push = onRows;
+      return () => undefined;
+    });
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText: "research_chunk_7" }));
+    render(<WorkflowCanvas dataLayer={base({ watchWalk, runTeamDetached, readRun })} teamName="sdlc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(watchWalk).toHaveBeenCalled());
+    act(() =>
+      push([
+        { runId: "r_walk", agentId: "w", agent: "team:sdlc", status: "running", ts: "2026-10-01T10:00:00Z" },
+        { runId: "m1", agentId: "a", agent: "marketing/researcher", status: "completed", ts: "2026-10-01T10:01:00Z", state: "research" },
+      ]),
+    );
+    fireEvent.click(await screen.findByTestId("node-research"));
+    fireEvent.click(await screen.findByRole("button", { name: /completed.*marketing\/researcher/ }));
+    expect(await screen.findByText("research_chunk_7")).toBeTruthy();
+  });
+});

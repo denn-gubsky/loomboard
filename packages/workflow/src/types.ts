@@ -15,6 +15,7 @@
 // exists to avoid.
 
 import type { WalkRunRow } from "./lib/runs";
+import type { ChannelMessage } from "./lib/output";
 
 /** One team's roll-up — GET /v1/_teamdef/names. */
 export interface TeamSummary {
@@ -114,6 +115,31 @@ export interface ChannelInfo {
 
 /** What a publish reports back that changes what "sent" means. Mirrors the
  *  fields of the SDK's ChannelPublishResult the composer acts on. */
+/** One run's outcome (RFC DI): what it answered and what it cost. */
+export interface RunDetail {
+  runId: string;
+  status: string;
+  /** The run's final answer, as text. Untrusted model output: render it as
+   *  text, never as markup. */
+  finalText?: string;
+  /** The output_format result, when the run had one. */
+  structured?: Record<string, unknown>;
+  error?: string;
+  stopReason?: string;
+  startedAt?: string;
+  completedAt?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+/** The prompt a run was sent, flattened to text. An image block is noted by
+ *  its media type rather than dropped silently. */
+export interface RunPrompt {
+  system: string;
+  input: string;
+}
+
 export interface PublishOutcome {
   /** Stored, not delivered until the hold is released. */
   held?: boolean;
@@ -171,6 +197,18 @@ export interface WorkflowDataLayer {
     onRows: (rows: WalkRunRow[]) => void,
     onError?: (e: unknown) => void,
   ): () => void;
+
+  /** One run's outcome, read from the Run itself (RFC DI) — for a member
+   *  row in the inspector and for the walk's own result. */
+  readRun?(runId: string): Promise<RunDetail>;
+
+  /** The exact prompt a run was sent (RFC DI `/prompt`), text blocks only. */
+  readRunPrompt?(runId: string): Promise<RunPrompt>;
+
+  /** Non-destructive read of a channel — never advances its cursor, so the
+   *  canvas showing a team's output cannot take a message from the consumer
+   *  it is for. `scope` is the channel's own declared scope, as for publish. */
+  peekChannel?(channel: string, opts: { scope: string; max?: number }): Promise<ChannelMessage[]>;
 
   /** Declared channels, for the publish composer's pre-flight (C7). */
   listChannels?(): Promise<ChannelInfo[]>;

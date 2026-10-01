@@ -24,7 +24,20 @@ import {
   toFlowNodes,
 } from "./lib/flow";
 import { bindingFindings, bindingNodes } from "./lib/bindings";
-import { emptyWalk, foldWalk, pulseLabel, statePulses, walkSignal, type WalkRunRow, type WalkView } from "./lib/runs";
+import {
+  emptyWalk,
+  foldWalk,
+  isTerminal,
+  pulseLabel,
+  rowsForState,
+  statePulses,
+  walkSignal,
+  type WalkRunRow,
+  type WalkView,
+} from "./lib/runs";
+import { outputChannels } from "./lib/output";
+import { OutputPanel } from "./OutputPanel";
+import { RunsPanel } from "./inspector/RunsPanel";
 import { BindingNode } from "./nodes/BindingNode";
 import { channelNodes } from "./lib/channelNodes";
 import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
@@ -230,6 +243,18 @@ function WorkflowCanvasInner({
   // The Documents and Memory the prompts pull in, as nodes feeding them (P3).
   const bindingViews = useMemo(() => (model ? bindingNodes(model) : []), [model]);
   const pulses = useMemo(() => (walk ? statePulses(walk) : undefined), [walk]);
+
+  // The team's output channels (M3b). Keyed by what the panel uses, so an
+  // ordinary graph edit — which rebuilds every view — does not re-peek them.
+  const outputsAll = useMemo(() => outputChannels(channelViews), [channelViews]);
+  const outputsKey = outputsAll.map((c) => `${c.channel}|${c.info?.scope ?? ""}|${c.declared}`).join(",");
+  const outputsRef = useRef({ key: "", value: outputsAll });
+  if (outputsRef.current.key !== outputsKey) outputsRef.current = { key: outputsKey, value: outputsAll };
+  const outputs = outputsRef.current.value;
+  // New output can appear when a run settles, so that is when to re-peek.
+  const outputRefresh = walk
+    ? `${walk.walk?.status ?? ""}:${[...walk.members.values()].filter((r) => isTerminal(r.status)).length}`
+    : "";
   const flowNodes = useMemo(
     () =>
       model
@@ -275,6 +300,13 @@ function WorkflowCanvasInner({
         setMeasured((prev) => mergeMeasured(prev, sized));
       }
 
+      // Selection too is not an edit, and a LIVE walk is exactly when the
+      // operator selects a node to read its runs (M3b). It used to sit behind
+      // the gate below, so nothing could be selected while a walk ran.
+      for (const c of changes) {
+        if (c.type === "select" && c.selected) setSelectedId(c.id);
+      }
+
       if (!editable) return;
       setModel((m) => {
         if (!m) return m;
@@ -295,8 +327,6 @@ function WorkflowCanvasInner({
               // the states' in layout.nodes under its `channel:` key.
               derivedPositions = { ...(derivedPositions ?? {}), [c.id]: pos };
             }
-          } else if (c.type === "select" && c.selected) {
-            setSelectedId(c.id);
           }
         }
         return nodes === m.nodes && dirty === m.layoutDirty && derivedPositions === m.derivedPositions
@@ -770,9 +800,22 @@ function WorkflowCanvasInner({
             onWalkHooksChange={onWalkHooksChange}
             channel={channelViews.find((v) => v.id === selectedId) ?? null}
             binding={bindingViews.find((v) => v.id === selectedId) ?? null}
+            runs={
+              walk && selected ? (
+                <RunsPanel
+                  rows={rowsForState(walk, selected.id)}
+                  readRun={dataLayer.readRun}
+                  readRunPrompt={dataLayer.readRunPrompt}
+                />
+              ) : undefined
+            }
           />
         )}
       </div>
+
+      {dataLayer.peekChannel && outputs.length > 0 && (
+        <OutputPanel channels={outputs} peekChannel={dataLayer.peekChannel} refreshKey={outputRefresh} />
+      )}
 
       {findings.length > 0 && (
         <ul className="lb-wf-findings">
