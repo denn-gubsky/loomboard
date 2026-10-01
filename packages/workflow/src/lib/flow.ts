@@ -56,6 +56,8 @@ export interface FlowNodeData {
   held?: number;
   /** End nodes only: what the walk that finished here produced. */
   result?: ResultItem[];
+  /** The entry Input node only, when a walk can be started: opens Start. */
+  start?: () => void;
   /** Findings anchored to this state, worst level first. */
   findings: Finding[];
   [k: string]: unknown;

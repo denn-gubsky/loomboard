@@ -149,6 +149,20 @@ export interface PublishOutcome {
   dropped_oldest?: number;
 }
 
+/** A document as a picker lists it. */
+export interface DocumentOption {
+  id: string;
+  title: string;
+}
+
+/** A chunk as a picker needs it. */
+export interface ChunkRowLite {
+  id: string;
+  title: string;
+  position: number;
+  parent_id?: string | null;
+}
+
 /** Everything the canvas needs from its host. Optional members degrade the UI
  *  rather than breaking it: no `listAgents` means the agent field is free text
  *  instead of a picker; no `runTeamDetached` hides the Run affordance. */
@@ -179,6 +193,13 @@ export interface WorkflowDataLayer {
     defId?: string;
     input?: string;
   }): Promise<DetachedRun>;
+
+  /** The documents a form's document picker offers (`x-loomcycle-picker:
+   *  {kind: "document"}`). Absent: the field is typed. */
+  listDocuments?(opts: { scope: "user" | "tenant"; underPath?: string }): Promise<DocumentOption[]>;
+  /** One document's chunks, for a chunk picker. Flat, with parent ids; the
+   *  canvas orders and depth-limits them (lib/inputForm.ts chunkOptions). */
+  listChunks?(documentId: string, opts: { scope: "user" | "tenant" }): Promise<ChunkRowLite[]>;
 
   /** Stop a live walk — running or parked — by its run id (RFC CZ C16).
    *

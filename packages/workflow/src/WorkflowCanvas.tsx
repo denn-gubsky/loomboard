@@ -12,6 +12,9 @@ import { Inspector } from "./inspector/Inspector";
 import { PublishComposer } from "./PublishComposer";
 import { Palette } from "./Palette";
 import { newStateRaw, type PaletteEntry } from "./lib/palette";
+import { fieldsPatch, inputFields, placeInput, startPlan, type FormResult } from "./lib/inputForm";
+import { InputDialog } from "./InputDialog";
+import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
 import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
 import {
   edgeId,
@@ -23,6 +26,7 @@ import {
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
+  toStartEdges,
   visibleEdges,
 } from "./lib/flow";
 import { bindingFindings, bindingNodes } from "./lib/bindings";
@@ -48,6 +52,7 @@ import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
 import { applyWire, connectionKind, placeChannel, planWire, removeChannel, transitionSource } from "./lib/channelWiring";
 import { ChannelNode } from "./nodes/ChannelNode";
 import {
+  contentKey,
   fromDefinition,
   patchHandler,
   teamChannels,
@@ -98,6 +103,9 @@ function WorkflowCanvasInner({
    *  parent is no longer the active pointer is REFUSED rather than silently
    *  overwriting whoever moved it. */
   const parentDefId = useRef<string | null>(null);
+  // The CONTENT last loaded or saved (lib/model contentKey). Run starts that
+  // saved version, so any difference means Start would not run what is shown.
+  const savedKey = useRef<string>("");
   const loadedName = useRef<string | null>(null);
 
   const readonly = mode === "readonly";
@@ -188,6 +196,7 @@ function WorkflowCanvasInner({
             if (!cancelled) setActiveDefId(list.find((t) => t.name === detail.name)?.active_def_id);
           })
           .catch(() => undefined);
+        savedKey.current = contentKey(next);
         setModel(next);
         setSelectedId(null);
       } catch (e) {
@@ -215,6 +224,9 @@ function WorkflowCanvasInner({
   const [channels, setChannels] = useState<ChannelInfo[]>();
   const [activeDefId, setActiveDefId] = useState<string>();
   const [composing, setComposing] = useState(false);
+  // The Input node's Start dialog (RFC CZ "The Input node").
+  const [startOpen, setStartOpen] = useState(false);
+  const [startError, setStartError] = useState<string>();
   // What xyflow measured, fed back in so the MiniMap has dimensions to draw.
   // Presentation-only: it never reaches the definition.
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
@@ -269,6 +281,10 @@ function WorkflowCanvasInner({
   const agentViewsRef = useRef(agentViews);
   agentViewsRef.current = agentViews;
   const pulses = useMemo(() => (walk ? statePulses(walk) : undefined), [walk]);
+  // What Start does, when the team begins with an Input node.
+  const plan = useMemo(() => (model ? startPlan(model) : undefined), [model]);
+  const unsaved = useMemo(() => !!model && contentKey(model) !== savedKey.current, [model]);
+  const canRun = !readonly && !!dataLayer.runTeamDetached && canStart(session);
   // The End node the result belongs on: where the last state that ran leads.
   const endedAt = useMemo(() => {
     if (!model || !result || result.walkRunId !== walk?.walkRunId) return undefined;
@@ -287,6 +303,10 @@ function WorkflowCanvasInner({
   const outputRefresh = walk
     ? `${walk.walk?.status ?? ""}:${[...walk.members.values()].filter((r) => isTerminal(r.status)).length}`
     : "";
+  const openStart = useCallback(() => {
+    setStartError(undefined);
+    setStartOpen(true);
+  }, []);
   const flowNodes = useMemo(
     () =>
       model
@@ -297,7 +317,17 @@ function WorkflowCanvasInner({
                 ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.id)), held: pulses.get(n.id)!.held } }
                 : n.id === endedAt && result
                   ? { ...n, data: { ...n.data, result: result.items } }
-                  : n,
+                  : plan && n.id === plan.input
+                    ? {
+                        ...n,
+                        data: {
+                          ...n.data,
+                          // Where Start puts the form: drawn as this node's sink.
+                          ...(plan.publishTo ? { channels: { sink: plan.publishTo } } : {}),
+                          ...(canRun ? { start: openStart } : {}),
+                        },
+                      }
+                    : n,
             ),
             ...toAgentFlowNodes(agentViews, selectedId, measured).map((n) =>
               pulses?.has(n.data.view.state)
@@ -308,7 +338,7 @@ function WorkflowCanvasInner({
             ...toBindingFlowNodes(bindingViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses, endedAt, result],
+    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses, endedAt, result, plan, canRun, openStart],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
@@ -321,7 +351,12 @@ function WorkflowCanvasInner({
     () =>
       model
         ? visibleEdges(
-            [...toFlowEdges(model, findings), ...toDataEdges(channelViews, agentViews), ...toBindingEdges(bindingViews)],
+            [
+              ...toFlowEdges(model, findings),
+              ...toDataEdges(channelViews, agentViews),
+              ...toStartEdges(model, channelViews),
+              ...toBindingEdges(bindingViews),
+            ],
             showTransitions,
           )
         : [],
@@ -538,6 +573,15 @@ function WorkflowCanvasInner({
     (entry: PaletteEntry) => {
       if (!editable || !model) return;
       const raw = newStateRaw(model, entry);
+      if (entry.kind === "input") {
+        // The Input node is the walk's ENTRY, wired into the old one — placed
+        // loose it was unreachable and a dead end (RFC CZ "The Input node").
+        const placed = placeInput(model, raw, [...channelViews, ...agentViews].map((v) => v.position));
+        if (placed.existing) setStatus("This team already starts with its Input node.");
+        else setModel(placed.model);
+        setSelectedId(placed.id);
+        return;
+      }
       const id = String(raw.state);
       setModel((m) => {
         if (!m) return m;
@@ -567,7 +611,7 @@ function WorkflowCanvasInner({
       // inspector is where that gets fixed.
       setSelectedId(id);
     },
-    [editable, model],
+    [editable, model, channelViews, agentViews],
   );
 
   const relayout = useCallback(() => {
@@ -599,6 +643,7 @@ function WorkflowCanvasInner({
       }
       const saved: SavedTeam = await dataLayer.forkTeam(name, toDefinition(model));
       parentDefId.current = saved.def_id;
+      savedKey.current = contentKey(model);
       setStatus(`Saved version ${saved.version}.`);
       // The saved graph IS the new baseline, so a subsequent save is not a
       // no-op fork of a stale parent.
@@ -612,7 +657,7 @@ function WorkflowCanvasInner({
   }, [dataLayer, model, onSaved, editable]);
 
   // ---- running ----
-  const startRun = useCallback(async () => {
+  const startRun = useCallback(async (form?: FormResult) => {
     if (!model || !dataLayer.runTeamDetached || !canStart(session)) return;
     const name = loadedName.current;
     if (!name) {
@@ -623,9 +668,25 @@ function WorkflowCanvasInner({
     setError(undefined);
     setStatus(undefined);
     try {
+      // The form must be on the Starter's channel before the walk reads it —
+      // browser-side until loomcycle ships an input-sourced Starter (G15 A).
+      const publishTo = form ? startPlan(model)?.publishTo : undefined;
+      if (form && publishTo) {
+        const scope = channels?.find((c) => c.name === publishTo)?.scope;
+        if (!scope || !dataLayer.publishChannel) {
+          setStartError(
+            `Cannot put the form on ${publishTo}: ${!scope ? "the channel is not listed on this runtime" : "this host cannot publish"}.`,
+          );
+          return;
+        }
+        await dataLayer.publishChannel(publishTo, form.value, { scope });
+      }
       // By def_id, never by name: Save-then-Run would otherwise execute the
       // PREVIOUS version, and the difference is invisible on screen.
-      const started = await dataLayer.runTeamDetached({ defId: parentDefId.current ?? undefined });
+      const started = await dataLayer.runTeamDetached({
+        defId: parentDefId.current ?? undefined,
+        ...(form ? { input: form.input } : {}),
+      });
       if (!started?.run_id) {
         // A host that quietly fell back to a blocking run returns a trace with
         // no handle. Refusing is the honest outcome: every live surface in Run
@@ -637,12 +698,14 @@ function WorkflowCanvasInner({
         return;
       }
       dispatchSession({ t: "start", runId: started.run_id, debug: false });
+      setStartOpen(false);
     } catch (e) {
-      setError(`Could not start the run: ${msg(e)}`);
+      if (form) setStartError(`Could not start: ${msg(e)}`);
+      else setError(`Could not start the run: ${msg(e)}`);
     } finally {
       setBusy(false);
     }
-  }, [dataLayer, model, session]);
+  }, [dataLayer, model, session, channels]);
 
   const backToEdit = useCallback(() => {
     // Explicit, and it DISCARDS the trace — never automatic on finish, because
@@ -703,7 +766,8 @@ function WorkflowCanvasInner({
         {!readonly && dataLayer.runTeamDetached && canStart(session) && (
           <button
             className="lb-wf-btn"
-            onClick={startRun}
+            // A team with an Input node starts from its form.
+            onClick={() => (plan ? openStart() : void startRun())}
             disabled={!model || busy || errorCount > 0}
             title={
               errorCount > 0
@@ -776,6 +840,26 @@ function WorkflowCanvasInner({
       </div>
 
       {error && <div className="lb-wf-error">{error}</div>}
+
+      {startOpen && plan && model && (
+        <InputDialog
+          fields={inputFields(model.nodes.find((n) => n.id === plan.input)!)}
+          plan={plan}
+          listDocuments={dataLayer.listDocuments}
+          listChunks={dataLayer.listChunks}
+          busy={busy}
+          blocked={
+            unsaved
+              ? "Save a new version first — Start runs the saved version, which is not what is on screen."
+              : !canRun
+                ? "A walk is already on screen. Go back to Edit to start another."
+                : undefined
+          }
+          error={startError}
+          onStart={(form) => void startRun(form)}
+          onClose={() => setStartOpen(false)}
+        />
+      )}
 
       {composing && entryChannel && dataLayer.publishChannel && (
         <PublishComposer
@@ -866,6 +950,19 @@ function WorkflowCanvasInner({
                   rows={rowsForState(walk, selected.id)}
                   readRun={dataLayer.readRun}
                   readRunPrompt={dataLayer.readRunPrompt}
+                />
+              ) : undefined
+            }
+            form={
+              selected && !selected.opaque && selected.kind === "input" ? (
+                <InputFieldsPanel
+                  fields={inputFields(selected)}
+                  disabled={busy || !editable}
+                  onChange={(fs) => {
+                    const p = fieldsPatch(selected, fs);
+                    // `capture: undefined` removes it once no field is bound.
+                    onPatch({ schema: p.schema, capture: p.capture });
+                  }}
                 />
               ) : undefined
             }
