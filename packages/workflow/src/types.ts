@@ -14,6 +14,8 @@
 // arbitrary JSON, and pretending otherwise is what the passthrough model
 // exists to avoid.
 
+import type { WalkRunRow } from "./lib/runs";
+
 /** One team's roll-up — GET /v1/_teamdef/names. */
 export interface TeamSummary {
   name: string;
@@ -159,6 +161,16 @@ export interface WorkflowDataLayer {
    *  reporting success — an older runtime (before loomcycle #1341) answers a
    *  walk's cancel with 409, and the canvas has to say the walk is still going. */
   cancelWalk?(runId: string, reason: string): Promise<{ stopped: boolean }>;
+
+  /** Follow one walk (RFC CZ M3): hydrate its runs, then stream their
+   *  transitions, until the returned function is called. Rows may arrive in
+   *  any order and repeat — lib/runs.ts `foldWalk` is built for that. The
+   *  host reconnects on its own; `onError` only reports, it does not stop. */
+  watchWalk?(
+    walkRunId: string,
+    onRows: (rows: WalkRunRow[]) => void,
+    onError?: (e: unknown) => void,
+  ): () => void;
 
   /** Declared channels, for the publish composer's pre-flight (C7). */
   listChannels?(): Promise<ChannelInfo[]>;
