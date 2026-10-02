@@ -34,7 +34,6 @@ import {
   emptyWalk,
   foldWalk,
   isTerminal,
-  lastState,
   pulseLabel,
   rowsForState,
   statePulses,
@@ -42,7 +41,7 @@ import {
   type WalkRunRow,
   type WalkView,
 } from "./lib/runs";
-import { outputChannels, resultTerminal, walkResult, type ResultItem } from "./lib/output";
+import { outputChannels, walkResult, type ResultItem } from "./lib/output";
 import { OutputPanel } from "./OutputPanel";
 import { RunsPanel } from "./inspector/RunsPanel";
 import { BindingNode } from "./nodes/BindingNode";
@@ -151,7 +150,7 @@ function WorkflowCanvasInner({
 
   // What a COMPLETED walk produced, for its End node: read from the walk's
   // own run (RFC DI — the run holds the output), once it has finished.
-  const [result, setResult] = useState<{ walkRunId: string; items: ResultItem[] }>();
+  const [result, setResult] = useState<{ walkRunId: string; terminal?: string; items: ResultItem[] }>();
   const walkDone = walk?.walk?.status === "completed" ? walk.walkRunId : undefined;
   useEffect(() => {
     if (!walkDone || !dataLayer.readRun) {
@@ -161,7 +160,7 @@ function WorkflowCanvasInner({
     let cancelled = false;
     dataLayer
       .readRun(walkDone)
-      .then((d) => !cancelled && setResult({ walkRunId: walkDone, items: walkResult(d.finalText) }))
+      .then((d) => !cancelled && setResult({ walkRunId: walkDone, terminal: d.terminal, items: walkResult(d.finalText) }))
       .catch((e) => console.warn("[canvas] reading the walk's result failed:", e));
     return () => {
       cancelled = true;
@@ -286,11 +285,9 @@ function WorkflowCanvasInner({
   const plan = useMemo(() => (model ? startPlan(model) : undefined), [model]);
   const unsaved = useMemo(() => !!model && contentKey(model) !== savedKey.current, [model]);
   const canRun = !readonly && !!dataLayer.runTeamDetached && canStart(session);
-  // The End node the result belongs on: where the last state that ran leads.
-  const endedAt = useMemo(() => {
-    if (!model || !result || result.walkRunId !== walk?.walkRunId) return undefined;
-    return resultTerminal(model, lastState(walk));
-  }, [model, result, walk]);
+  // The End node the result belongs on: the one the runtime says the walk
+  // reached (G14), so two endings of one team stay apart.
+  const endedAt = result && result.walkRunId === walk?.walkRunId ? result.terminal : undefined;
 
   // The team's output channels (M3b). Keyed by what the panel uses, so an
   // ordinary graph edit — which rebuilds every view — does not re-peek them.

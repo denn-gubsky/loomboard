@@ -8,11 +8,11 @@ const client = (o: Record<string, unknown>) =>
   ({ whoami: vi.fn(async () => ({ subject: "u-self" })), ...o }) as unknown as LoomcycleClient;
 
 describe("workflowDataLayer — run and channel reads", () => {
-  it("readRun maps a run's result and usage (RFC DI)", async () => {
+  it("readRun maps a run's result, the End a walk reached, and usage (RFC DI, G14)", async () => {
     const getRun = vi.fn(async () => ({
       run_id: "r1",
       status: "completed",
-      result: { final_text: "chunk_9", structured: { chunk_id: "chunk_9" } },
+      result: { final_text: "chunk_9", structured: { chunk_id: "chunk_9" }, terminal: "done" },
       error: null,
       stop_reason: "end_turn",
       started_at: "2026-10-01T10:00:00Z",
@@ -26,6 +26,7 @@ describe("workflowDataLayer — run and channel reads", () => {
       status: "completed",
       finalText: "chunk_9",
       structured: { chunk_id: "chunk_9" },
+      terminal: "done",
       stopReason: "end_turn",
       model: "m",
       inputTokens: 12,

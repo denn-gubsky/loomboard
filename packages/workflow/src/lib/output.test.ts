@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { channelNodes } from "./channelNodes";
 import { fromDefinition } from "./model";
-import { latestMessages, messageText, outputChannels, resultTerminal, walkResult } from "./output";
+import { latestMessages, messageText, outputChannels, walkResult } from "./output";
 
 describe("outputChannels — derived, not configured", () => {
   const m = fromDefinition({
@@ -86,30 +86,5 @@ describe("walkResult", () => {
 
   it("keeps markup as text — it is model output", () => {
     expect(walkResult('<img src=x onerror="x()">')[0].text).toBe('<img src=x onerror="x()">');
-  });
-});
-
-describe("resultTerminal", () => {
-  const m = fromDefinition({
-    entry: "a",
-    states: [
-      { state: "a", handler: { kind: "agent", agent: "x" } },
-      { state: "ok", handler: { kind: "terminal" } },
-      { state: "gave-up", handler: { kind: "terminal" } },
-    ],
-    transitions: [
-      { from: "a", to: "gave-up", on: "pushback:stop" },
-      { from: "a", to: "ok", on: "success" },
-    ],
-  });
-
-  it("picks the terminal the last state reached on success", () => {
-    expect(resultTerminal(m, "a")).toBe("ok");
-  });
-
-  it("falls back to the only terminal, and says nothing when it cannot tell", () => {
-    const one = fromDefinition({ entry: "a", states: [{ state: "a", handler: { kind: "agent", agent: "x" } }, { state: "done", handler: { kind: "terminal" } }], transitions: [{ from: "a", to: "done", on: "success" }] });
-    expect(resultTerminal(one, undefined)).toBe("done");
-    expect(resultTerminal(m, undefined)).toBeUndefined();
   });
 });

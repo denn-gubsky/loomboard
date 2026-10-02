@@ -707,7 +707,7 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     const finalText = JSON.stringify({
       results: [{ index: 0, agent: "e", run_id: "m2", ok: true, output: "[sub-agent agent_id=a_1]\narticle_chunk_42" }],
     });
-    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText }));
+    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText, terminal: "done" }));
     render(<WorkflowCanvas dataLayer={base({ watchWalk, runTeamDetached, readRun })} teamName="sdlc" />);
     fireEvent.click(await screen.findByRole("button", { name: "Run" }));
     await waitFor(() => expect(watchWalk).toHaveBeenCalled());
@@ -726,6 +726,41 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     expect(readRun).toHaveBeenCalledWith("r_walk");
     expect(result.textContent).toContain("article_chunk_42");
     expect(result.textContent).not.toContain("[sub-agent");
+  });
+
+  it("puts the result on the End node the RUNTIME says the walk reached, not the one its success edge leads to (G14)", async () => {
+    let push: (rows: WalkRunRow[]) => void = () => undefined;
+    const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {
+      push = onRows;
+      return () => undefined;
+    });
+    const twoEnds = {
+      ...pipeline,
+      states: [...pipeline.states, { state: "gave-up", handler: { kind: "terminal" } }],
+      transitions: [...pipeline.transitions, { from: "edit", to: "gave-up", on: "pushback:stop" }],
+    };
+    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText: "no article", terminal: "gave-up" }));
+    render(
+      <WorkflowCanvas
+        dataLayer={base({
+          getActiveTeamDef: async () => ({ def_id: "d", name: "sdlc", version: 1, definition: twoEnds }),
+          watchWalk,
+          runTeamDetached: async () => ({ run_id: "r_walk", status: "running" }),
+          readRun,
+        })}
+        teamName="sdlc"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(watchWalk).toHaveBeenCalled());
+    act(() =>
+      push([
+        { runId: "m2", agentId: "b", agent: "e", status: "completed", ts: "2026-10-01T10:02:00Z", state: "edit" },
+        { runId: "r_walk", agentId: "w", agent: "team:sdlc", status: "completed", ts: "2026-10-01T10:03:00Z" },
+      ]),
+    );
+    expect((await screen.findByTestId("result-gave-up")).textContent).toContain("no article");
+    expect(screen.queryByTestId("result-done")).toBeNull();
   });
 
   it("opens a Starter's runs from its AGENT node, and counts them there", async () => {
