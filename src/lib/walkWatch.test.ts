@@ -66,16 +66,15 @@ describe("rowFromAgent / rowFromEvent", () => {
   });
 });
 
-/** A fake client that behaves like loomcycle v1.101.0: listWalkRuns pages
- *  include the walk's own run, but the walk-filtered STREAM applies the real
- *  server filter (`parent_context.walk_id == walkId`) — so the walk's own
- *  transitions never arrive on it (gap G10). An earlier fake sent them, which
- *  is how a live-only bug passed every test. */
-function fakeClient(pages: Agent[][][], streams: RunStateEvent[][], walkStatuses: Partial<Agent>[] = []) {
+/** A fake client that behaves like loomcycle after #1587 (gap G10 fixed):
+ *  listWalkRuns pages include the walk's own run, and the walk-filtered STREAM
+ *  applies the server's filter — `run_id == walkId || parent_context.walk_id
+ *  == walkId` — so the walk's own start, end and pause arrive on it. It has
+ *  NO getRun: the watcher must never need to read the walk's run itself. */
+function fakeClient(pages: Agent[][][], streams: RunStateEvent[][]) {
   let hydration = 0;
   let pageIdx = 0;
   let streamIdx = 0;
-  let walkIdx = 0;
   const listWalkRuns = vi.fn(async (_walkId: string, opts?: { cursor?: string }) => {
     if (!opts?.cursor) {
       pageIdx = 0;
@@ -89,18 +88,14 @@ function fakeClient(pages: Agent[][][], streams: RunStateEvent[][], walkStatuses
   const streamUserRunStates = vi.fn(async function* (_u: string, o: { walkId?: string }) {
     yield { kind: "open" as const, payload: {} };
     for (const e of streams[streamIdx++] ?? []) {
-      if (o.walkId && e.parent_context?.walk_id !== o.walkId) continue; // the server's filter
+      if (o.walkId && e.run_id !== o.walkId && e.parent_context?.walk_id !== o.walkId) continue; // the server's filter
       yield { kind: "event" as const, payload: e };
     }
   });
-  const getRun = vi.fn(async (runId: string) =>
-    agent({ run_id: runId, ...(walkStatuses[Math.min(walkIdx++, Math.max(0, walkStatuses.length - 1))] ?? {}) }),
-  );
   return {
-    client: { listWalkRuns, streamUserRunStates, getRun } as unknown as LoomcycleClient,
+    client: { listWalkRuns, streamUserRunStates } as unknown as LoomcycleClient,
     listWalkRuns,
     streamUserRunStates,
-    getRun,
   };
 }
 
@@ -108,82 +103,65 @@ const settle = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 const member = (o: Partial<RunStateEvent>) => event({ parent_context: { walk_id: WALK, state: "s" }, ...o });
 
 describe("watchWalk", () => {
-  it("hydrates every page, then streams this walk's member events", async () => {
+  it("hydrates every page, then streams this walk's events", async () => {
     const { client, streamUserRunStates } = fakeClient(
       [[[agent({ run_id: WALK })], [agent({ run_id: "m1", parent_context: { walk_id: WALK, state: "s" } })]]],
       [[member({ run_id: "m1" }), event({ run_id: "stranger" })]],
     );
     const got: WalkRunRow[] = [];
-    // Long delays: this case is about ONE hydrate-then-stream cycle.
-    const stop = watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), undefined, {
-      reconnectMs: 10_000,
-      pollMs: 10_000,
-    });
+    // A long reconnect: this case is about ONE hydrate-then-stream cycle.
+    const stop = watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), undefined, { reconnectMs: 10_000 });
     await settle();
     stop();
     expect(got.map((r) => r.runId)).toEqual([WALK, "m1", "m1"]);
     expect(streamUserRunStates.mock.calls[0][1]).toMatchObject({ walkId: WALK });
   });
 
-  it("sees the walk END by reading its own run — the filtered stream never carries it (G10)", async () => {
-    // The live failure: both members finished, the walk completed 2ms later,
-    // and the canvas stayed "Running" because no frame for the walk came.
-    const { client, getRun, listWalkRuns } = fakeClient(
+  it("sees the walk END from its own frame on the stream, folds a last listing and stops (G10 fixed)", async () => {
+    const { client, listWalkRuns, streamUserRunStates } = fakeClient(
       [[[agent({ run_id: WALK })]], [[agent({ run_id: WALK, status: "completed" })]]],
       [[member({ run_id: "m1", status: "completed" }), event({ run_id: WALK, status: "completed" })]],
-      [{ status: "completed", completed_at: "2026-10-01T10:02:00Z" }],
     );
     const got: WalkRunRow[] = [];
-    watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), undefined, {
-      reconnectMs: 10_000,
-      pollMs: 10_000, // far away: only the member-settled check can see the end in time
-    });
+    watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), undefined, { reconnectMs: 1 });
     await settle(50);
-    expect(getRun).toHaveBeenCalledWith(WALK, expect.anything());
     expect(got.some((r) => r.runId === WALK && r.status === "completed")).toBe(true);
     expect(listWalkRuns).toHaveBeenCalledTimes(2); // initial + final
+    expect(streamUserRunStates).toHaveBeenCalledTimes(1); // stopped: no reconnect
   });
 
-  it("finds the end by the poll alone when no member event precedes it (e.g. an abort)", async () => {
-    const { client, getRun } = fakeClient([[[agent({ run_id: WALK })]]], [[]], [{ status: "cancelled" }]);
+  it("reports the walk's breakpoint pause from its own frame", async () => {
+    const { client } = fakeClient([[[agent({ run_id: WALK })]]], [[event({ run_id: WALK, awaited_state: "interrupted", awaited_on: "question" })]]);
     const got: WalkRunRow[] = [];
-    watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), undefined, { reconnectMs: 10_000, pollMs: 5 });
-    await settle(60);
-    expect(getRun).toHaveBeenCalled();
-    expect(got.some((r) => r.runId === WALK && r.status === "cancelled")).toBe(true);
-  });
-
-  it("stops polling once the walk has ended", async () => {
-    const { client, getRun } = fakeClient([[[agent({ run_id: WALK })]]], [[]], [{ status: "completed" }]);
-    watchWalk(client, async () => "u", WALK, () => undefined, undefined, { reconnectMs: 10_000, pollMs: 5 });
-    await settle(60);
-    const calls = getRun.mock.calls.length;
-    await settle(60);
-    expect(getRun.mock.calls.length).toBe(calls);
-  });
-
-  it("reports the walk's pause, which also only the walk's own run carries", async () => {
-    const { client } = fakeClient([[[agent({ run_id: WALK })]]], [[]], [{ awaited_state: "interrupted" }]);
-    const got: WalkRunRow[] = [];
-    const stop = watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), undefined, {
-      reconnectMs: 10_000,
-      pollMs: 5,
-    });
-    await settle(40);
+    const stop = watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), undefined, { reconnectMs: 10_000 });
+    await settle();
     stop();
     expect(got.some((r) => r.runId === WALK && r.awaited === "interrupted")).toBe(true);
   });
 
+  it("never reads the walk's run itself — the stream is enough (the client has no getRun)", async () => {
+    const errors: unknown[] = [];
+    const { client } = fakeClient(
+      [[[agent({ run_id: WALK })]]],
+      [[member({ run_id: "m1", status: "completed" })]],
+    );
+    const stop = watchWalk(client, async () => "u", WALK, () => undefined, (e) => errors.push(e), { reconnectMs: 10_000 });
+    await settle(40);
+    stop();
+    // A getRun call would throw "not a function" and land here.
+    expect(errors).toEqual([]);
+  });
+
   it("never streams a walk the listing already shows ended", async () => {
     const { client, streamUserRunStates } = fakeClient([[[agent({ run_id: WALK, status: "failed" })]]], []);
-    watchWalk(client, async () => "u", WALK, () => undefined, undefined, { reconnectMs: 1, pollMs: 10_000 });
+    watchWalk(client, async () => "u", WALK, () => undefined, undefined, { reconnectMs: 1 });
     await settle();
     expect(streamUserRunStates).not.toHaveBeenCalled();
   });
 
   it("reconnects and RE-HYDRATES when the stream ends cleanly", async () => {
     const { client, listWalkRuns, streamUserRunStates } = fakeClient([[[agent({ run_id: WALK })]]], [[], []]);
-    const stop = watchWalk(client, async () => "u", WALK, () => undefined, undefined, { reconnectMs: 1, pollMs: 10_000 });
+    const stop = watchWalk(client, async () => "u", WALK, () => undefined, undefined, { reconnectMs: 1 });
     await settle();
     stop();
     expect(streamUserRunStates.mock.calls.length).toBeGreaterThanOrEqual(2);
@@ -194,9 +172,9 @@ describe("watchWalk", () => {
     const listWalkRuns = vi.fn(async () => {
       throw new Error("503");
     });
-    const client = { listWalkRuns, streamUserRunStates: vi.fn(), getRun: vi.fn(async () => agent({ run_id: WALK })) } as unknown as LoomcycleClient;
+    const client = { listWalkRuns, streamUserRunStates: vi.fn() } as unknown as LoomcycleClient;
     const errors: unknown[] = [];
-    const stop = watchWalk(client, async () => "u", WALK, () => undefined, (e) => errors.push(e), { reconnectMs: 1, pollMs: 10_000 });
+    const stop = watchWalk(client, async () => "u", WALK, () => undefined, (e) => errors.push(e), { reconnectMs: 1 });
     await settle();
     stop();
     const calls = listWalkRuns.mock.calls.length;
