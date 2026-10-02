@@ -77,6 +77,13 @@ describe("walkResult", () => {
     expect(walkResult("")).toEqual([]);
   });
 
+  it("drops the marker from an agent state's plain answer too — a team that ends in an agent", () => {
+    // The pcparts v2 walk's real final text: its last state is an agent.
+    expect(walkResult("[sub-agent agent_id=a_9471f3fa8a7c4655]\nd56c87cbbd50a67dc8a1e61e74a52720")).toEqual([
+      { text: "d56c87cbbd50a67dc8a1e61e74a52720" },
+    ]);
+  });
+
   it("keeps markup as text — it is model output", () => {
     expect(walkResult('<img src=x onerror="x()">')[0].text).toBe('<img src=x onerror="x()">');
   });

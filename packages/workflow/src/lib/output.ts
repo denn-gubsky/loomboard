@@ -93,9 +93,9 @@ export function walkResult(finalText?: string): ResultItem[] {
       });
     }
   } catch {
-    // Not JSON: an agent state's plain answer.
+    // Not JSON: an agent state's plain answer — which carries the same marker.
   }
-  return [{ text: raw }];
+  return [{ text: raw.replace(SUB_AGENT_HEADER, "") }];
 }
 
 /** The End node a finished walk reached, or undefined when the canvas cannot
