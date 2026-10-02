@@ -200,8 +200,19 @@ export function rowsForState(view: WalkView, state: string): WalkRunRow[] {
       (a, b) =>
         (a.stateVisit ?? 0) - (b.stateVisit ?? 0) ||
         (a.waveIndex ?? 0) - (b.waveIndex ?? 0) ||
-        (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0),
+        instantMs(a.ts) - instantMs(b.ts),
     );
+}
+
+/** The state the walk ran LAST — its most recent member, by instant (never
+ *  by spelling: the listing and the stream write different offsets, see
+ *  instantMs). Undefined before any member ran. */
+export function lastState(view: WalkView): string | undefined {
+  let last: WalkRunRow | undefined;
+  for (const r of view.members.values()) {
+    if (r.state && (!last || instantMs(r.ts) >= instantMs(last.ts))) last = r;
+  }
+  return last?.state;
 }
 
 /** Each row's visit number WITHIN its state: the rank of its walk ordinal
