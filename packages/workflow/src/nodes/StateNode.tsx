@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { HANDLE, type FlowNodeData } from "../lib/flow";
 import { promptFields } from "../lib/bindings";
 import { inputFields } from "../lib/inputForm";
+import { isInputStarter } from "../lib/validate";
 
 // One component for every handler kind, rather than one per kind.
 //
@@ -29,7 +30,11 @@ const KIND_LABEL: Record<string, string> = {
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
   const { node, agents, wait, consolidator, channels, fanout, assigns, hooks, isEntry, findings, pulse, held, result, start } = d;
-  const fieldsOf = !node.opaque && node.kind === "input" ? inputFields(node) : [];
+  // A Starter reading the walk's input is the team's front door, like an
+  // Input state: it shows the form and Start.
+  const readsInput = isInputStarter(node);
+  const hasForm = !node.opaque && (node.kind === "input" || readsInput);
+  const fieldsOf = hasForm ? inputFields(node) : [];
 
   // A Starter sits IN the data row (C2 amended): it reads on its left and
   // dispatches its agent on its right, so its control handles are the bottom
@@ -92,7 +97,8 @@ export function StateNode({ data, selected }: NodeProps) {
           isConnectable={false}
         />
       )}
-      {inRow && (
+      {/* Nothing feeds a Starter that reads the walk's input: no channel. */}
+      {inRow && !readsInput && (
         <Handle
           id={HANDLE.dataIn}
           type="target"
@@ -206,7 +212,8 @@ export function StateNode({ data, selected }: NodeProps) {
           )}
           {/* The Input node: the team's form, each field with the variable it
               becomes, and Start — the team's front door (RFC CZ). */}
-          {node.kind === "input" && (
+          {readsInput && <div className="lb-wf-node__meta">← the walk's input</div>}
+          {hasForm && (
             <>
               {fieldsOf.length ? (
                 <ul className="lb-wf-node__form">

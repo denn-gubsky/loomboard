@@ -836,3 +836,64 @@ describe("WorkflowCanvas — the Input node (RFC CZ)", () => {
     expect(runTeamDetached).not.toHaveBeenCalled();
   });
 });
+
+describe("WorkflowCanvas — a Starter reading the walk's input (loomcycle #1579)", () => {
+  // pcparts v2: no channels at all. The entry Starter takes the input; the
+  // editor is an agent state the walk feeds.
+  const v2 = {
+    entry: "research",
+    states: [
+      {
+        state: "research",
+        handler: {
+          kind: "starter",
+          source: { channel: "", kind: "input" },
+          schema: {
+            type: "object",
+            required: ["document_id", "chunk_id"],
+            properties: { document_id: { type: "string", title: "Document" }, chunk_id: { type: "string", title: "Part" } },
+          },
+          fanout: { agent: "marketing/researcher", per: "message", max: 1 },
+          binds: { document_id: "$.document_id", chunk_id: "$.chunk_id" },
+          capture: { research: "$.results[0].output" },
+        },
+      },
+      { state: "edit", handler: { kind: "agent", agent: "marketing/article-editor" } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [
+      { from: "research", to: "edit", on: "success" },
+      { from: "edit", to: "done", on: "success" },
+    ],
+  };
+  const layer = (o: Partial<WorkflowDataLayer> = {}) =>
+    stubLayer({
+      getActiveTeamDef: async () => ({ def_id: "d2", name: "pcparts", version: 2, definition: v2 }),
+      getTeamDef: async () => ({ def_id: "d2", name: "pcparts", version: 2, definition: v2 }),
+      listChannels: async () => [],
+      ...o,
+    });
+
+  it("shows the channel-free team as valid — the mirror knows an input source", async () => {
+    // Regression: the mirror required `source.channel` on every Starter, so
+    // this definition (accepted by the runtime) came up red and Run was off.
+    render(<WorkflowCanvas dataLayer={layer()} teamName="pcparts" />);
+    const research = await screen.findByTestId("node-research");
+    expect(screen.queryByText(/\d+ problems?/)).toBeNull();
+    expect(research.textContent).toContain("the walk's input");
+    expect(research.textContent).toContain("${var.chunk_id}");
+  });
+
+  it("starts with ONE run carrying the input — nothing is published", async () => {
+    const publishChannel = vi.fn(async () => undefined);
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    render(<WorkflowCanvas dataLayer={layer({ publishChannel, runTeamDetached })} teamName="pcparts" />);
+    fireEvent.click(within(await screen.findByTestId("node-research")).getByText("Start…"));
+    fireEvent.change(await screen.findByLabelText(/Document/), { target: { value: "doc-parts" } });
+    fireEvent.change(screen.getByLabelText(/Part/), { target: { value: "ddr5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(runTeamDetached).toHaveBeenCalled());
+    expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d2", input: JSON.stringify({ document_id: "doc-parts", chunk_id: "ddr5" }) });
+    expect(publishChannel).not.toHaveBeenCalled();
+  });
+});
