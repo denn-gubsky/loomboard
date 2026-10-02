@@ -728,6 +728,44 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     expect(result.textContent).not.toContain("[sub-agent");
   });
 
+  it("colours where a running walk is — active, passed, and a marker on the current state — and resets when it ends", async () => {
+    let push: (rows: WalkRunRow[]) => void = () => undefined;
+    const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {
+      push = onRows;
+      return () => undefined;
+    });
+    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText: "a1", terminal: "done" }));
+    render(
+      <WorkflowCanvas
+        dataLayer={base({ watchWalk, runTeamDetached: async () => ({ run_id: "r_walk", status: "running" }), readRun })}
+        teamName="sdlc"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(watchWalk).toHaveBeenCalled());
+    const walkRow = (status: string, ts: string): WalkRunRow => ({ runId: "r_walk", agentId: "w", agent: "team:sdlc", status, ts });
+    act(() =>
+      push([
+        walkRow("running", "2026-10-01T10:00:00Z"),
+        { runId: "m1", agentId: "a", agent: "r", status: "completed", ts: "2026-10-01T10:01:00Z", state: "research", stateVisit: 1 },
+        { runId: "m2", agentId: "b", agent: "e", status: "running", ts: "2026-10-01T10:02:00Z", state: "edit", stateVisit: 2 },
+      ]),
+    );
+    const edit = await screen.findByTestId("node-edit");
+    await waitFor(() => expect(edit.className).toContain("is-active"));
+    expect(screen.getByTestId("agent-edit").className).toContain("is-active");
+    expect(screen.getByTestId("node-research").className).toContain("is-passed");
+    expect(screen.getByTestId("current-edit")).toBeTruthy();
+    expect(screen.queryByTestId("current-research")).toBeNull();
+
+    act(() => push([walkRow("completed", "2026-10-01T10:03:00Z")]));
+    await waitFor(() => expect(screen.getByTestId("node-edit").className).not.toContain("is-active"));
+    expect(screen.getByTestId("node-research").className).not.toContain("is-passed");
+    expect(screen.queryByTestId("current-edit")).toBeNull();
+    // What it produced stays: the End node keeps the result.
+    expect(await screen.findByTestId("result-done")).toBeTruthy();
+  });
+
   it("puts the result on the End node the RUNTIME says the walk reached, not the one its success edge leads to (G14)", async () => {
     let push: (rows: WalkRunRow[]) => void = () => undefined;
     const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {

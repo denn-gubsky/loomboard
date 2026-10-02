@@ -9,8 +9,14 @@ import { AGENT_HANDLE, type AgentFlowData } from "../lib/flow";
 // runs hold the output (RFC DI / DJ).
 
 export function AgentNode({ data, selected }: NodeProps) {
-  const { view, pulse, held } = data as unknown as AgentFlowData;
-  const classes = ["lb-wf-node", "lb-wf-node--agentref", selected ? "is-selected" : "", view.agents.length ? "" : "has-error"]
+  const { view, pulse, held, progress } = data as unknown as AgentFlowData;
+  const classes = [
+    "lb-wf-node",
+    "lb-wf-node--agentref",
+    selected ? "is-selected" : "",
+    view.agents.length ? "" : "has-error",
+    progress ? `is-${progress}` : "",
+  ]
     .filter(Boolean)
     .join(" ");
 

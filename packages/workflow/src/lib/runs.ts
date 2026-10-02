@@ -73,7 +73,7 @@ export function isTerminal(status: string): boolean {
 // Tauri webview need not share. Microseconds beyond the millisecond are
 // therefore ignored: two rows in the same millisecond tie. An unparseable
 // instant sorts as the oldest.
-function instantMs(ts: string): number {
+export function instantMs(ts: string): number {
   const millis = ts.replace(
     /(T\d{2}:\d{2}:\d{2})\.(\d+)/,
     (_, hms: string, frac: string) => `${hms}.${frac.padEnd(3, "0").slice(0, 3)}`,
