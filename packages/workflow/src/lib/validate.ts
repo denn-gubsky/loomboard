@@ -484,6 +484,28 @@ function validateHandler(n: CanvasNode): string[] {
     );
   }
 
+  // Mirrors validatePublishing (loomcycle #1577): `publish` puts the walk's
+  // input on a channel and `payload` picks a channel state's message shape.
+  // Each belongs to one kind; elsewhere it would read as configured and do
+  // nothing.
+  const publish = obj(h.publish);
+  if (publish) {
+    if (n.kind !== "input") {
+      out.push(
+        `sets \`publish\` but is kind ${JSON.stringify(n.kind)} (input only) — ` +
+          "a channel state publishes to its `channel`",
+      );
+    } else if (!str(publish.channel).trim()) {
+      out.push("input handler `publish` is present but names no channel");
+    }
+  }
+  const payload = str(h.payload);
+  if (payload && n.kind !== "channel") {
+    out.push(`sets \`payload\` but is kind ${JSON.stringify(n.kind)} (channel only)`);
+  } else if (payload && payload !== "envelope" && payload !== "raw") {
+    out.push(`channel handler has invalid payload ${JSON.stringify(payload)} (want envelope|raw)`);
+  }
+
   const timeout = h.timeout_ms;
   if (typeof timeout === "number" && timeout < 0) out.push("handler timeout_ms must be >= 0");
   return out;

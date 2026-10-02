@@ -27,7 +27,7 @@ export interface ChannelRef {
   channel: string;
   side: ChannelSide;
   state: string;
-  field: "source" | "sink" | "channel";
+  field: "source" | "sink" | "channel" | "publish";
 }
 
 function str(v: unknown): string {
@@ -58,6 +58,12 @@ export function channelRefs(model: CanvasModel): ChannelRef[] {
     }
     if (str(h.channel)) {
       out.push({ channel: str(h.channel), side: "publish", state: n.id, field: "channel" });
+    }
+    // An input state's `publish` (loomcycle #1577): the walk's input, put on
+    // a channel. A publish reference like any other, so it needs the grant.
+    const publish = obj(h.publish);
+    if (publish && str(publish.channel)) {
+      out.push({ channel: str(publish.channel), side: "publish", state: n.id, field: "publish" });
     }
   }
   return out;

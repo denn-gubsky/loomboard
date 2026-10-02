@@ -56,6 +56,23 @@ describe("channelRefs — what the definition names", () => {
     expect(sides.sort()).toEqual(["publish", "subscribe"]);
   });
 
+  it("counts an input state's `publish` as a publish reference that needs the grant (loomcycle #1577)", () => {
+    const m = fromDefinition({
+      entry: "form",
+      states: [
+        { state: "form", handler: { kind: "input", publish: { channel: "intake" } } },
+        { state: "s", handler: starter() },
+        { state: "done", handler: { kind: "terminal" } },
+      ],
+      transitions: [
+        { from: "form", to: "s", on: "success" },
+        { from: "s", to: "done", on: "success" },
+      ],
+    });
+    expect(channelRefs(m)[0]).toEqual({ channel: "intake", side: "publish", state: "form", field: "publish" });
+    expect(requiredACL(m).publish).toContain("intake");
+  });
+
   it("ignores an empty channel name", () => {
     const m = fromDefinition({
       entry: "a",
