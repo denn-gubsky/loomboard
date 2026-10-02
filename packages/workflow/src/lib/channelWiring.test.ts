@@ -52,6 +52,16 @@ describe("planWire — what a drag to or from a channel means", () => {
     });
   });
 
+  it("Input → channel sets the Input's `publish` — the walk's input goes there (loomcycle #1577)", () => {
+    const withInput = fromDefinition({ ...toDefinition(base()), entry: "form", states: [{ state: "form", handler: { kind: "input" } }, ...(toDefinition(base()).states as unknown[])] });
+    const { m, views, id } = placed(withInput, "inbox-form");
+    const w = planWire(m, views, { source: "form", target: id, sourceHandle: HANDLE.dataOut });
+    expect(w).toEqual({ state: "form", field: "publish", channel: "inbox-form" });
+    const next = applyWire(m, w!);
+    expect(handlerOf(next.nodes.find((n) => n.id === "form")!).publish).toEqual({ channel: "inbox-form" });
+    expect(connectionKind(m, views, { source: "form", target: id, sourceHandle: HANDLE.dataOut })).toBe("wire");
+  });
+
   it("channel → Starter data-in sets the Starter's source", () => {
     const { m, views, id } = placed(base(), "tickets");
     expect(planWire(m, views, { source: id, target: "intake", targetHandle: HANDLE.dataIn })).toEqual({

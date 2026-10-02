@@ -431,6 +431,11 @@ export function handlerChannels(n: CanvasNode): { source?: string; sink?: string
     const sink = str(h.channel).trim();
     return { sink: sink || undefined };
   }
+  if (n.kind === "input") {
+    // `publish` (loomcycle #1577): the walk's input, put on a channel.
+    const sink = isObj(h.publish) ? str(h.publish.channel).trim() : "";
+    return { sink: sink || undefined };
+  }
   return {};
 }
 

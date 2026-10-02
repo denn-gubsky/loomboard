@@ -12,7 +12,7 @@ import { Inspector } from "./inspector/Inspector";
 import { PublishComposer } from "./PublishComposer";
 import { Palette } from "./Palette";
 import { newStateRaw, type PaletteEntry } from "./lib/palette";
-import { fieldsPatch, inputFields, placeInput, startPlan, type FormResult } from "./lib/inputForm";
+import { fieldsPatch, inputFields, placeInput, startFindings, startPlan, type FormResult } from "./lib/inputForm";
 import { InputDialog } from "./InputDialog";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
 import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
@@ -26,7 +26,6 @@ import {
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
-  toStartEdges,
   visibleEdges,
 } from "./lib/flow";
 import { bindingFindings, bindingNodes } from "./lib/bindings";
@@ -267,7 +266,8 @@ function WorkflowCanvasInner({
   // check lives in the TeamDef tool's create/fork preflight — but both refuse a
   // save, so the operator sees one list.
   const findings = useMemo(
-    () => (model ? [...validateModel(model), ...aclFindings(model), ...bindingFindings(model)] : []),
+    () =>
+      model ? [...validateModel(model), ...aclFindings(model), ...bindingFindings(model), ...startFindings(model)] : [],
     [model],
   );
   // The channels the graph names, as nodes its data edges route through.
@@ -315,15 +315,7 @@ function WorkflowCanvasInner({
                 : n.id === endedAt && result
                   ? { ...n, data: { ...n.data, result: result.items } }
                   : plan && n.id === plan.input
-                    ? {
-                        ...n,
-                        data: {
-                          ...n.data,
-                          // Where Start puts the form: drawn as this node's sink.
-                          ...(plan.publishTo ? { channels: { sink: plan.publishTo } } : {}),
-                          ...(canRun ? { start: openStart } : {}),
-                        },
-                      }
+                    ? { ...n, data: { ...n.data, ...(canRun ? { start: openStart } : {}) } }
                     : n,
             ),
             ...toAgentFlowNodes(agentViews, selectedId, measured).map((n) =>
@@ -351,7 +343,6 @@ function WorkflowCanvasInner({
             [
               ...toFlowEdges(model, findings),
               ...toDataEdges(channelViews, agentViews),
-              ...toStartEdges(model, channelViews),
               ...toBindingEdges(bindingViews),
             ],
             showTransitions,
@@ -665,19 +656,6 @@ function WorkflowCanvasInner({
     setError(undefined);
     setStatus(undefined);
     try {
-      // The form must be on the Starter's channel before the walk reads it —
-      // browser-side until loomcycle ships an input-sourced Starter (G15 A).
-      const publishTo = form ? startPlan(model)?.publishTo : undefined;
-      if (form && publishTo) {
-        const scope = channels?.find((c) => c.name === publishTo)?.scope;
-        if (!scope || !dataLayer.publishChannel) {
-          setStartError(
-            `Cannot put the form on ${publishTo}: ${!scope ? "the channel is not listed on this runtime" : "this host cannot publish"}.`,
-          );
-          return;
-        }
-        await dataLayer.publishChannel(publishTo, form.value, { scope });
-      }
       // By def_id, never by name: Save-then-Run would otherwise execute the
       // PREVIOUS version, and the difference is invisible on screen.
       const started = await dataLayer.runTeamDetached({
@@ -702,7 +680,7 @@ function WorkflowCanvasInner({
     } finally {
       setBusy(false);
     }
-  }, [dataLayer, model, session, channels]);
+  }, [dataLayer, model, session]);
 
   const backToEdit = useCallback(() => {
     // Explicit, and it DISCARDS the trace — never automatic on finish, because
@@ -841,7 +819,6 @@ function WorkflowCanvasInner({
       {startOpen && plan && model && (
         <InputDialog
           fields={inputFields(model.nodes.find((n) => n.id === plan.input)!)}
-          plan={plan}
           listDocuments={dataLayer.listDocuments}
           listChunks={dataLayer.listChunks}
           busy={busy}

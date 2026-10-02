@@ -223,12 +223,12 @@ describe("withLayout", () => {
 });
 
 describe("autoLayout — the Input node", () => {
-  it("puts an Input before the channel its Start publishes to: [Input] → [channel] → (Starter)", () => {
+  it("puts an Input before the channel it publishes to: [Input] → [channel] → (Starter)", () => {
     const pos = autoLayout(
       fromDefinition({
         entry: "form",
         states: [
-          { state: "form", handler: { kind: "input" } },
+          { state: "form", handler: { kind: "input", publish: { channel: "pcparts-in" } } },
           { state: "research", handler: { kind: "starter", source: { channel: "pcparts-in" }, fanout: { agent: "r", max: 1 } } },
           { state: "done", handler: { kind: "terminal" } },
         ],

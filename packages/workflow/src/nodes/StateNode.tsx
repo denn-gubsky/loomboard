@@ -42,9 +42,9 @@ export function StateNode({ data, selected }: NodeProps) {
   const inRow = !node.opaque && node.kind === "starter";
   // Kinds that carry a prompt can be fed a binding (lib/bindings.ts).
   const takesBindings = !node.opaque && promptFields(node.kind).length > 0;
-  // A publish node publishes; so does an Input node whose Start puts the form
-  // on a channel (the canvas draws that edge from this handle).
-  const publishes = !node.opaque && (node.kind === "channel" || (node.kind === "input" && !!channels.sink));
+  // A publish node publishes; so can an Input node — the walk's input, via its
+  // `publish` (a drag from this handle to a channel sets it).
+  const publishes = !node.opaque && (node.kind === "channel" || node.kind === "input");
 
   const errors = findings.filter((f) => f.level === "error");
   const infos = findings.filter((f) => f.level === "info");
@@ -280,8 +280,6 @@ export function StateNode({ data, selected }: NodeProps) {
           type="source"
           position={Position.Top}
           className="lb-wf-handle lb-wf-handle--data"
-          // An Input's channel is where Start publishes — derived, not wired.
-          isConnectable={node.kind === "channel"}
         />
       )}
 

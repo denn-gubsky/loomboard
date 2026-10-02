@@ -3,10 +3,11 @@
 //
 // There is no "channel edge" in the definition. A data edge is DERIVED from a
 // node naming a channel (lib/channelNodes.ts), so drawing one is really
-// setting that name — and only three settings are expressible:
+// setting that name — and only four settings are expressible:
 //
 //   [agent]  ── out ──▶ [channel]          sets its Starter's `sink.channel`
 //   publish  ── data-out ──▶ [channel]     sets the channel node's `channel`
+//   Input    ── data-out ──▶ [channel]     sets the Input's `publish.channel`
 //   [channel] ── out ──▶ data-in ── Starter   sets the Starter's `source.channel`
 //
 // The sink is wired from the AGENT node because that is where a Starter's
@@ -42,7 +43,7 @@ export interface WireAttempt {
 
 export interface Wiring {
   state: string;
-  field: "source" | "sink" | "channel";
+  field: "source" | "sink" | "channel" | "publish";
   channel: string;
 }
 
@@ -77,10 +78,11 @@ export function planWire(
     if (owner) {
       return c.sourceHandle === AGENT_HANDLE.out ? { state: owner, field: "sink", channel: to.channel } : null;
     }
-    // publish node → channel. A Starter's own data-out is its dispatch.
+    // publish node / Input → channel. A Starter's own data-out is its dispatch.
     const n = model.nodes.find((x) => x.id === c.source);
     if (!n || n.opaque || c.sourceHandle !== HANDLE.dataOut) return null;
     if (n.kind === "channel") return { state: n.id, field: "channel", channel: to.channel };
+    if (n.kind === "input") return { state: n.id, field: "publish", channel: to.channel };
     return null;
   }
 
@@ -91,7 +93,7 @@ export function planWire(
   return null;
 }
 
-/** Apply a wiring to the model. The rest of the Starter's `source` / `sink`
+/** Apply a wiring to the model. The rest of the `source` / `sink` / `publish`
  *  block — wait, batch, n — is kept: only the channel changes. */
 export function applyWire(model: CanvasModel, w: Wiring): CanvasModel {
   return {
