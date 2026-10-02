@@ -58,4 +58,17 @@ describe("workflowDataLayer — run and channel reads", () => {
     await layer.peekChannel!("out", { scope: "global" });
     expect(peekChannel).toHaveBeenLastCalledWith("out", { scope: "global", maxMessages: undefined });
   });
+
+  it("lists documents and chunks for the Input node's pickers through the Document tool", async () => {
+    const document = vi.fn(async (input: { op: string }) =>
+      input.op === "query_documents"
+        ? { documents: [{ document_id: "doc1", title: "PC Parts Catalog", root_chunk_id: "root" }] }
+        : { chunks: [{ id: "c1", document_id: "doc1", title: "Ryzen", position: 0, revision: 1, parent_id: "root" }] },
+    );
+    const layer = workflowDataLayer(client({ document }));
+    expect(await layer.listDocuments!({ scope: "user", underPath: "/loomboard/tests" })).toEqual([{ id: "doc1", title: "PC Parts Catalog" }]);
+    expect(document).toHaveBeenLastCalledWith({ op: "query_documents", scope: "user", under_path: "/loomboard/tests" });
+    expect(await layer.listChunks!("doc1", { scope: "user" })).toEqual([{ id: "c1", title: "Ryzen", position: 0, parent_id: "root" }]);
+    expect(document).toHaveBeenLastCalledWith({ op: "query_chunks", scope: "user", document_id: "doc1" });
+  });
 });

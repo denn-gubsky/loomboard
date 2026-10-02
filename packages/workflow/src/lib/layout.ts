@@ -27,6 +27,7 @@
 import { agentNodeId, dispatchesAgent } from "./agentNodes";
 import { channelNodeId } from "./channelNodes";
 import { channelRefs } from "./channels";
+import { startPlan } from "./inputForm";
 import { isDerivedLayoutKey, type CanvasModel, type XY } from "./model";
 
 /** Horizontal gap between layers, in px. Wide enough for a channel node. */
@@ -97,6 +98,10 @@ export function autoLayout(model: CanvasModel): Record<string, XY> {
   for (const e of model.edges) {
     if (reachable.has(e.from) && reachable.has(e.to)) link(agentOf.get(e.from) ?? e.from, e.to);
   }
+  // An Input node whose Start publishes to a channel sits before that channel:
+  // [Input] → [channel] → (Starter).
+  const plan = startPlan(model);
+  if (plan?.publishTo && reachable.has(plan.input)) link(plan.input, channelNodeId(model, plan.publishTo));
 
   // Back edges by DFS, from the walk's front door first so its own direction
   // is "forward": the channel the entry reads (C7), then the entry, then

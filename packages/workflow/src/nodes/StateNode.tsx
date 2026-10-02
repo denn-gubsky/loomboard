@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { HANDLE, type FlowNodeData } from "../lib/flow";
 import { promptFields } from "../lib/bindings";
+import { inputFields } from "../lib/inputForm";
 
 // One component for every handler kind, rather than one per kind.
 //
@@ -27,7 +28,8 @@ const KIND_LABEL: Record<string, string> = {
 
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
-  const { node, agents, wait, consolidator, channels, fanout, assigns, formFields, hooks, isEntry, findings, pulse, held, result } = d;
+  const { node, agents, wait, consolidator, channels, fanout, assigns, hooks, isEntry, findings, pulse, held, result, start } = d;
+  const fieldsOf = !node.opaque && node.kind === "input" ? inputFields(node) : [];
 
   // A Starter sits IN the data row (C2 amended): it reads on its left and
   // dispatches its agent on its right, so its control handles are the bottom
@@ -35,7 +37,9 @@ export function StateNode({ data, selected }: NodeProps) {
   const inRow = !node.opaque && node.kind === "starter";
   // Kinds that carry a prompt can be fed a binding (lib/bindings.ts).
   const takesBindings = !node.opaque && promptFields(node.kind).length > 0;
-  const publishes = !node.opaque && node.kind === "channel";
+  // A publish node publishes; so does an Input node whose Start puts the form
+  // on a channel (the canvas draws that edge from this handle).
+  const publishes = !node.opaque && (node.kind === "channel" || (node.kind === "input" && !!channels.sink));
 
   const errors = findings.filter((f) => f.level === "error");
   const infos = findings.filter((f) => f.level === "info");
@@ -200,12 +204,39 @@ export function StateNode({ data, selected }: NodeProps) {
               ))}
             </div>
           )}
+          {/* The Input node: the team's form, each field with the variable it
+              becomes, and Start — the team's front door (RFC CZ). */}
           {node.kind === "input" && (
-            <div className="lb-wf-node__meta">
-              {formFields.length
-                ? `${formFields.length} field${formFields.length === 1 ? "" : "s"}: ${formFields.join(", ")}`
-                : "plain text input"}
-            </div>
+            <>
+              {fieldsOf.length ? (
+                <ul className="lb-wf-node__form">
+                  {fieldsOf.map((f) => (
+                    <li key={f.name}>
+                      <span title={f.picker ? `picked: a ${f.picker.kind}` : f.type}>
+                        {f.picker ? "▾ " : ""}
+                        {f.title ?? f.name}
+                        {f.required ? " *" : ""}
+                      </span>
+                      {f.variable && <code className="lb-wf-node__var">{`→ \${var.${f.variable}}`}</code>}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="lb-wf-node__meta">plain text input</div>
+              )}
+              {start && (
+                <button
+                  type="button"
+                  className="lb-wf-btn lb-wf-btn--primary lb-wf-node__start nodrag"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    start();
+                  }}
+                >
+                  Start…
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -242,6 +273,8 @@ export function StateNode({ data, selected }: NodeProps) {
           type="source"
           position={Position.Top}
           className="lb-wf-handle lb-wf-handle--data"
+          // An Input's channel is where Start publishes — derived, not wired.
+          isConnectable={node.kind === "channel"}
         />
       )}
 

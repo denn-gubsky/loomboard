@@ -433,3 +433,20 @@ export function handlerChannels(n: CanvasNode): { source?: string; sink?: string
   }
   return {};
 }
+
+/** The definition's CONTENT as a stable string — what the runtime hashes, so
+ *  two models with the same key run the same team. Layout and colours are
+ *  left out (presentation, excluded from the hash), and keys are sorted so
+ *  the author's typing order is not a difference. Compared against the last
+ *  loaded or saved key, it says whether Run would start something other than
+ *  what is on screen. */
+export function contentKey(model: CanvasModel): string {
+  const { layout: _layout, colors: _colors, ...content } = toDefinition(model);
+  const stable = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(stable)
+      : isObj(v)
+        ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])]))
+        : v;
+  return JSON.stringify(stable(content));
+}

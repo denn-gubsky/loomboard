@@ -31,6 +31,9 @@ export interface InspectorProps {
    *  above the fields, because in Run mode they are what the operator came
    *  to see. */
   runs?: ReactNode;
+  /** The Input node's form editor (fields, pickers, variables). Rendered
+   *  above the raw fields, which still show the schema it writes. */
+  form?: ReactNode;
 }
 
 /** The node inspector: the state id and kind rendered by hand, everything else
@@ -57,6 +60,7 @@ export function Inspector({
   onGrantChannel,
   binding,
   runs,
+  form,
 }: InspectorProps) {
   const value = useMemo<DefValue>(() => {
     if (!node) return {};
@@ -144,6 +148,7 @@ export function Inspector({
       </label>
 
       {runs}
+      {form}
 
       {node.opaque ? (
         // An opaque node is deliberately NOT editable field-by-field: this

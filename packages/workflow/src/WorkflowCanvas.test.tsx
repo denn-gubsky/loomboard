@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import type { TeamDefDetail, WorkflowDataLayer } from "./types";
@@ -751,5 +751,88 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     expect(screen.getByTestId("node-research").textContent).not.toContain("1/1 done");
     fireEvent.click(agent);
     expect(await screen.findByRole("button", { name: /completed.*marketing\/researcher/ })).toBeTruthy();
+  });
+});
+
+describe("WorkflowCanvas — the Input node (RFC CZ)", () => {
+  // pcparts as it runs on TrueNAS, without and with its Input node.
+  const states = [
+    { state: "research", handler: { kind: "starter", source: { channel: "pcparts-in" }, fanout: { agent: "r", max: 1 }, sink: { channel: "handoff" } } },
+    { state: "edit", handler: { kind: "starter", source: { channel: "handoff" }, fanout: { agent: "e", max: 1 }, sink: { channel: "articles" } } },
+    { state: "done", handler: { kind: "terminal" } },
+  ];
+  const transitions = [
+    { from: "research", to: "edit", on: "success" },
+    { from: "edit", to: "done", on: "success" },
+  ];
+  const channelsAcl = { subscribe: ["pcparts-in", "handoff"], publish: ["handoff", "articles"] };
+  const withForm = {
+    entry: "form",
+    channels: channelsAcl,
+    states: [
+      {
+        state: "form",
+        handler: {
+          kind: "input",
+          schema: {
+            type: "object",
+            required: ["document_id", "chunk_id"],
+            properties: { document_id: { type: "string", title: "Document" }, chunk_id: { type: "string", title: "Part" } },
+          },
+          capture: { document_id: "$.document_id", chunk_id: "$.chunk_id" },
+        },
+      },
+      ...states,
+    ],
+    transitions: [{ from: "form", to: "research", on: "success" }, ...transitions],
+  };
+  const layerFor = (definition: unknown, o: Partial<WorkflowDataLayer> = {}) =>
+    stubLayer({
+      getActiveTeamDef: async () => ({ def_id: "d1", name: "pcparts", version: 1, definition }),
+      getTeamDef: async () => ({ def_id: "d1", name: "pcparts", version: 1, definition }),
+      listChannels: async () => ["pcparts-in", "handoff", "articles"].map((name) => ({ name, scope: "user" })),
+      ...o,
+    });
+
+  it("places an Input form as the ENTRY, wired into the old entry — no 'unreachable' or 'dead end'", async () => {
+    // Regression: it was dropped loose, refused on the spot by both rules.
+    render(<WorkflowCanvas dataLayer={layerFor({ entry: "research", channels: channelsAcl, states, transitions })} teamName="pcparts" />);
+    await screen.findByTestId("node-research");
+    fireEvent.click(screen.getByRole("button", { name: "Input form" }));
+    expect(await screen.findByTestId("node-input-1")).toBeTruthy();
+    expect(screen.queryByText(/unreachable from entry/)).toBeNull();
+    expect(screen.queryByText(/no outbound transition/)).toBeNull();
+    expect(screen.getByTestId("node-input-1").textContent).toContain("entry");
+  });
+
+  it("starts pcparts from its form: puts {document_id, chunk_id} on the Starter's channel, then runs with it", async () => {
+    const publishChannel = vi.fn(async () => undefined);
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    render(<WorkflowCanvas dataLayer={layerFor(withForm, { publishChannel, runTeamDetached })} teamName="pcparts" />);
+    const form = await screen.findByTestId("node-form");
+    expect(form.textContent).toContain("${var.document_id}");
+    fireEvent.click(within(await screen.findByTestId("node-form")).getByText("Start…"));
+    fireEvent.change(await screen.findByLabelText(/Document/), { target: { value: "doc-parts" } });
+    fireEvent.change(screen.getByLabelText(/Part/), { target: { value: "gpu" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(runTeamDetached).toHaveBeenCalled());
+    expect(publishChannel).toHaveBeenCalledWith("pcparts-in", { document_id: "doc-parts", chunk_id: "gpu" }, { scope: "user" });
+    expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d1", input: JSON.stringify({ document_id: "doc-parts", chunk_id: "gpu" }) });
+    // Published BEFORE the walk is asked to read it.
+    expect(publishChannel.mock.invocationCallOrder[0]).toBeLessThan(runTeamDetached.mock.invocationCallOrder[0]);
+  });
+
+  it("refuses to Start while the graph differs from the saved version — Start would run the old one", async () => {
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    render(<WorkflowCanvas dataLayer={layerFor(withForm, { runTeamDetached, publishChannel: vi.fn() })} teamName="pcparts" />);
+    await screen.findByTestId("node-form");
+    // An unsaved edit: add a field through the form editor.
+    fireEvent.click(screen.getByTestId("node-form"));
+    fireEvent.change(await screen.findByLabelText("New field name"), { target: { value: "tone" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    fireEvent.click(within(await screen.findByTestId("node-form")).getByText("Start…"));
+    expect(await screen.findByText(/Save a new version first/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(runTeamDetached).not.toHaveBeenCalled();
   });
 });
