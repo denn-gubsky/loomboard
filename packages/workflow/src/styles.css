@@ -935,17 +935,21 @@
     background-position-x: 400px;
   }
 }
+/* The flash glows INWARD. Nodes paint above the edge layer, and the data row
+ * puts nodes ~30px apart, so an outer glow covered the short violet hop
+ * between a Starter and its agent (and the channel hops) — only its arrowhead
+ * showed. Outside the box there is only a 2–3px ring. */
 @keyframes lb-wf-run-flash {
   0%,
   100% {
     box-shadow:
       0 0 0 2px var(--lb-wf-run-active-edge),
-      0 0 10px 2px rgb(56 189 248 / 45%);
+      inset 0 0 6px 1px rgb(255 255 255 / 45%);
   }
   50% {
     box-shadow:
-      0 0 0 2px var(--lb-wf-run-active-edge),
-      0 0 22px 7px rgb(56 189 248 / 85%);
+      0 0 0 3px var(--lb-wf-run-active-edge),
+      inset 0 0 18px 6px rgb(255 255 255 / 90%);
   }
 }
 /* The walk's position: above the node, outside its box. Positioned against
