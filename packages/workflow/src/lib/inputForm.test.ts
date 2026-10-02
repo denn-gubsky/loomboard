@@ -38,6 +38,13 @@ describe("inputFields", () => {
     ]);
   });
 
+  it("orders the form by `required` — the runtime sorts object keys, so properties come back alphabetical", () => {
+    // As TrueNAS stores pcparts v2: chunk_id first. The chunk picker follows
+    // the document field, so the document must be asked for first.
+    const sorted = { ...PCPARTS_SCHEMA, properties: { chunk_id: PCPARTS_SCHEMA.properties.chunk_id, document_id: PCPARTS_SCHEMA.properties.document_id, tone: { type: "string" } } };
+    expect(inputFields(node(team({ schema: sorted }))).map((f) => f.name)).toEqual(["document_id", "chunk_id", "tone"]);
+  });
+
   it("calls a field unbound when no capture reads it, and a plain-text form fieldless", () => {
     expect(inputFields(node(team({ schema: PCPARTS_SCHEMA })))[0].variable).toBeUndefined();
     expect(inputFields(node(team({})))).toEqual([]);

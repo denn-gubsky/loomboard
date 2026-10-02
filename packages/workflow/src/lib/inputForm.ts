@@ -113,7 +113,17 @@ export function inputFields(n: CanvasNode): InputField[] {
     const field = capturedField(path);
     if (field && !variableOf.has(field)) variableOf.set(field, variable);
   }
-  return Object.entries(props).map(([name, raw]) => {
+  // Field ORDER: the runtime stores a definition with object keys sorted, so
+  // `properties` comes back alphabetical — chunk_id before the document_id
+  // its picker follows. `required` is a list, and lists keep their order, so
+  // it leads; the remaining fields follow in key order.
+  const requiredOrder = Array.isArray(schema.required) ? schema.required.filter((r): r is string => typeof r === "string") : [];
+  const rank = (name: string) => {
+    const i = requiredOrder.indexOf(name);
+    return i === -1 ? requiredOrder.length : i;
+  };
+  const entries = Object.entries(props).sort(([a], [b]) => rank(a) - rank(b));
+  return entries.map(([name, raw]) => {
     const p = isObj(raw) ? raw : {};
     const type = FIELD_TYPES.includes(p.type as FieldType) ? (p.type as FieldType) : "string";
     return {
