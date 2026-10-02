@@ -4127,6 +4127,743 @@
           "notify-owner"
         ]
       }
+    },
+    {
+      "name": "input starter as entry, with schema and binds",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "input"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              },
+              "schema": {
+                "type": "object",
+                "required": [
+                  "document_id"
+                ],
+                "properties": {
+                  "document_id": {
+                    "type": "string",
+                    "x-loomcycle-picker": {
+                      "kind": "document"
+                    }
+                  }
+                }
+              },
+              "binds": {
+                "document_id": "$.document_id"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input starter per=once without max",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "input"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "once"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input starter names a channel",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "input",
+                "channel": "q"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input starter waits",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "input",
+                "wait_ms": 1000
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input starter batches",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "input",
+                "batch": 2
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input starter acks",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "input"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              },
+              "ack": "after_read"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input starter fans out per chunk",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "input"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "chunk",
+                "max": 2
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input starter that is not the entry",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "a",
+        "states": [
+          {
+            "state": "a",
+            "handler": {
+              "kind": "agent",
+              "agent": "x"
+            }
+          },
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "input"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "a",
+            "to": "s",
+            "on": "success"
+          },
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "transition back into an input starter",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "input"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "agent",
+              "agent": "x"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "a",
+            "on": "success"
+          },
+          {
+            "from": "a",
+            "to": "s",
+            "on": "pushback:redo"
+          },
+          {
+            "from": "a",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "schema on a channel starter",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "q"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              },
+              "schema": {
+                "type": "object",
+                "required": [
+                  "document_id"
+                ],
+                "properties": {
+                  "document_id": {
+                    "type": "string",
+                    "x-loomcycle-picker": {
+                      "kind": "document"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "document starter per chunk",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "document",
+                "path": "/specs/acme"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "chunk",
+                "max": 4
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "document starter per message",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "document",
+                "path": "/specs/acme"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "document starter path with a variable",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "document",
+                "path": "/specs/${var.x}"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "chunk",
+                "max": 4
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "document starter relative path",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "document",
+                "path": "specs/acme"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "chunk",
+                "max": 4
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "document starter waits",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "document",
+                "path": "/specs/acme",
+                "wait": "any"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "chunk",
+                "max": 4
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel starter per chunk",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "q"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "chunk",
+                "max": 2
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter source of an unknown kind",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "kind": "queue",
+                "channel": "q"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel starter with a document path",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "q",
+                "path": "/x"
+              },
+              "fanout": {
+                "agent": "w",
+                "per": "message",
+                "max": 1
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
     }
   ]
 }

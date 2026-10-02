@@ -64,7 +64,7 @@ import {
   type JsonObject,
   type TeamChannels,
 } from "./lib/model";
-import { canSave, validateModel } from "./lib/validate";
+import { canSave, isInputStarter, validateModel } from "./lib/validate";
 import { aclFindings } from "./lib/channels";
 import {
   INITIAL as SESSION_INITIAL,
@@ -954,15 +954,12 @@ function WorkflowCanvasInner({
               ) : undefined
             }
             form={
-              selected && !selected.opaque && selected.kind === "input" ? (
+              selected && !selected.opaque && (selected.kind === "input" || isInputStarter(selected)) ? (
                 <InputFieldsPanel
                   fields={inputFields(selected)}
                   disabled={busy || !editable}
-                  onChange={(fs) => {
-                    const p = fieldsPatch(selected, fs);
-                    // `capture: undefined` removes it once no field is bound.
-                    onPatch({ schema: p.schema, capture: p.capture });
-                  }}
+                  // An emptied variable map comes back `undefined`, removing it.
+                  onChange={(fs) => onPatch(fieldsPatch(selected, fs))}
                 />
               ) : undefined
             }

@@ -6,7 +6,12 @@
 // team: the runtime parses the threaded input as JSON and binds each JSONPath
 // (loomcycle teamrun `captured`), so this works today with no new feature.
 //
-// What Start does depends on what the Input leads to:
+// A Starter whose source is the walk's input (loomcycle #1579) is the same
+// front door in one node: its `schema` is the form, and its `binds` — not
+// `capture` — map the form's fields into variables. Start just runs: the
+// Starter takes the input itself, so nothing is published anywhere.
+//
+// What Start does for an Input STATE depends on what it leads to:
 //   - an agent / parallel state: runTeam({input}) and nothing else;
 //   - a Starter reading a channel: the Starter only reads its channel, so the
 //     form must be ON that channel first. Until loomcycle ships a Starter that
@@ -22,7 +27,8 @@
 //
 // Pure: no React, no network.
 
-import { handlerChannels, handlerOf, type CanvasModel, type CanvasNode, type JsonObject, type XY } from "./model";
+import { handlerChannels, handlerOf, type CanvasModel, type CanvasNode, type Json, type JsonObject, type XY } from "./model";
+import { isInputStarter } from "./validate";
 
 export const PICKER_KEY = "x-loomcycle-picker";
 
@@ -87,19 +93,37 @@ function capturedField(path: unknown): string | undefined {
   return m?.[1];
 }
 
-/** The form an `input` state declares, with each field's variable. */
+/** Which handler map binds the form's fields to variables: a Starter's
+ *  `binds` (over its item), an input state's `capture` (over its output). */
+function mappingKey(n: CanvasNode): "binds" | "capture" {
+  return n.kind === "starter" ? "binds" : "capture";
+}
+
+/** The form an `input` state — or an input-sourced Starter — declares, with
+ *  each field's variable. */
 export function inputFields(n: CanvasNode): InputField[] {
   const h = handlerOf(n);
   const schema = isObj(h.schema) ? h.schema : {};
   const props = isObj(schema.properties) ? schema.properties : {};
   const required = new Set(Array.isArray(schema.required) ? schema.required.filter((r): r is string => typeof r === "string") : []);
-  const capture = isObj(h.capture) ? h.capture : {};
+  const mapping = h[mappingKey(n)];
+  const capture = isObj(mapping) ? mapping : {};
   const variableOf = new Map<string, string>();
   for (const [variable, path] of Object.entries(capture)) {
     const field = capturedField(path);
     if (field && !variableOf.has(field)) variableOf.set(field, variable);
   }
-  return Object.entries(props).map(([name, raw]) => {
+  // Field ORDER: the runtime stores a definition with object keys sorted, so
+  // `properties` comes back alphabetical — chunk_id before the document_id
+  // its picker follows. `required` is a list, and lists keep their order, so
+  // it leads; the remaining fields follow in key order.
+  const requiredOrder = Array.isArray(schema.required) ? schema.required.filter((r): r is string => typeof r === "string") : [];
+  const rank = (name: string) => {
+    const i = requiredOrder.indexOf(name);
+    return i === -1 ? requiredOrder.length : i;
+  };
+  const entries = Object.entries(props).sort(([a], [b]) => rank(a) - rank(b));
+  return entries.map(([name, raw]) => {
     const p = isObj(raw) ? raw : {};
     const type = FIELD_TYPES.includes(p.type as FieldType) ? (p.type as FieldType) : "string";
     return {
@@ -114,11 +138,12 @@ export function inputFields(n: CanvasNode): InputField[] {
   });
 }
 
-/** The `schema` and `capture` an edited field list writes. Everything the
- *  editor does not own is kept: the schema's other keywords, each property's
- *  other keywords (enum, format, …), and capture entries that are not the plain
- *  `$.<field>` form. */
-export function fieldsPatch(n: CanvasNode, fields: readonly InputField[]): { schema: JsonObject; capture?: JsonObject } {
+/** The `schema` and the variable map (`capture`, or a Starter's `binds`) an
+ *  edited field list writes, as a handler patch — a map left empty is
+ *  `undefined`, which removes it. Everything the editor does not own is kept:
+ *  the schema's other keywords, each property's other keywords (enum,
+ *  format, …), and entries that are not the plain `$.<field>` form. */
+export function fieldsPatch(n: CanvasNode, fields: readonly InputField[]): Record<string, Json | undefined> {
   const h = handlerOf(n);
   const prev = isObj(h.schema) ? h.schema : {};
   const prevProps = isObj(prev.properties) ? prev.properties : {};
@@ -138,7 +163,9 @@ export function fieldsPatch(n: CanvasNode, fields: readonly InputField[]): { sch
   const { required: _r, properties: _ps, ...schemaRest } = prev;
   const schema: JsonObject = { ...schemaRest, type: "object", properties, ...(required.length ? { required } : {}) };
 
-  const prevCapture = isObj(h.capture) ? h.capture : {};
+  const key = mappingKey(n);
+  const prevMapping = h[key];
+  const prevCapture = isObj(prevMapping) ? prevMapping : {};
   const owned = new Set(Object.keys(prevProps).concat(fields.map((f) => f.name)));
   const capture: JsonObject = {};
   for (const [variable, path] of Object.entries(prevCapture)) {
@@ -146,7 +173,7 @@ export function fieldsPatch(n: CanvasNode, fields: readonly InputField[]): { sch
     if (!field || !owned.has(field)) capture[variable] = path;
   }
   for (const f of fields) if (f.variable) capture[f.variable] = `$.${f.name}`;
-  return { schema, ...(Object.keys(capture).length ? { capture } : {}) };
+  return { schema, [key]: Object.keys(capture).length ? capture : undefined };
 }
 
 export interface FormResult {
@@ -205,11 +232,14 @@ export interface StartPlan {
   publishTo?: string;
 }
 
-/** What Start does for this model, or undefined when the entry is not an
- *  Input node (the team has no form). */
+/** What Start does for this model, or undefined when the team has no form:
+ *  its entry is neither an Input state nor a Starter reading the walk's input.
+ *  An input-sourced Starter is its own front door: Start only runs. */
 export function startPlan(model: CanvasModel): StartPlan | undefined {
   const entry = model.nodes.find((n) => n.id === model.entry);
-  if (!entry || entry.opaque || entry.kind !== "input") return undefined;
+  if (!entry || entry.opaque) return undefined;
+  if (isInputStarter(entry)) return { input: entry.id };
+  if (entry.kind !== "input") return undefined;
   const out = model.edges.filter((e) => e.from === entry.id);
   const next = (out.find((e) => e.on === "success") ?? out[0])?.to;
   const target = model.nodes.find((n) => n.id === next);
@@ -227,7 +257,9 @@ export function placeInput(
   derived: readonly XY[] = [],
 ): { model: CanvasModel; id: string; existing: boolean } {
   const entry = model.nodes.find((n) => n.id === model.entry);
-  if (entry && entry.kind === "input") return { model, id: entry.id, existing: true };
+  // A Starter reading the walk's input already IS the front door — and the
+  // runtime refuses one that is not the entry, so nothing may go before it.
+  if (entry && (entry.kind === "input" || isInputStarter(entry))) return { model, id: entry.id, existing: true };
   const id = String(raw.state);
   const xs = [...model.nodes.map((n) => n.position.x), ...derived.map((p) => p.x)];
   const position = {

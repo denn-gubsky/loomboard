@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chunkOptions, fieldsPatch, formInput, inputFields, placeInput, startPlan, type InputField } from "./inputForm";
-import { fromDefinition, handlerOf, toDefinition, type CanvasNode } from "./model";
+import { fromDefinition, patchHandler, toDefinition, type CanvasNode } from "./model";
 
 // The pcparts team's form: the expected input is {document_id, chunk_id},
 // both picked rather than typed, both bound as ${var.*}.
@@ -38,6 +38,13 @@ describe("inputFields", () => {
     ]);
   });
 
+  it("orders the form by `required` — the runtime sorts object keys, so properties come back alphabetical", () => {
+    // As TrueNAS stores pcparts v2: chunk_id first. The chunk picker follows
+    // the document field, so the document must be asked for first.
+    const sorted = { ...PCPARTS_SCHEMA, properties: { chunk_id: PCPARTS_SCHEMA.properties.chunk_id, document_id: PCPARTS_SCHEMA.properties.document_id, tone: { type: "string" } } };
+    expect(inputFields(node(team({ schema: sorted }))).map((f) => f.name)).toEqual(["document_id", "chunk_id", "tone"]);
+  });
+
   it("calls a field unbound when no capture reads it, and a plain-text form fieldless", () => {
     expect(inputFields(node(team({ schema: PCPARTS_SCHEMA })))[0].variable).toBeUndefined();
     expect(inputFields(node(team({})))).toEqual([]);
@@ -48,8 +55,7 @@ describe("fieldsPatch", () => {
   it("round-trips: the fields it writes read back as the same fields", () => {
     const m = team({ schema: PCPARTS_SCHEMA, capture: { document_id: "$.document_id", chunk_id: "$.chunk_id" } });
     const fields = inputFields(node(m));
-    const patched = { ...node(m), raw: { ...node(m).raw, handler: { ...handlerOf(node(m)), ...fieldsPatch(node(m), fields) } } };
-    expect(inputFields(patched)).toEqual(fields);
+    expect(inputFields(patchHandler(node(m), fieldsPatch(node(m), fields)))).toEqual(fields);
   });
 
   it("keeps what the editor does not own: other keywords and an author's own capture", () => {
@@ -59,8 +65,9 @@ describe("fieldsPatch", () => {
     });
     const fields: InputField[] = inputFields(node(m)).map((f) => (f.name === "tone" ? { ...f, variable: undefined } : f));
     const p = fieldsPatch(node(m), fields);
-    expect(p.schema.title).toBe("Pick a part");
-    expect((p.schema.properties as Record<string, Record<string, unknown>>).tone.enum).toEqual(["warm", "dry"]);
+    const schema = p.schema as { title: string; properties: Record<string, Record<string, unknown>> };
+    expect(schema.title).toBe("Pick a part");
+    expect(schema.properties.tone.enum).toEqual(["warm", "dry"]);
     // `$` is not a field read: the author's, kept. `$.tone` was the editor's
     // and the field is now unbound: dropped.
     expect(p.capture).toEqual({ whole: "$" });
@@ -152,5 +159,54 @@ describe("chunkOptions", () => {
 
   it("keeps the top-level sections only at depth 1 — the parts, not their research", () => {
     expect(chunkOptions(rows, 1).map((c) => c.id)).toEqual(["cpu", "gpu"]);
+  });
+});
+
+describe("an input-sourced Starter — its own front door (loomcycle #1579)", () => {
+  // pcparts v2: no channels, the entry Starter takes the walk's input.
+  const v2 = fromDefinition({
+    entry: "research",
+    states: [
+      {
+        state: "research",
+        handler: {
+          kind: "starter",
+          source: { kind: "input" },
+          schema: PCPARTS_SCHEMA,
+          fanout: { agent: "r", per: "message", max: 1 },
+          binds: { document_id: "$.document_id", chunk_id: "$.chunk_id" },
+        },
+      },
+      { state: "edit", handler: { kind: "agent", agent: "e" } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [
+      { from: "research", to: "edit", on: "success" },
+      { from: "edit", to: "done", on: "success" },
+    ],
+  });
+  const starter = node(v2, "research");
+
+  it("reads the form from the Starter's schema, and each field's variable from its BINDS", () => {
+    expect(inputFields(starter).map((f) => [f.name, f.variable, f.picker?.kind])).toEqual([
+      ["document_id", "document_id", "document"],
+      ["chunk_id", "chunk_id", "chunk"],
+    ]);
+  });
+
+  it("writes an edited field list back as `binds`, never `capture` — a Starter binds from its item", () => {
+    const fields = inputFields(starter).map((f) => (f.name === "chunk_id" ? { ...f, variable: undefined } : f));
+    const p = fieldsPatch(starter, fields);
+    expect(p.binds).toEqual({ document_id: "$.document_id" });
+    expect("capture" in p).toBe(false);
+    expect(inputFields(patchHandler(starter, p)).find((f) => f.name === "chunk_id")!.variable).toBeUndefined();
+  });
+
+  it("plans Start as a single run: the Starter takes the input, nothing is published", () => {
+    expect(startPlan(v2)).toEqual({ input: "research" });
+  });
+
+  it("puts no Input node in front of it — the runtime refuses one that is not the entry", () => {
+    expect(placeInput(v2, { state: "input-1", handler: { kind: "input" } })).toMatchObject({ existing: true, id: "research" });
   });
 });

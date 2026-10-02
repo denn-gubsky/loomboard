@@ -135,32 +135,59 @@ function validateStarter(h: JsonObject): string[] {
     return ["starter handler names its agents in `fanout`, not in agent/agents/consolidator"];
   }
 
-  const source = obj(h.source);
-  if (!source || !str(source.channel).trim()) {
-    return ["starter handler requires `source.channel` — a starter reads exactly one channel"];
-  }
-  const wait = str(source.wait);
-  switch (wait) {
-    case "":
-    case "any":
-      break;
-    case "at_least":
-      if (num(source.n) < 1) out.push("starter source wait=at_least requires `n` >= 1");
-      break;
-    case "all":
-      // `all` counts CHANNELS, and a starter reads one — so it returns after the
-      // first message. A silent wrong answer, which is why it is refused rather
-      // than normalised to `any`.
-      out.push(
-        'starter source wait="all" counts CHANNELS, and a starter reads ONE — ' +
-          "over one channel it returns after the first message. Use at_least with `n`, or any",
-      );
-      break;
-    default:
-      out.push(`starter source has invalid wait ${JSON.stringify(wait)} (want any|at_least)`);
-  }
-  if (num(source.wait_ms) < 0 || num(source.batch) < 0 || num(source.n) < 0) {
-    out.push("starter source wait_ms/batch/n must be >= 0");
+  // The source's kind decides which fields mean anything (validate.go's
+  // switch): a channel is read with a wait; a document is read once, whole;
+  // the walk's input is there when the walk starts. A field that only another
+  // kind reads is refused, not ignored — it would look configured and do
+  // nothing.
+  const source = obj(h.source) ?? {};
+  const kind = str(source.kind);
+  const isDoc = kind === "document";
+  const isInput = kind === "input";
+  if (isDoc) {
+    const d = validateDocumentSource(h, source);
+    if (d) return [d];
+  } else if (isInput) {
+    const d = validateInputSource(h, source);
+    if (d) return [d];
+  } else if (kind !== "" && kind !== "channel") {
+    return [`starter source has invalid kind ${JSON.stringify(kind)} (want channel|document|input)`];
+  } else {
+    if (!str(source.channel).trim()) {
+      return [
+        "starter handler requires `source.channel` — a starter reads exactly one channel " +
+          "(or, with source.kind: document, one document)",
+      ];
+    }
+    if (str(source.path) || str(source.scope) || str(source.select)) {
+      return [
+        "starter source sets path/scope/select, which only a document source reads — " +
+          "set source.kind: document, or remove them",
+      ];
+    }
+    const wait = str(source.wait);
+    switch (wait) {
+      case "":
+      case "any":
+        break;
+      case "at_least":
+        if (num(source.n) < 1) out.push("starter source wait=at_least requires `n` >= 1");
+        break;
+      case "all":
+        // `all` counts CHANNELS, and a starter reads one — so it returns after the
+        // first message. A silent wrong answer, which is why it is refused rather
+        // than normalised to `any`.
+        out.push(
+          'starter source wait="all" counts CHANNELS, and a starter reads ONE — ' +
+            "over one channel it returns after the first message. Use at_least with `n`, or any",
+        );
+        break;
+      default:
+        out.push(`starter source has invalid wait ${JSON.stringify(wait)} (want any|at_least)`);
+    }
+    if (num(source.wait_ms) < 0 || num(source.batch) < 0 || num(source.n) < 0) {
+      out.push("starter source wait_ms/batch/n must be >= 0");
+    }
   }
 
   const fanout = obj(h.fanout);
@@ -174,7 +201,22 @@ function validateStarter(h: JsonObject): string[] {
   if (hasOne === hasMany) out.push("starter fanout needs exactly one of `agent` or `agents`");
   if (fanAgents.some((a) => !a.trim())) out.push("starter fanout has an empty agent name");
 
+  // per=message and per=chunk each belong to one source kind.
   const per = str(fanout.per);
+  if (isDoc && (per === "" || per === "message")) {
+    out.push(
+      "starter reads a document, which has sections, not messages — " +
+        "set fanout.per to chunk (one run per section) or once (one run holding every section)",
+    );
+    return out;
+  }
+  if (!isDoc && per === "chunk") {
+    out.push(
+      "starter fanout per=chunk needs a document source (source.kind: document); " +
+        "a channel source fans out per=message or per=once",
+    );
+    return out;
+  }
   switch (per) {
     case "":
     case "message":
@@ -185,13 +227,21 @@ function validateStarter(h: JsonObject): string[] {
         );
       }
       break;
+    case "chunk":
+      if (num(fanout.max) < 1) {
+        out.push(
+          "starter fanout per=chunk requires `max` >= 1 — " +
+            "the wave is as wide as the document has sections, so the ceiling is not optional",
+        );
+      }
+      break;
     case "once":
       if (num(fanout.max) !== 0) {
         out.push("starter fanout per=once spawns one run, so `max` means nothing");
       }
       break;
     default:
-      out.push(`starter fanout has invalid per ${JSON.stringify(per)} (want message|once)`);
+      out.push(`starter fanout has invalid per ${JSON.stringify(per)} (want message|once|chunk)`);
   }
   const fanWait = validateWait(str(fanout.wait));
   if (fanWait) out.push(fanWait);
@@ -218,6 +268,75 @@ function validateStarter(h: JsonObject): string[] {
 
   if (binds) out.push(...validateCaptureMap(binds));
   return out;
+}
+
+/** Mirrors validateDocumentSource: a document is read once, whole, at a fixed
+ *  path — so the fields that shape a channel read are refused. */
+function validateDocumentSource(h: JsonObject, src: JsonObject): string | null {
+  if (str(src.channel).trim()) return "starter reads a document, so `source.channel` means nothing — remove it";
+  const p = str(src.path);
+  if (!p.trim()) return "starter document source requires `source.path`";
+  if (!p.startsWith("/") || p === "/") {
+    return `starter document source path ${JSON.stringify(p)} must be an absolute document path, e.g. /specs/acme`;
+  }
+  if (p.includes("${") || p.includes("{{")) {
+    return `starter document source path ${JSON.stringify(p)} must be a fixed path — variables are not supported`;
+  }
+  const scope = str(src.scope);
+  if (scope !== "" && scope !== "user" && scope !== "tenant") {
+    return `starter document source has invalid scope ${JSON.stringify(scope)} (want user|tenant)`;
+  }
+  const select = str(src.select);
+  if (select !== "" && select !== "chunks") {
+    return `starter document source has invalid select ${JSON.stringify(select)} (want chunks)`;
+  }
+  if (str(src.wait) || num(src.n) !== 0 || num(src.wait_ms) !== 0) {
+    return (
+      "starter reads a document, which is read once when the wave dispatches — " +
+      "there is nothing to wait for, so remove source.wait/n/wait_ms"
+    );
+  }
+  if (num(src.batch) !== 0) {
+    return "starter reads a document, which is read whole — remove source.batch (fanout.max bounds the wave)";
+  }
+  if (str(h.ack)) return "starter reads a document, which has no cursor to acknowledge — remove `ack`";
+  return null;
+}
+
+/** Mirrors validateInputSource (loomcycle #1579): the walk's own input, there
+ *  when the walk starts — no channel, no document, nothing to wait for. Its
+ *  placement (entry only) is a graph rule, checked in validateModel. */
+function validateInputSource(h: JsonObject, src: JsonObject): string | null {
+  if (str(src.channel).trim()) {
+    return "starter reads the walk's input, so `source.channel` means nothing — remove it";
+  }
+  if (str(src.path) || str(src.scope) || str(src.select)) {
+    return "starter reads the walk's input, which is no document — remove source.path/scope/select";
+  }
+  if (str(src.wait) || num(src.n) !== 0 || num(src.wait_ms) !== 0) {
+    return (
+      "starter reads the walk's input, which is there when the walk starts — " +
+      "there is nothing to wait for, so remove source.wait/n/wait_ms"
+    );
+  }
+  if (num(src.batch) !== 0) {
+    return "starter reads the walk's input, which is read whole — remove source.batch (fanout.max bounds the wave)";
+  }
+  if (str(h.ack)) return "starter reads the walk's input, which has no cursor to acknowledge — remove `ack`";
+  const fanout = obj(h.fanout);
+  if (fanout && str(fanout.per) === "chunk") {
+    return (
+      "starter fanout per=chunk needs a document source (source.kind: document); " +
+      "an input source fans out per=message (one run per item) or per=once"
+    );
+  }
+  return null;
+}
+
+/** Whether a node is a Starter reading the walk's input (loomcycle #1579). */
+export function isInputStarter(n: CanvasNode): boolean {
+  if (n.opaque || n.kind !== "starter") return false;
+  return str(obj(handlerOf(n).source)?.kind) === "input";
 }
 
 /** Mirrors validateWait: "" | all | any | at_least:<positive int>. */
@@ -358,8 +477,11 @@ function validateHandler(n: CanvasNode): string[] {
         "assignment belongs on a `vars` state, where it is visible",
     );
   }
-  if (n.kind !== "input" && h.schema !== undefined) {
-    out.push(`sets \`schema\` but is kind ${JSON.stringify(n.kind)} (input only)`);
+  if (n.kind !== "input" && h.schema !== undefined && str(obj(h.source)?.kind) !== "input") {
+    out.push(
+      `sets \`schema\` but is kind ${JSON.stringify(n.kind)} ` +
+        "(an input state, or a starter whose source is the walk's input)",
+    );
   }
 
   const timeout = h.timeout_ms;
@@ -409,6 +531,29 @@ export function validateModel(model: CanvasModel): Finding[] {
   if (model.entry.trim() && !byId.has(model.entry)) {
     err(`entry ${JSON.stringify(model.entry)} does not resolve to a state`);
   }
+  // Mirrors validateInputSourcePlacement: the walk's input is read once, at
+  // the start, so a Starter reading it must BE the start — and cannot be
+  // re-entered by a transition, since its items would be the same input.
+  for (const n of model.nodes) {
+    if (isInputStarter(n) && n.id !== model.entry) {
+      err(
+        `state ${JSON.stringify(n.id)} starter reads the walk's input, so it must be the definition's \`entry\` ` +
+          `(entry is ${JSON.stringify(model.entry)})`,
+        { nodeId: n.id },
+      );
+    }
+  }
+  model.edges.forEach((e, i) => {
+    const to = byId.get(e.to);
+    if (to && isInputStarter(to)) {
+      err(
+        `transition[${i}] from ${JSON.stringify(e.from)} on ${JSON.stringify(e.on)} leads into state ${JSON.stringify(e.to)}, ` +
+          "a starter that reads the walk's input — its items are the input the walk was started with, " +
+          "so it cannot be re-entered; route a retry to a later state",
+        { edgeIndex: i },
+      );
+    }
+  });
 
   const maxIter = model.source.max_iterations;
   if (typeof maxIter === "number") {
