@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   emptyWalk,
   foldWalk,
+  liveRunByState,
   pulseLabel,
   rowPhase,
   lastState,
@@ -228,5 +229,18 @@ describe("lastState — the state the walk ran last, by instant", () => {
       row({ runId: "early", state: "s", ts: "2026-10-01T12:36:00+03:00" }),
     ]);
     expect(rowsForState(v, "s").map((r) => r.runId)).toEqual(["early", "late"]);
+  });
+});
+
+describe("liveRunByState — the run Run mode follows on each node", () => {
+  it("is each state's most recent run still going — none for a state whose runs all settled", () => {
+    const v = foldWalk(emptyWalk(WALK), [
+      row({ runId: "r1", state: "research", status: "completed", ts: "2026-10-01T10:00:00Z" }),
+      row({ runId: "w1", state: "write", status: "running", ts: "2026-10-01T10:01:00Z" }),
+      row({ runId: "w2", state: "write", status: "running", ts: "2026-10-01T10:02:00Z", awaited: "review" }),
+    ]);
+    const live = liveRunByState(v);
+    expect([...live.keys()]).toEqual(["write"]);
+    expect(live.get("write")!.runId).toBe("w2");
   });
 });

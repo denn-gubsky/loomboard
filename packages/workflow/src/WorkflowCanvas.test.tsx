@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowCanvas } from "./WorkflowCanvas";
-import type { TeamDefDetail, WorkflowDataLayer } from "./types";
+import type { RunChatTarget, RunLine, TeamDefDetail, WorkflowDataLayer } from "./types";
 import type { WalkRunRow } from "./lib/runs";
 
 // Render smoke tests.
@@ -764,6 +764,61 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     expect(screen.queryByTestId("current-edit")).toBeNull();
     // What it produced stays: the End node keeps the result.
     expect(await screen.findByTestId("result-done")).toBeTruthy();
+  });
+
+  it("shows an active agent's last lines on its node, and opens its conversation in the host's chat on the right", async () => {
+    let push: (rows: WalkRunRow[]) => void = () => undefined;
+    const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {
+      push = onRows;
+      return () => undefined;
+    });
+    let sendLines: (lines: RunLine[]) => void = () => undefined;
+    const stopLines = vi.fn();
+    const watchRunLines = vi.fn((_runId: string, onLines: (lines: RunLine[]) => void) => {
+      sendLines = onLines;
+      return stopLines;
+    });
+    const renderRunChat = vi.fn((run: RunChatTarget) => <div data-testid="host-chat">{`${run.agent} ${run.runId} ${run.live}`}</div>);
+    render(
+      <WorkflowCanvas
+        dataLayer={base({ watchWalk, watchRunLines, runTeamDetached: async () => ({ run_id: "r_walk", status: "running" }) })}
+        teamName="sdlc"
+        renderRunChat={renderRunChat}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(watchWalk).toHaveBeenCalled());
+    const member = (status: string): WalkRunRow => ({
+      runId: "m1",
+      agentId: "a",
+      agent: "marketing/researcher",
+      status,
+      ts: status === "running" ? "2026-10-01T10:01:00Z" : "2026-10-01T10:02:00Z",
+      state: "research",
+      stateVisit: 1,
+    });
+    act(() => push([{ runId: "r_walk", agentId: "w", agent: "team:sdlc", status: "running", ts: "2026-10-01T10:00:00Z" }, member("running")]));
+    await waitFor(() => expect(watchRunLines).toHaveBeenCalledWith("m1", expect.any(Function), expect.any(Function)));
+    act(() => sendLines([{ role: "assistant", kind: "tool", text: "WebSearch" }, { role: "assistant", kind: "text", text: "The 7800X3D leads" }]));
+    const lines = await screen.findByTestId("lines-research");
+    expect(lines.textContent).toContain("⚙ WebSearch");
+    expect(lines.textContent).toContain("The 7800X3D leads");
+
+    // Selecting the state that ran opens ITS run in the host's chat.
+    fireEvent.click(screen.getByTestId("node-research"));
+    expect((await screen.findByTestId("host-chat")).textContent).toBe("marketing/researcher m1 true");
+    // Details is the Inspector, with a way back.
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.queryByTestId("host-chat")).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Conversation" }));
+    expect(await screen.findByTestId("host-chat")).toBeTruthy();
+
+    // The run settles: no longer active, so its follow closes and its lines go.
+    act(() => push([member("completed")]));
+    await waitFor(() => expect(stopLines).toHaveBeenCalled());
+    expect(screen.queryByTestId("lines-research")).toBeNull();
+    // Its conversation is still there to read, now as a finished run.
+    expect((await screen.findByTestId("host-chat")).textContent).toBe("marketing/researcher m1 false");
   });
 
   it("puts the result on the End node the RUNTIME says the walk reached, not the one its success edge leads to (G14)", async () => {

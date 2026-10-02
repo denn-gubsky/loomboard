@@ -14,6 +14,7 @@
 // arbitrary JSON, and pretending otherwise is what the passthrough model
 // exists to avoid.
 
+import type { ReactNode } from "react";
 import type { WalkRunRow } from "./lib/runs";
 import type { ChannelMessage } from "./lib/output";
 
@@ -216,6 +217,11 @@ export interface WorkflowDataLayer {
    *  transitions, until the returned function is called. Rows may arrive in
    *  any order and repeat — lib/runs.ts `foldWalk` is built for that. The
    *  host reconnects on its own; `onError` only reports, it does not stop. */
+  /** Follow ONE member run's conversation while it runs (Run mode's live
+   *  lines on an agent node): the last few lines, re-sent as they change,
+   *  until the returned function is called. */
+  watchRunLines?(runId: string, onLines: (lines: RunLine[]) => void, onError?: (e: unknown) => void): () => void;
+
   watchWalk?(
     walkRunId: string,
     onRows: (rows: WalkRunRow[]) => void,
@@ -264,4 +270,26 @@ export interface WorkflowCanvasProps {
   /** Palette default and light/dark. Defaults to the ancestor's data-theme. */
   theme?: "dark" | "light";
   className?: string;
+  /** Run mode: the host's chat for one member run, shown on the right when a
+   *  state that ran is selected. The package has no chat of its own — a host
+   *  renders its transcript and composer. Without it, the Inspector shows. */
+  renderRunChat?: (run: RunChatTarget) => ReactNode;
+}
+
+/** One line of a run's conversation, compact: a user turn, or one part of an
+ *  assistant turn (its text, a tool it called, its thinking). */
+export interface RunLine {
+  role: "user" | "assistant";
+  kind: "text" | "tool" | "thinking" | "notice";
+  text: string;
+}
+
+/** The member run a host chat is opened on. */
+export interface RunChatTarget {
+  runId: string;
+  agent: string;
+  /** The state that started it. */
+  state: string;
+  /** Still running: a message reaches the agent mid-run. */
+  live: boolean;
 }

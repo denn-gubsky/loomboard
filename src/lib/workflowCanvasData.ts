@@ -9,6 +9,11 @@ import type {
 } from "@loomboard/workflow";
 import { queryChunks, queryDocuments } from "./workflowApi";
 import { hookNamesOf } from "@loomboard/workflow";
+import { runLineFolder } from "./runLines";
+import type { PreviewLine } from "./tilePreview";
+
+/** How often a run's lines may redraw its node at most. */
+const LINES_COALESCE_MS = 250;
 import { watchWalk } from "./walkWatch";
 
 // loomboard's binding of @loomboard/workflow's injected data layer to
@@ -86,6 +91,38 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
     // the caller's own user, which is where a walk's runs are filed since
     // loomcycle 1.101 (gap G9; before it, every walk ran as `http-admin`).
     watchWalk: (walkRunId, onRows, onError) => watchWalk(client, selfUserId, walkRunId, onRows, onError),
+
+    // A member run's last few lines for its node (Run mode). The stream
+    // replays the run from its start, then tails it until it ends; updates
+    // are coalesced, since a replay — and a model streaming text — arrive in
+    // bursts that would otherwise redraw the canvas per token.
+    watchRunLines(runId, onLines, onError) {
+      const ac = new AbortController();
+      const fold = runLineFolder();
+      let pending: PreviewLine[] | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const flush = () => {
+        timer = undefined;
+        if (pending) onLines(pending);
+        pending = undefined;
+      };
+      (async () => {
+        for await (const ev of client.streamRunByID(runId, { signal: ac.signal })) {
+          const lines = fold.push(ev);
+          if (!lines) continue;
+          pending = lines;
+          timer ??= setTimeout(flush, LINES_COALESCE_MS);
+        }
+        if (timer) clearTimeout(timer);
+        flush();
+      })().catch((e) => {
+        if (!ac.signal.aborted) onError?.(e);
+      });
+      return () => {
+        ac.abort();
+        if (timer) clearTimeout(timer);
+      };
+    },
 
     async readRun(runId) {
       const a = await client.getRun(runId);

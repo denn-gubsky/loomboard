@@ -35,6 +35,39 @@ describe("workflowDataLayer — run and channel reads", () => {
     expect(d.error).toBeUndefined();
   });
 
+  it("watchRunLines follows one run's stream into its last lines, coalescing a burst into one update", async () => {
+    const frames = [
+      { type: "agent", run_id: "m1", session_id: "s1" },
+      { type: "text", text: "Hel" },
+      { type: "text", text: "lo" },
+    ];
+    const streamRunByID = vi.fn(async function* () {
+      for (const f of frames) yield f;
+    });
+    const got: unknown[] = [];
+    workflowDataLayer(client({ streamRunByID })).watchRunLines!("m1", (lines) => got.push(lines));
+    await vi.waitFor(() => expect(got.length).toBeGreaterThan(0));
+    expect(streamRunByID).toHaveBeenCalledWith("m1", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    // The two deltas arrived together: one update, with the whole text.
+    expect(got).toEqual([[{ role: "assistant", kind: "text", text: "Hello" }]]);
+  });
+
+  it("watchRunLines stops following when told to, and does not report the abort as an error", async () => {
+    let signal: AbortSignal | undefined;
+    const streamRunByID = vi.fn(async function* (_id: string, o: { signal: AbortSignal }) {
+      signal = o.signal;
+      yield { type: "text", text: "x" };
+      await new Promise((_, reject) => o.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+    });
+    const onError = vi.fn();
+    const stop = workflowDataLayer(client({ streamRunByID })).watchRunLines!("m1", () => undefined, onError);
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    stop();
+    expect(signal!.aborted).toBe(true);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("readRunPrompt flattens text blocks and NAMES an image rather than dropping it", async () => {
     const getRunPrompt = vi.fn(async () => ({
       run_id: "r1",

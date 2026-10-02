@@ -995,3 +995,57 @@
     animation: none;
   }
 }
+
+/* ---- Run mode: a run's live lines on its node, and its conversation ---- */
+.loomboard-workflow .lb-wf-node__lines {
+  margin: 6px 0 0;
+  padding: 5px 6px;
+  list-style: none;
+  border-radius: 5px;
+  background: var(--lb-wf-surface);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.loomboard-workflow .lb-wf-node__line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.loomboard-workflow .lb-wf-node__line--user {
+  font-weight: 600;
+}
+.loomboard-workflow .lb-wf-node__line--tool,
+.loomboard-workflow .lb-wf-node__line--thinking {
+  color: var(--lb-wf-muted);
+  font-style: italic;
+}
+/* The right column in Run mode: wider than the Inspector, since it holds a
+ * transcript, and the host's chat fills it. */
+.loomboard-workflow .lb-wf-runchat {
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  flex: none;
+  min-height: 0;
+  border-left: 1px solid var(--lb-wf-border);
+  background: var(--lb-wf-surface);
+}
+.loomboard-workflow .lb-wf-runchat__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--lb-wf-border);
+}
+.loomboard-workflow .lb-wf-runchat__head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.loomboard-workflow .lb-wf-runchat__body,
+.loomboard-workflow .lb-wf-runchat__chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}

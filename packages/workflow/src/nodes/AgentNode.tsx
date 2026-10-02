@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { AGENT_HANDLE, type AgentFlowData } from "../lib/flow";
+import { RunLines } from "./RunLines";
 
 // The agent a Starter dispatches, drawn in the data row between the Starter
 // and the channel its results go to (C2 amended). It is the Starter's fan-out,
@@ -9,7 +10,7 @@ import { AGENT_HANDLE, type AgentFlowData } from "../lib/flow";
 // runs hold the output (RFC DI / DJ).
 
 export function AgentNode({ data, selected }: NodeProps) {
-  const { view, pulse, held, progress } = data as unknown as AgentFlowData;
+  const { view, pulse, held, progress, lines } = data as unknown as AgentFlowData;
   const classes = [
     "lb-wf-node",
     "lb-wf-node--agentref",
@@ -42,6 +43,7 @@ export function AgentNode({ data, selected }: NodeProps) {
             {pulse}
           </div>
         )}
+        {lines && <RunLines lines={lines} testId={`lines-${view.state}`} />}
       </div>
       {/* The Starter's transitions leave here: its outcome is these runs'
           results. A drag from it to a state adds one (lib/channelWiring.ts). */}

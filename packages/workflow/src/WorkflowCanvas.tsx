@@ -15,6 +15,8 @@ import { newStateRaw, type PaletteEntry } from "./lib/palette";
 import { fieldsPatch, inputFields, placeInput, startFindings, startPlan, type FormResult } from "./lib/inputForm";
 import { InputDialog } from "./InputDialog";
 import { walkProgress, type WalkProgress } from "./lib/progress";
+import { useRunLines } from "./useRunLines";
+import { RunChatColumn } from "./RunChatColumn";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
 import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
 import {
@@ -33,6 +35,7 @@ import {
 import { bindingFindings, bindingNodes } from "./lib/bindings";
 import {
   emptyWalk,
+  liveRunByState,
   foldWalk,
   isTerminal,
   pulseLabel,
@@ -92,6 +95,7 @@ function WorkflowCanvasInner({
   onSaved,
   theme,
   className,
+  renderRunChat,
 }: WorkflowCanvasProps) {
   const [model, setModel] = useState<CanvasModel | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -285,6 +289,13 @@ function WorkflowCanvasInner({
   const pulses = useMemo(() => (walk ? statePulses(walk) : undefined), [walk]);
   // Where a RUNNING walk is; none once it has ended (lib/progress.ts).
   const progress = useMemo(() => (model ? walkProgress(model, walk) : undefined), [model, walk]);
+  // The run going in each state, followed live on its node. Empty once the
+  // walk has ended, which closes every follow and clears the lines.
+  const liveRuns = useMemo(() => (walk ? liveRunByState(walk) : new Map<string, WalkRunRow>()), [walk]);
+  const runLines = useRunLines(dataLayer.watchRunLines, liveRuns);
+  // Run mode's right column: the selected state's conversation, or Details.
+  const [sideTab, setSideTab] = useState<"chat" | "details">("chat");
+  useEffect(() => setSideTab("chat"), [selectedId]);
   // What Start does, when the team begins with an Input node.
   const plan = useMemo(() => (model ? startPlan(model) : undefined), [model]);
   const unsaved = useMemo(() => !!model && contentKey(model) !== savedKey.current, [model]);
@@ -323,18 +334,24 @@ function WorkflowCanvasInner({
                     : n,
             ).map((n) => {
               const p = progressOf(progress, n.id);
-              return p ? { ...n, data: { ...n.data, progress: p, current: p === "active" } } : n;
+              // A Starter's lines show on its agent node, where the run is.
+              const lines = dispatchesAgent(n.data.node) ? undefined : runLines.get(n.id);
+              return p || lines
+                ? { ...n, data: { ...n.data, ...(p ? { progress: p, current: p === "active" } : {}), ...(lines ? { lines } : {}) } }
+                : n;
             }),
             ...toAgentFlowNodes(agentViews, selectedId, measured).map((n) => {
               const state = n.data.view.state;
               const p = progressOf(progress, state);
-              return pulses?.has(state) || p
+              const lines = runLines.get(state);
+              return pulses?.has(state) || p || lines
                 ? {
                     ...n,
                     data: {
                       ...n.data,
                       ...(pulses?.has(state) ? { pulse: pulseLabel(pulses.get(state)), held: pulses.get(state)!.held } : {}),
                       ...(p ? { progress: p } : {}),
+                      ...(lines ? { lines } : {}),
                     },
                   }
                 : n;
@@ -343,7 +360,7 @@ function WorkflowCanvasInner({
             ...toBindingFlowNodes(bindingViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses, progress, endedAt, result, plan, canRun, openStart],
+    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses, progress, runLines, endedAt, result, plan, canRun, openStart],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
@@ -919,7 +936,15 @@ function WorkflowCanvasInner({
           </ReactFlow>
         </div>
 
-        {!readonly && (
+        {!readonly && renderRunChat && walk && selected && sideTab === "chat" && rowsForState(walk, selected.id).length > 0 ? (
+          <RunChatColumn
+            key={selected.id}
+            state={selected.id}
+            rows={rowsForState(walk, selected.id)}
+            renderRunChat={renderRunChat}
+            onDetails={() => setSideTab("details")}
+          />
+        ) : !readonly && (
           <Inspector
             node={selected}
             findings={findings}
@@ -936,11 +961,18 @@ function WorkflowCanvasInner({
             binding={bindingViews.find((v) => v.id === selectedId) ?? null}
             runs={
               walk && selected ? (
-                <RunsPanel
-                  rows={rowsForState(walk, selected.id)}
-                  readRun={dataLayer.readRun}
-                  readRunPrompt={dataLayer.readRunPrompt}
-                />
+                <>
+                  {renderRunChat && rowsForState(walk, selected.id).length > 0 && (
+                    <button type="button" className="lb-wf-btn" onClick={() => setSideTab("chat")}>
+                      Conversation
+                    </button>
+                  )}
+                  <RunsPanel
+                    rows={rowsForState(walk, selected.id)}
+                    readRun={dataLayer.readRun}
+                    readRunPrompt={dataLayer.readRunPrompt}
+                  />
+                </>
               ) : undefined
             }
             form={
