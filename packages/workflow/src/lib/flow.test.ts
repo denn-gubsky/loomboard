@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_HANDLE,
   HANDLE,
+  markTaken,
   edgeClass,
   edgeId,
   fanoutSummary,
@@ -505,5 +506,26 @@ describe("an Input's `publish` — the walk's input, put on a channel (loomcycle
     const m = team();
     expect(toDataEdges(channelNodes(m)).some((x) => x.source === "form")).toBe(false);
     expect(followsData(m, "form", "research")).toBe(false);
+  });
+});
+
+describe("markTaken", () => {
+  it("marks only the transitions a walk took — never a data edge", () => {
+    const m = fromDefinition({
+      entry: "a",
+      states: [
+        { state: "a", handler: { kind: "agent", agent: "x" } },
+        { state: "b", handler: { kind: "agent", agent: "y" } },
+        { state: "done", handler: { kind: "terminal" } },
+      ],
+      transitions: [
+        { from: "a", to: "b", on: "success" },
+        { from: "b", to: "a", on: "pushback:redo" },
+        { from: "b", to: "done", on: "success" },
+      ],
+    });
+    const edges = markTaken(toFlowEdges(m, []), new Set(["a success b"]));
+    expect(edges.filter((e) => e.className?.includes("lb-wf-edge--taken")).map((e) => e.id)).toEqual(["a success b"]);
+    expect(markTaken(edges, undefined)).toBe(edges);
   });
 });

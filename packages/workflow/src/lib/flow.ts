@@ -53,6 +53,10 @@ export interface FlowNodeData {
   /** How many of this state's runs are held for review — drawn louder, since
    *  a hold waits for a person. */
   held?: number;
+  /** While a walk runs: where it is (lib/progress.ts). `current` marks an
+   *  active state — the walk's position, drawn above the node. */
+  progress?: "active" | "passed";
+  current?: boolean;
   /** End nodes only: what the walk that finished here produced. */
   result?: ResultItem[];
   /** The entry Input node only, when a walk can be started: opens Start. */
@@ -320,6 +324,13 @@ export function followsData(model: CanvasModel, from: string, to: string): boole
   return !!sink && handlerChannels(b).source === sink;
 }
 
+/** Marks the transitions a running walk has taken: bolder, and green. The
+ *  arrowhead is `context-stroke`, so it follows the class. */
+export function markTaken(edges: FlowEdge[], taken: ReadonlySet<string> | undefined): FlowEdge[] {
+  if (!taken?.size) return edges;
+  return edges.map((e) => (e.data?.kind === "control" && taken.has(e.id) ? { ...e, className: `${e.className} lb-wf-edge--taken` } : e));
+}
+
 /** A transition's label: the step it takes, `research → edit`, plus its
  *  route when that is not plain `success` (`review → code · pushback:redo`).
  *  Named for the states because a transition beside a data row is otherwise
@@ -489,6 +500,8 @@ export interface AgentFlowData {
    *  run (lib/runs.ts). */
   pulse?: string;
   held?: number;
+  /** Its Starter's place in a running walk (lib/progress.ts). */
+  progress?: "active" | "passed";
   [k: string]: unknown;
 }
 

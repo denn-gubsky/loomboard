@@ -878,3 +878,116 @@
   display: flex;
   gap: 6px;
 }
+
+/* ---- Run mode: where a running walk is (lib/progress.ts) ----
+ *
+ * Active: a light, saturated blue that moves (a wave) and pulses (a flash).
+ * Passed: a light, saturated green. Taken transitions: bolder, green. All of
+ * it disappears when the walk ends — the progress is computed only while it
+ * runs. The fills are bright in both themes, so a coloured node switches to
+ * dark text and lets its inner panels show through.
+ */
+.loomboard-workflow {
+  --lb-wf-run-active: #38bdf8;
+  --lb-wf-run-active-hi: #bae6fd;
+  --lb-wf-run-active-edge: #0284c7;
+  --lb-wf-run-passed: #6ee7a0;
+  --lb-wf-run-passed-edge: #16a34a;
+  --lb-wf-run-taken: #22e06b;
+}
+.loomboard-workflow .lb-wf-node.is-active,
+.loomboard-workflow .lb-wf-node.is-passed {
+  --lb-wf-fg: #0b1a2a;
+  --lb-wf-muted: #23384a;
+  --lb-wf-surface: rgb(255 255 255 / 45%);
+  /* The run count, ENTRY badge and handles are accent-coloured: dark enough
+     to read on either fill. */
+  --lb-wf-accent: #0b4f8a;
+  --lb-wf-conditional: #9a3412;
+  color: #0b1a2a;
+}
+.loomboard-workflow .lb-wf-node.is-active {
+  border-color: var(--lb-wf-run-active-edge);
+  /* Same colour at both ends of one 400px tile, so the scroll loops seamlessly. */
+  background-image: linear-gradient(
+    100deg,
+    var(--lb-wf-run-active) 0%,
+    var(--lb-wf-run-active-hi) 25%,
+    var(--lb-wf-run-active) 50%,
+    var(--lb-wf-run-active-hi) 75%,
+    var(--lb-wf-run-active) 100%
+  );
+  background-size: 400px 100%;
+  background-repeat: repeat-x;
+  animation:
+    lb-wf-run-wave 2.4s linear infinite,
+    lb-wf-run-flash 1.4s ease-in-out infinite;
+}
+.loomboard-workflow .lb-wf-node.is-passed {
+  border-color: var(--lb-wf-run-passed-edge);
+  background: var(--lb-wf-run-passed);
+}
+@keyframes lb-wf-run-wave {
+  from {
+    background-position-x: 0;
+  }
+  to {
+    background-position-x: 400px;
+  }
+}
+@keyframes lb-wf-run-flash {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--lb-wf-run-active-edge),
+      0 0 10px 2px rgb(56 189 248 / 45%);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--lb-wf-run-active-edge),
+      0 0 22px 7px rgb(56 189 248 / 85%);
+  }
+}
+/* The walk's position: above the node, outside its box. Positioned against
+ * xyflow's node wrapper, which is already absolutely placed. */
+.loomboard-workflow .lb-wf-node__marker {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, -8px);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--lb-wf-run-active-edge);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: lb-wf-run-bob 1.4s ease-in-out infinite;
+}
+@keyframes lb-wf-run-bob {
+  0%,
+  100% {
+    transform: translate(-50%, -8px);
+  }
+  50% {
+    transform: translate(-50%, -12px);
+  }
+}
+/* After the quiet "follows" rule above, so a taken step is never faint. */
+.loomboard-workflow .lb-wf-edge--taken .react-flow__edge-path {
+  stroke: var(--lb-wf-run-taken);
+  stroke-width: 3;
+  stroke-dasharray: none;
+  opacity: 1;
+}
+.loomboard-workflow .lb-wf-edge--taken .react-flow__edge-text {
+  fill: var(--lb-wf-run-passed-edge);
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loomboard-workflow .lb-wf-node.is-active,
+  .loomboard-workflow .lb-wf-node__marker {
+    animation: none;
+  }
+}

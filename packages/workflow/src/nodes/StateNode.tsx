@@ -29,7 +29,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
-  const { node, agents, wait, consolidator, channels, fanout, assigns, hooks, isEntry, findings, pulse, held, result, start } = d;
+  const { node, agents, wait, consolidator, channels, fanout, assigns, hooks, isEntry, findings, pulse, held, result, start, progress, current } = d;
   // A Starter reading the walk's input is the team's front door, like an
   // Input state: it shows the form and Start.
   const readsInput = isInputStarter(node);
@@ -54,12 +54,20 @@ export function StateNode({ data, selected }: NodeProps) {
     `lb-wf-node--${node.opaque ? "opaque" : node.kind || "unset"}`,
     selected ? "is-selected" : "",
     errors.length ? "has-error" : "",
+    progress ? `is-${progress}` : "",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
     <div className={classes} data-testid={`node-${node.id}`}>
+      {/* Where a running walk is: a marker above the node, outside its box so
+          it never covers the face. */}
+      {current && (
+        <div className="lb-wf-node__marker" data-testid={`current-${node.id}`} aria-label="the walk is here">
+          ▼ now
+        </div>
+      )}
       {/* Three handle pairs, one per relation. A forward CONTROL edge runs
           right → left across the row; a BACKWARD one (any pushback loop) runs
           through the bottom pair, so it arcs below the row rather than curving

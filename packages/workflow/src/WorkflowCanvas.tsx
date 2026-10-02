@@ -14,6 +14,7 @@ import { Palette } from "./Palette";
 import { newStateRaw, type PaletteEntry } from "./lib/palette";
 import { fieldsPatch, inputFields, placeInput, startFindings, startPlan, type FormResult } from "./lib/inputForm";
 import { InputDialog } from "./InputDialog";
+import { walkProgress, type WalkProgress } from "./lib/progress";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
 import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
 import {
@@ -24,6 +25,7 @@ import {
   toBindingFlowNodes,
   toChannelFlowNodes,
   toDataEdges,
+  markTaken,
   toFlowEdges,
   toFlowNodes,
   visibleEdges,
@@ -281,6 +283,8 @@ function WorkflowCanvasInner({
   const agentViewsRef = useRef(agentViews);
   agentViewsRef.current = agentViews;
   const pulses = useMemo(() => (walk ? statePulses(walk) : undefined), [walk]);
+  // Where a RUNNING walk is; none once it has ended (lib/progress.ts).
+  const progress = useMemo(() => (model ? walkProgress(model, walk) : undefined), [model, walk]);
   // What Start does, when the team begins with an Input node.
   const plan = useMemo(() => (model ? startPlan(model) : undefined), [model]);
   const unsaved = useMemo(() => !!model && contentKey(model) !== savedKey.current, [model]);
@@ -317,17 +321,29 @@ function WorkflowCanvasInner({
                   : plan && n.id === plan.input
                     ? { ...n, data: { ...n.data, ...(canRun ? { start: openStart } : {}) } }
                     : n,
-            ),
-            ...toAgentFlowNodes(agentViews, selectedId, measured).map((n) =>
-              pulses?.has(n.data.view.state)
-                ? { ...n, data: { ...n.data, pulse: pulseLabel(pulses.get(n.data.view.state)), held: pulses.get(n.data.view.state)!.held } }
-                : n,
-            ),
+            ).map((n) => {
+              const p = progressOf(progress, n.id);
+              return p ? { ...n, data: { ...n.data, progress: p, current: p === "active" } } : n;
+            }),
+            ...toAgentFlowNodes(agentViews, selectedId, measured).map((n) => {
+              const state = n.data.view.state;
+              const p = progressOf(progress, state);
+              return pulses?.has(state) || p
+                ? {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      ...(pulses?.has(state) ? { pulse: pulseLabel(pulses.get(state)), held: pulses.get(state)!.held } : {}),
+                      ...(p ? { progress: p } : {}),
+                    },
+                  }
+                : n;
+            }),
             ...toChannelFlowNodes(channelViews, selectedId, measured),
             ...toBindingFlowNodes(bindingViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses, endedAt, result, plan, canRun, openStart],
+    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses, progress, endedAt, result, plan, canRun, openStart],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
@@ -341,14 +357,14 @@ function WorkflowCanvasInner({
       model
         ? visibleEdges(
             [
-              ...toFlowEdges(model, findings),
+              ...markTaken(toFlowEdges(model, findings), progress?.taken),
               ...toDataEdges(channelViews, agentViews),
               ...toBindingEdges(bindingViews),
             ],
             showTransitions,
           )
         : [],
-    [model, findings, channelViews, bindingViews, agentViews, showTransitions],
+    [model, findings, channelViews, bindingViews, agentViews, showTransitions, progress],
   );
 
   const selected = useMemo(
@@ -960,6 +976,11 @@ function WorkflowCanvasInner({
 
 /** The canvas. Wrapped in ReactFlowProvider so a host can mount more than one
  *  without their viewports fighting. */
+/** A state's place in a running walk, for its node's colour. */
+function progressOf(p: WalkProgress | undefined, id: string): "active" | "passed" | undefined {
+  return p?.active.has(id) ? "active" : p?.passed.has(id) ? "passed" : undefined;
+}
+
 export function WorkflowCanvas(props: WorkflowCanvasProps) {
   return (
     <ReactFlowProvider>
