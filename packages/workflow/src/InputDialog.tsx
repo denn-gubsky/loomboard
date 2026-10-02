@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { chunkOptions, formInput, type ChunkOption, type FormResult, type InputField, type StartPlan } from "./lib/inputForm";
+import { chunkOptions, formInput, type ChunkOption, type FormResult, type InputField } from "./lib/inputForm";
 import type { DocumentOption, WorkflowDataLayer } from "./types";
 
 // The Start dialog of the Input node (RFC CZ "The Input node"): the team's
@@ -13,7 +13,6 @@ import type { DocumentOption, WorkflowDataLayer } from "./types";
 
 export interface InputDialogProps {
   fields: InputField[];
-  plan: StartPlan;
   listDocuments?: WorkflowDataLayer["listDocuments"];
   listChunks?: WorkflowDataLayer["listChunks"];
   busy?: boolean;
@@ -26,7 +25,7 @@ export interface InputDialogProps {
 
 type Values = Record<string, string | boolean | undefined>;
 
-export function InputDialog({ fields, plan, listDocuments, listChunks, busy, blocked, error, onStart, onClose }: InputDialogProps) {
+export function InputDialog({ fields, listDocuments, listChunks, busy, blocked, error, onStart, onClose }: InputDialogProps) {
   const [values, setValues] = useState<Values>({});
   const [plain, setPlain] = useState("");
   const [shown, setShown] = useState<Record<string, string>>({});
@@ -50,14 +49,7 @@ export function InputDialog({ fields, plan, listDocuments, listChunks, busy, blo
       <header className="lb-wf-start__head">
         <strong>Start</strong>
         <span className="lb-wf-team__hint">
-          {plan.publishTo ? (
-            <>
-              {" "}— publishes the form to <code>{plan.publishTo}</code>, which <code>{plan.next}</code> reads, then runs
-              the saved version
-            </>
-          ) : (
-            <> — runs the saved version with this input</>
-          )}
+          {" "}— runs the saved version with this input
         </span>
         <span className="lb-wf-toolbar__spacer" />
         <button type="button" className="lb-wf-btn" onClick={onClose}>

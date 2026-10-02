@@ -800,7 +800,7 @@ describe("WorkflowCanvas — the Input node (RFC CZ)", () => {
     { from: "research", to: "edit", on: "success" },
     { from: "edit", to: "done", on: "success" },
   ];
-  const channelsAcl = { subscribe: ["pcparts-in", "handoff"], publish: ["handoff", "articles"] };
+  const channelsAcl = { subscribe: ["pcparts-in", "handoff"], publish: ["pcparts-in", "handoff", "articles"] };
   const withForm = {
     entry: "form",
     channels: channelsAcl,
@@ -815,6 +815,7 @@ describe("WorkflowCanvas — the Input node (RFC CZ)", () => {
             properties: { document_id: { type: "string", title: "Document" }, chunk_id: { type: "string", title: "Part" } },
           },
           capture: { document_id: "$.document_id", chunk_id: "$.chunk_id" },
+          publish: { channel: "pcparts-in" },
         },
       },
       ...states,
@@ -840,7 +841,9 @@ describe("WorkflowCanvas — the Input node (RFC CZ)", () => {
     expect(screen.getByTestId("node-input-1").textContent).toContain("entry");
   });
 
-  it("starts pcparts from its form: puts {document_id, chunk_id} on the Starter's channel, then runs with it", async () => {
+  it("starts pcparts from its form with ONE run — the Input's `publish` puts the form on the channel, not the browser", async () => {
+    // Regression: Start published {document_id, chunk_id} from the browser,
+    // then ran (G15's stopgap). The runtime does it now (loomcycle #1577).
     const publishChannel = vi.fn(async () => undefined);
     const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
     render(<WorkflowCanvas dataLayer={layerFor(withForm, { publishChannel, runTeamDetached })} teamName="pcparts" />);
@@ -851,10 +854,11 @@ describe("WorkflowCanvas — the Input node (RFC CZ)", () => {
     fireEvent.change(screen.getByLabelText(/Part/), { target: { value: "gpu" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     await waitFor(() => expect(runTeamDetached).toHaveBeenCalled());
-    expect(publishChannel).toHaveBeenCalledWith("pcparts-in", { document_id: "doc-parts", chunk_id: "gpu" }, { scope: "user" });
     expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d1", input: JSON.stringify({ document_id: "doc-parts", chunk_id: "gpu" }) });
-    // Published BEFORE the walk is asked to read it.
-    expect(publishChannel.mock.invocationCallOrder[0]).toBeLessThan(runTeamDetached.mock.invocationCallOrder[0]);
+    expect(publishChannel).not.toHaveBeenCalled();
+    // Drawn from the definition, and valid: nothing to fix before Start.
+    expect(screen.queryByText(/\d+ problems?/)).toBeNull();
+    expect(screen.getByTestId("node-form").textContent).toContain("pcparts-in");
   });
 
   it("refuses to Start while the graph differs from the saved version — Start would run the old one", async () => {

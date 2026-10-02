@@ -12,7 +12,6 @@ import {
   toDataEdges,
   toFlowEdges,
   toFlowNodes,
-  toStartEdges,
   visibleEdges,
 } from "./flow";
 import { fromDefinition } from "./model";
@@ -481,32 +480,30 @@ describe("hookLabels (RFC DK-P4c)", () => {
   });
 });
 
-describe("toStartEdges — what the Input node's Start does", () => {
-  const m = fromDefinition({
-    entry: "form",
-    states: [
-      { state: "form", handler: { kind: "input" } },
-      { state: "research", handler: { kind: "starter", source: { channel: "pcparts-in" }, fanout: { agent: "r", max: 1 } } },
-    ],
-    transitions: [{ from: "form", to: "research", on: "success" }],
-  });
-
-  it("draws Start publishing the form to the channel the next Starter reads", () => {
-    const [e] = toStartEdges(m, channelNodes(m));
-    expect([e.source, e.target, e.label]).toEqual(["form", "channel:pcparts-in", "Start publishes"]);
-    expect(e.deletable).toBe(false);
-  });
-
-  it("treats Input → Starter as following that data, so it is drawn quietly", () => {
-    expect(followsData(m, "form", "research")).toBe(true);
-  });
-
-  it("draws nothing when the Input leads to an agent — Start only runs", () => {
-    const agentTeam = fromDefinition({
+describe("an Input's `publish` — the walk's input, put on a channel (loomcycle #1577)", () => {
+  const team = (publish?: string) =>
+    fromDefinition({
       entry: "form",
-      states: [{ state: "form", handler: { kind: "input" } }, { state: "w", handler: { kind: "agent", agent: "w" } }],
-      transitions: [{ from: "form", to: "w", on: "success" }],
+      states: [
+        { state: "form", handler: { kind: "input", ...(publish ? { publish: { channel: publish } } : {}) } },
+        { state: "research", handler: { kind: "starter", source: { channel: "pcparts-in" }, fanout: { agent: "r", max: 1 } } },
+      ],
+      transitions: [{ from: "form", to: "research", on: "success" }],
     });
-    expect(toStartEdges(agentTeam, channelNodes(agentTeam))).toEqual([]);
+
+  it("is drawn as an ordinary data edge, Input → channel — it is the definition, not the canvas acting", () => {
+    const m = team("pcparts-in");
+    const e = toDataEdges(channelNodes(m)).find((x) => x.source === "form");
+    expect([e?.target, e?.sourceHandle, e?.className]).toEqual(["channel:pcparts-in", HANDLE.dataOut, "lb-wf-edge lb-wf-edge--data"]);
+  });
+
+  it("makes Input → Starter follow that data, so the transition is drawn quietly", () => {
+    expect(followsData(team("pcparts-in"), "form", "research")).toBe(true);
+  });
+
+  it("draws nothing from an Input that publishes nowhere", () => {
+    const m = team();
+    expect(toDataEdges(channelNodes(m)).some((x) => x.source === "form")).toBe(false);
+    expect(followsData(m, "form", "research")).toBe(false);
   });
 });

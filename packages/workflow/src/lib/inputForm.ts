@@ -11,14 +11,12 @@
 // `capture` — map the form's fields into variables. Start just runs: the
 // Starter takes the input itself, so nothing is published anywhere.
 //
-// What Start does for an Input STATE depends on what it leads to:
-//   - an agent / parallel state: runTeam({input}) and nothing else;
-//   - a Starter reading a channel: the Starter only reads its channel, so the
-//     form must be ON that channel first. Until loomcycle ships a Starter that
-//     takes the walk's input (G15 Ask A), the canvas publishes the form there
-//     from the browser, then runs — the same two calls the publish composer
-//     makes. The plan below names the channel so both the button and the
-//     graph can say so.
+// Start only runs, whatever the Input leads to. In front of a Starter that
+// reads a channel, the form must be ON that channel: the Input state's own
+// `publish: {channel}` (loomcycle #1577) has the runtime put the walk's input
+// there, so it is part of the definition — drawn and wired like any other
+// channel reference, and granted by the team's ACL. A new Input placed in
+// front of such a Starter gets it set; one without it is flagged.
 //
 // Pickers come from `x-loomcycle-picker` on a property (G15 Ask C, the name
 // loomcycle adopted): `document` lists documents, `chunk` lists the chunks of
@@ -28,7 +26,7 @@
 // Pure: no React, no network.
 
 import { handlerChannels, handlerOf, type CanvasModel, type CanvasNode, type Json, type JsonObject, type XY } from "./model";
-import { isInputStarter } from "./validate";
+import { isInputStarter, type Finding } from "./validate";
 
 export const PICKER_KEY = "x-loomcycle-picker";
 
@@ -227,9 +225,6 @@ export interface StartPlan {
   input: string;
   /** The state it leads to on success. */
   next?: string;
-  /** The channel the form must be on before the walk starts: the next
-   *  state's source when that is a Starter (browser-side until G15 Ask A). */
-  publishTo?: string;
 }
 
 /** What Start does for this model, or undefined when the team has no form:
@@ -242,9 +237,30 @@ export function startPlan(model: CanvasModel): StartPlan | undefined {
   if (entry.kind !== "input") return undefined;
   const out = model.edges.filter((e) => e.from === entry.id);
   const next = (out.find((e) => e.on === "success") ?? out[0])?.to;
-  const target = model.nodes.find((n) => n.id === next);
-  const publishTo = target && !target.opaque && target.kind === "starter" ? handlerChannels(target).source : undefined;
-  return { input: entry.id, ...(next ? { next } : {}), ...(publishTo ? { publishTo } : {}) };
+  return { input: entry.id, ...(next ? { next } : {}) };
+}
+
+/** Canvas advice, not a runtime rule: an Input in front of a Starter that
+ *  reads a channel should publish there, or Start leaves the Starter waiting
+ *  for a message nothing in the walk sends. The runtime accepts it — another
+ *  publisher may feed that channel — so it is `info`, never a block. */
+export function startFindings(model: CanvasModel): Finding[] {
+  const plan = startPlan(model);
+  const input = model.nodes.find((n) => n.id === plan?.input);
+  const next = model.nodes.find((n) => n.id === plan?.next);
+  if (!input || input.kind !== "input" || !next || next.opaque || next.kind !== "starter") return [];
+  const reads = handlerChannels(next).source;
+  if (!reads || handlerChannels(input).sink === reads) return [];
+  return [
+    {
+      level: "info",
+      nodeId: input.id,
+      message:
+        `state ${JSON.stringify(input.id)} leads to ${JSON.stringify(next.id)}, which reads channel ${JSON.stringify(reads)}, ` +
+        "but does not publish the input there — Start would leave it waiting. Drag this node's top handle to the channel " +
+        "to set `publish`.",
+    },
+  ];
 }
 
 /** Where a new Input node goes and what it is wired to: it becomes the entry,
@@ -266,7 +282,17 @@ export function placeInput(
     x: (xs.length ? Math.min(...xs) : 0) - 280,
     y: entry ? entry.position.y : 0,
   };
-  const node: CanvasNode = { id, kind: "input", opaque: false, position, raw };
+  // In front of a Starter that reads a channel, the form must go ON it: the
+  // runtime publishes the walk's input there (see the header).
+  const reads = entry && !entry.opaque && entry.kind === "starter" ? handlerChannels(entry).source : undefined;
+  const handler = typeof raw.handler === "object" && raw.handler !== null && !Array.isArray(raw.handler) ? raw.handler : {};
+  const node: CanvasNode = {
+    id,
+    kind: "input",
+    opaque: false,
+    position,
+    raw: reads ? { ...raw, handler: { ...handler, publish: { channel: reads } } } : raw,
+  };
   const edges = entry
     ? [...model.edges, { from: id, to: entry.id, on: "success", raw: { from: id, to: entry.id, on: "success" } }]
     : model.edges;

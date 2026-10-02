@@ -20,8 +20,8 @@
     "than the runtime. Any case where they differ must say why in why_divergent.",
     "",
     "VERIFIED: every go_valid below was checked by RUNNING these cases through",
-    "loomcycle's own json decoder + teamgraph.Validate at tag v1.99.0 \u2014 not by",
-    "hand, and not by reading the validator. All 115 agree; the hook cases",
+    "loomcycle's own json decoder + teamgraph.Validate at tag v1.102.0 \u2014 not by",
+    "hand, and not by reading the validator. All 146 agree; the hook cases",
     "(RFC DK) were added and run on 2026-09-28. Decoding counts:",
     "several hook shapes are refused while unmarshalling, before Validate runs.",
     "",
@@ -4847,6 +4847,427 @@
                 "per": "message",
                 "max": 1
               }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input publishes the walk's input to a channel",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "input",
+              "publish": {
+                "channel": "pcparts-in"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input publish alongside schema and capture",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "input",
+              "schema": {
+                "type": "object"
+              },
+              "capture": {
+                "part": "$.part"
+              },
+              "publish": {
+                "channel": "pcparts-in"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input publish null is no publish",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "input",
+              "publish": null
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input publish naming no channel",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "input",
+              "publish": {}
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input publish with a blank channel",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "input",
+              "publish": {
+                "channel": "  "
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "publish on an agent state",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "publish": {
+                "channel": "c"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "publish on a channel state",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "channel",
+              "channel": "c",
+              "publish": {
+                "channel": "c"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "publish on a starter",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "in"
+              },
+              "fanout": {
+                "agent": "a",
+                "max": 1
+              },
+              "publish": {
+                "channel": "c"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel payload raw",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "channel",
+              "channel": "c",
+              "payload": "raw"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel payload envelope",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "channel",
+              "channel": "c",
+              "payload": "envelope"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel payload not envelope or raw",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "channel",
+              "channel": "c",
+              "payload": "json"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "payload on an input state",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "input",
+              "payload": "raw"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "payload on an agent state",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "a",
+              "payload": "raw"
             }
           },
           {

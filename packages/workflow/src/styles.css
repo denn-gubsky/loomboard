@@ -816,21 +816,6 @@
   margin-top: 6px;
   width: 100%;
 }
-/* Start putting the form on a channel: the canvas acting (browser-side until
- * loomcycle G15 Ask A), not the definition — so dashed. */
-.loomboard-workflow .lb-wf-edge--start .react-flow__edge-path {
-  stroke: var(--lb-wf-data);
-  stroke-width: 1.5;
-  stroke-dasharray: 5 4;
-}
-.loomboard-workflow .lb-wf-edge--start {
-  pointer-events: none;
-}
-.loomboard-workflow .lb-wf-edge--start .react-flow__edge-text {
-  fill: var(--lb-wf-data);
-  font-size: 10px;
-}
-
 /* The Start dialog — a panel above the graph, like the publish composer. */
 .loomboard-workflow .lb-wf-start {
   padding: 10px;

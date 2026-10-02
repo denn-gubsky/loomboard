@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InputDialog } from "./InputDialog";
-import type { FormResult, InputField, StartPlan } from "./lib/inputForm";
+import type { FormResult, InputField } from "./lib/inputForm";
 
 afterEach(cleanup);
 
@@ -11,7 +11,6 @@ const FIELDS: InputField[] = [
   { name: "document_id", title: "Document", type: "string", required: true, picker: { kind: "document", scope: "user", underPath: "/loomboard/tests" }, variable: "document_id" },
   { name: "chunk_id", title: "Part", type: "string", required: true, picker: { kind: "chunk", document: "document_id", depth: 1 }, variable: "chunk_id" },
 ];
-const PLAN: StartPlan = { input: "form", next: "research", publishTo: "pcparts-in" };
 
 const listDocuments = vi.fn(async () => [
   { id: "doc-parts", title: "PC Parts Catalog" },
@@ -31,7 +30,7 @@ const listChunks = vi.fn(async (documentId: string) =>
 const dialog = (o: Partial<Parameters<typeof InputDialog>[0]> = {}) => {
   const onStart = vi.fn((_f: FormResult) => undefined);
   render(
-    <InputDialog fields={FIELDS} plan={PLAN} listDocuments={listDocuments} listChunks={listChunks} onStart={onStart} onClose={() => undefined} {...o} />,
+    <InputDialog fields={FIELDS} listDocuments={listDocuments} listChunks={listChunks} onStart={onStart} onClose={() => undefined} {...o} />,
   );
   return onStart;
 };
@@ -68,9 +67,9 @@ describe("InputDialog", () => {
     expect(await screen.findByText("required")).toBeTruthy();
   });
 
-  it("says where Start puts the form, and refuses while blocked", () => {
+  it("says Start runs the saved version, and refuses while blocked", () => {
     const onStart = dialog({ blocked: "Save a new version first" });
-    expect(screen.getByRole("dialog").textContent).toContain("pcparts-in");
+    expect(screen.getByRole("dialog").textContent).toContain("runs the saved version");
     expect((screen.getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(true);
     expect(onStart).not.toHaveBeenCalled();
   });

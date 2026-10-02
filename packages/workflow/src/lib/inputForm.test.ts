@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { chunkOptions, fieldsPatch, formInput, inputFields, placeInput, startPlan, type InputField } from "./inputForm";
-import { fromDefinition, patchHandler, toDefinition, type CanvasNode } from "./model";
+import { chunkOptions, fieldsPatch, formInput, inputFields, placeInput, startFindings, startPlan, type InputField } from "./inputForm";
+import { fromDefinition, handlerOf, patchHandler, toDefinition, type CanvasNode } from "./model";
 
 // The pcparts team's form: the expected input is {document_id, chunk_id},
 // both picked rather than typed, both bound as ${var.*}.
@@ -101,8 +101,8 @@ describe("formInput", () => {
 });
 
 describe("startPlan", () => {
-  it("publishes to the channel the next Starter reads — the pcparts case, browser-side until G15 Ask A", () => {
-    expect(startPlan(team({ schema: PCPARTS_SCHEMA }))).toEqual({ input: "form", next: "research", publishTo: "pcparts-in" });
+  it("only runs, even in front of a Starter reading a channel — the Input's `publish` puts the form there", () => {
+    expect(startPlan(team({ schema: PCPARTS_SCHEMA, publish: { channel: "pcparts-in" } }))).toEqual({ input: "form", next: "research" });
   });
 
   it("only runs when the Input leads to an agent, and has no plan without an Input entry", () => {
@@ -123,6 +123,19 @@ describe("startPlan", () => {
   });
 });
 
+describe("startFindings", () => {
+  it("says when an Input leads to a channel Starter it does not publish to — Start would leave it waiting", () => {
+    const [f] = startFindings(team({ schema: PCPARTS_SCHEMA }));
+    expect(f).toMatchObject({ level: "info", nodeId: "form" });
+    expect(f.message).toContain('reads channel "pcparts-in"');
+  });
+
+  it("is quiet once the Input publishes there, and for a team with no channel Starter after its Input", () => {
+    expect(startFindings(team({ publish: { channel: "pcparts-in" } }))).toEqual([]);
+    expect(startFindings(team())).toEqual([]);
+  });
+});
+
 describe("placeInput", () => {
   it("makes a new Input the ENTRY, wired into the old entry — never a loose, unreachable state", () => {
     // Regression: the palette dropped it loose — "unreachable from entry" and
@@ -133,6 +146,8 @@ describe("placeInput", () => {
     expect(model.entry).toBe("input-1");
     expect(model.edges.some((e) => e.from === id && e.to === "research" && e.on === "success")).toBe(true);
     expect(toDefinition(model).entry).toBe("input-1");
+    // In front of a Starter reading a channel, it publishes the form there.
+    expect(handlerOf(model.nodes.find((n) => n.id === id)!).publish).toEqual({ channel: "pcparts-in" });
     // Left of everything drawn, so it reads first.
     expect(model.nodes.find((n) => n.id === id)!.position.x).toBeLessThan(Math.min(...m.nodes.map((n) => n.position.x)));
   });
