@@ -94,6 +94,7 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
         status: a.status,
         finalText: a.result?.final_text,
         structured: a.result?.structured,
+        terminal: a.result?.terminal,
         error: a.error ?? undefined,
         stopReason: a.stop_reason ?? undefined,
         startedAt: a.started_at,

@@ -124,6 +124,9 @@ export interface RunDetail {
   finalText?: string;
   /** The output_format result, when the run had one. */
   structured?: Record<string, unknown>;
+  /** A walk's run only: the End (terminal) state it reached. Absent when the
+   *  walk failed or was cancelled, and on every agent run. */
+  terminal?: string;
   error?: string;
   stopReason?: string;
   startedAt?: string;
