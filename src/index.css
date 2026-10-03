@@ -616,6 +616,39 @@ button {
   flex: 1;
   min-height: 0;
 }
+/* The canvas's Run-mode chat for one member run (RunChatPane), inside the
+   package's right column. <Chat> fills only a flex column (see .wf-pane-chat). */
+.run-chat-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.run-chat-pane__note {
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+.run-chat-pane__error {
+  margin: 0.5rem 0.7rem;
+  color: var(--danger, #dc2626);
+}
+.run-chat-pane__chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+/* As in .wf-pane-chat: without it .loomchat refuses to shrink below the whole
+   transcript, so its message list never scrolls (and so never follows the
+   tail) — the pane just clips it. */
+.run-chat-pane__chat .loomchat {
+  min-height: 0;
+}
 
 /* ---- workflow board (RFC BT P4 — the live agentic-team cockpit) ---- */
 .workflow-pane {

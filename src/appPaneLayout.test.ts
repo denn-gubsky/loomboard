@@ -106,3 +106,16 @@ describe("embedded component sizing", () => {
     expect(minHeightZero, `${sel} needs min-height: 0`).toContain(sel);
   });
 });
+
+describe("a hosted <Chat> scrolls", () => {
+  // .loomchat is flex: 1 without min-height: 0, so inside a flex column it
+  // refuses to shrink below its whole transcript: the message list then never
+  // scrolls — and never follows the tail. Every pane that hosts one has to
+  // let it shrink.
+  const HOSTS = ["wf-pane-chat", "run-chat-pane__chat"];
+  const minHeightZero = selectorsDeclaring("min-height", "0");
+
+  it.each(HOSTS)(".%s lets its .loomchat shrink, so the transcript scrolls", (host) => {
+    expect(minHeightZero, `.${host} .loomchat needs min-height: 0`).toContain(`.${host} .loomchat`);
+  });
+});

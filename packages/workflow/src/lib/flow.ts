@@ -24,6 +24,7 @@ import type { ChannelNodeView } from "./channelNodes";
 import type { BindingNodeView } from "./bindings";
 import { agentNodeId, dispatchesAgent, type AgentNodeView } from "./agentNodes";
 import type { ResultItem } from "./output";
+import type { RunLine } from "../types";
 
 /** Which relation an edge represents. `control` is a transition the operator
  *  drew; `data` is derived from channel wiring and is never draggable. */
@@ -57,6 +58,8 @@ export interface FlowNodeData {
    *  active state — the walk's position, drawn above the node. */
   progress?: "active" | "passed";
   current?: boolean;
+  /** An agent state with a run going: that run's last few lines, live. */
+  lines?: RunLine[];
   /** End nodes only: what the walk that finished here produced. */
   result?: ResultItem[];
   /** The entry Input node only, when a walk can be started: opens Start. */
@@ -502,6 +505,8 @@ export interface AgentFlowData {
   held?: number;
   /** Its Starter's place in a running walk (lib/progress.ts). */
   progress?: "active" | "passed";
+  /** The run going on it: its last few lines, live. */
+  lines?: RunLine[];
   [k: string]: unknown;
 }
 

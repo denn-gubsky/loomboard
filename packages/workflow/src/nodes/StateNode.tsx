@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { HANDLE, type FlowNodeData } from "../lib/flow";
+import { RunLines } from "./RunLines";
 import { promptFields } from "../lib/bindings";
 import { inputFields } from "../lib/inputForm";
 import { isInputStarter } from "../lib/validate";
@@ -29,7 +30,8 @@ const KIND_LABEL: Record<string, string> = {
 
 export function StateNode({ data, selected }: NodeProps) {
   const d = data as unknown as FlowNodeData;
-  const { node, agents, wait, consolidator, channels, fanout, assigns, hooks, isEntry, findings, pulse, held, result, start, progress, current } = d;
+  const { node, agents, wait, consolidator, channels, fanout, assigns, hooks, isEntry, findings, pulse, held, result, start, progress, current, lines } =
+    d;
   // A Starter reading the walk's input is the team's front door, like an
   // Input state: it shows the form and Start.
   const readsInput = isInputStarter(node);
@@ -173,6 +175,7 @@ export function StateNode({ data, selected }: NodeProps) {
               {pulse}
             </div>
           )}
+          {lines && <RunLines lines={lines} testId={`lines-${node.id}`} />}
           {!inRow && channels.sink && (
             <div className="lb-wf-node__channel lb-wf-node__channel--out" title={`publishes to ${channels.sink}`}>
               → {channels.sink}

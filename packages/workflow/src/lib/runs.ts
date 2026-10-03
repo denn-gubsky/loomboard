@@ -204,6 +204,18 @@ export function rowsForState(view: WalkView, state: string): WalkRunRow[] {
     );
 }
 
+/** Each state's most recent run that is still going — the one Run mode
+ *  follows live on its node. */
+export function liveRunByState(view: WalkView): Map<string, WalkRunRow> {
+  const out = new Map<string, WalkRunRow>();
+  for (const r of view.members.values()) {
+    if (!r.state || isTerminal(r.status)) continue;
+    const cur = out.get(r.state);
+    if (!cur || instantMs(r.ts) >= instantMs(cur.ts)) out.set(r.state, r);
+  }
+  return out;
+}
+
 /** The state the walk ran LAST — its most recent member, by instant (never
  *  by spelling: the listing and the stream write different offsets, see
  *  instantMs). Undefined before any member ran. */

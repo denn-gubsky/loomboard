@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { WorkflowCanvas, type TeamSummary } from "@loomboard/workflow";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { WorkflowCanvas, type RunChatTarget, type TeamSummary } from "@loomboard/workflow";
 import "@loomboard/workflow/styles.css";
-import { useLoomcycle } from "../../state/connection";
+import { useConnection, useLoomcycle } from "../../state/connection";
+import { buildConnection } from "../../lib/buildConnection";
+import { RunChatPane } from "./RunChatPane";
 import { workflowDataLayer } from "../../lib/workflowCanvasData";
 
 // The Canvas surface (RFC CZ P0): a graph editor for TeamDef workflows.
@@ -11,12 +13,21 @@ import { workflowDataLayer } from "../../lib/workflowCanvasData";
 // integrated into loomcycle's own console, so if the injected data layer is
 // awkward to bind we find out in this file rather than in the other repo.
 //
-// Deliberately thin: team selection and nothing else. Everything about the
-// graph — editing, validation, layout, save — belongs to the package.
+// Deliberately thin: team selection, plus the one thing the package cannot
+// carry — a chat for a member run in Run mode. Everything about the graph —
+// editing, validation, layout, save — belongs to the package.
 
 export default function CanvasArea() {
   const client = useLoomcycle();
   const dataLayer = useMemo(() => workflowDataLayer(client), [client]);
+  // Run mode's chat for a member run: the app's own <Chat>, which the package
+  // does not carry (it renders whatever the host gives it).
+  const { settings } = useConnection();
+  const connection = useMemo(() => (settings ? buildConnection(settings) : null), [settings]);
+  const renderRunChat = useCallback(
+    (target: RunChatTarget) => (connection ? <RunChatPane connection={connection} client={client} target={target} /> : null),
+    [connection, client],
+  );
 
   const [teams, setTeams] = useState<TeamSummary[]>([]);
   const [selected, setSelected] = useState<string>();
@@ -76,6 +87,7 @@ export default function CanvasArea() {
           dataLayer={dataLayer}
           teamName={selected}
           onSaved={() => setReloadKey((k) => k + 1)}
+          renderRunChat={connection ? renderRunChat : undefined}
         />
       ) : (
         !loading && (
