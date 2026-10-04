@@ -124,9 +124,16 @@ export const CHANNEL_LAYOUT_PREFIX = "channel:";
 export const BINDING_LAYOUT_PREFIX = "binding:";
 /** The layout key prefix a Starter's agent node uses (lib/agentNodes.ts). */
 export const AGENT_LAYOUT_PREFIX = "agent:";
+/** The layout key prefix variable nodes use (lib/variables.ts). */
+export const VARIABLE_LAYOUT_PREFIX = "var:";
 /** Every prefix whose `layout.nodes` keys belong to a derived node, not a
  *  state — kept across a save that rebuilds the layout from the states. */
-export const DERIVED_LAYOUT_PREFIXES = [CHANNEL_LAYOUT_PREFIX, BINDING_LAYOUT_PREFIX, AGENT_LAYOUT_PREFIX] as const;
+export const DERIVED_LAYOUT_PREFIXES = [
+  CHANNEL_LAYOUT_PREFIX,
+  BINDING_LAYOUT_PREFIX,
+  AGENT_LAYOUT_PREFIX,
+  VARIABLE_LAYOUT_PREFIX,
+] as const;
 
 export function isDerivedLayoutKey(key: string): boolean {
   return DERIVED_LAYOUT_PREFIXES.some((p) => key.startsWith(p));
