@@ -116,7 +116,6 @@ export function StateNode({ data, selected }: NodeProps) {
           position={Position.Bottom}
           className="lb-wf-handle lb-wf-handle--binding"
           style={{ left: "25%" }}
-          isConnectable={false}
         />
       )}
       {/* Nothing feeds a Starter that reads the walk's input: no channel. */}

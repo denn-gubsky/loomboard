@@ -46,7 +46,9 @@ export function BindingNode({ data, selected }: NodeProps) {
       <div className="lb-wf-node__body">
         <div className="lb-wf-node__meta">{delivered}</div>
         <div className="lb-wf-node__meta">
-          read by {readers.length} node{readers.length === 1 ? "" : "s"}
+          {readers.length
+            ? `read by ${readers.length} node${readers.length === 1 ? "" : "s"}`
+            : "not wired yet — drag the top handle onto a node"}
         </div>
         {view.templated && (
           <div className="lb-wf-node__meta" title="The ref contains ${…}: what it names is decided per run">
@@ -64,7 +66,6 @@ export function BindingNode({ data, selected }: NodeProps) {
         type="source"
         position={Position.Top}
         className="lb-wf-handle lb-wf-handle--binding"
-        isConnectable={false}
       />
     </div>
   );

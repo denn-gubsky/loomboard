@@ -21,9 +21,70 @@ export interface PaletteProps {
   /** Declared channel names, offered as suggestions — free text is still
    *  allowed, because a team may be authored before its channels exist. */
   channelNames?: readonly string[];
+  /** Place a Document or Memory node by name; returns why it cannot, if so.
+   *  Absent: those entries are shown and not offered. */
+  onPlaceBinding?: (kind: "document" | "memory", ref: string) => string | undefined;
 }
 
-export function Palette({ onPlace, disabled, onPlaceChannel, channelNames }: PaletteProps) {
+/** A Document / Memory entry: a name first, then the node. */
+function BindingPick({
+  entry,
+  disabled,
+  onPlaceBinding,
+}: {
+  entry: PaletteEntry;
+  disabled?: boolean;
+  onPlaceBinding?: PaletteProps["onPlaceBinding"];
+}) {
+  const [open, setOpen] = useState(false);
+  const [ref, setRef] = useState("");
+  const [error, setError] = useState<string>();
+  const kind = entry.binding!;
+  return (
+    <div className="lb-wf-palette__ref">
+      <button
+        type="button"
+        className="lb-wf-palette__item"
+        title={entry.hint}
+        disabled={disabled || !onPlaceBinding}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        {entry.label}
+      </button>
+      {open && onPlaceBinding && (
+        <form
+          className="lb-wf-palette__pick"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const why = onPlaceBinding(kind, ref);
+            setError(why);
+            if (!why) {
+              setRef("");
+              setOpen(false);
+            }
+          }}
+        >
+          <input
+            className="lb-wf-input"
+            aria-label={`${entry.label} name`}
+            placeholder={kind === "document" ? "/path or id, #Heading" : "core_blocks, key:…, search:…"}
+            value={ref}
+            onChange={(e) => setRef(e.target.value)}
+            spellCheck={false}
+            autoFocus
+          />
+          <button type="submit" className="lb-wf-btn" disabled={!ref.trim()}>
+            Place
+          </button>
+          {error && <div className="lb-wf-finding lb-wf-finding--error">{error}</div>}
+        </form>
+      )}
+    </div>
+  );
+}
+
+export function Palette({ onPlace, disabled, onPlaceChannel, channelNames, onPlaceBinding }: PaletteProps) {
   const [picking, setPicking] = useState(false);
   const [name, setName] = useState("");
   const place = () => {
@@ -38,7 +99,9 @@ export function Palette({ onPlace, disabled, onPlaceChannel, channelNames }: Pal
         <section key={group} className="lb-wf-palette__group">
           <h3 className="lb-wf-palette__title">{group}</h3>
           {entriesInGroup(group).map((entry) =>
-            entry.reference ? (
+            entry.binding ? (
+              <BindingPick key={entry.id} entry={entry} disabled={disabled} onPlaceBinding={onPlaceBinding} />
+            ) : entry.reference ? (
               <div key={entry.id} className="lb-wf-palette__ref">
                 <button
                   type="button"

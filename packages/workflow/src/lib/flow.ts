@@ -561,8 +561,8 @@ export interface BindingFlowNode {
   selected?: boolean;
   measured?: { width: number; height: number };
   /** Derived from a prompt's text: removed by editing the prompt. */
-  deletable: false;
-  connectable: false;
+  deletable: boolean;
+  connectable: true;
 }
 
 export function toBindingFlowNodes(
@@ -575,8 +575,10 @@ export function toBindingFlowNodes(
     type: "binding" as const,
     position: v.position,
     selected: v.id === selectedId,
-    deletable: false as const,
-    connectable: false as const,
+    // One nothing reads is only a placed position: it can be deleted. One a
+    // prompt names exists because of that prompt.
+    deletable: v.readers.length === 0,
+    connectable: true as const,
     data: { view: v },
     ...(measured?.[v.id] ? { measured: measured[v.id] } : {}),
   }));
@@ -623,7 +625,7 @@ export interface VariableFlowNode {
   data: VariableFlowData;
   selected?: boolean;
   deletable: false;
-  connectable: false;
+  connectable: true;
   measured?: { width: number; height: number };
 }
 
@@ -638,7 +640,7 @@ export function toVariableFlowNodes(
     position: v.position,
     selected: v.id === selectedId,
     deletable: false as const,
-    connectable: false as const,
+    connectable: true as const,
     data: { view: v },
     ...(measured?.[v.id] ? { measured: measured[v.id] } : {}),
   }));
