@@ -607,6 +607,10 @@ button {
   text-align: center;
   color: var(--text-dim);
 }
+.explorer-pane__bar {
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
 
 .library-pane > .loomcycle-library,
 .explorer-pane > .loomcycle-explorer,

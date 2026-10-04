@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { channelNodes } from "./channelNodes";
 import { fromDefinition } from "./model";
-import { latestMessages, messageText, outputChannels, walkResult } from "./output";
+import { latestMessages, messageText, chunkIdOf, outputChannels, walkResult } from "./output";
 
 describe("outputChannels — derived, not configured", () => {
   const m = fromDefinition({
@@ -86,5 +86,18 @@ describe("walkResult", () => {
 
   it("keeps markup as text — it is model output", () => {
     expect(walkResult('<img src=x onerror="x()">')[0].text).toBe('<img src=x onerror="x()">');
+  });
+});
+
+describe("chunkIdOf", () => {
+  it("reads a chunk id from an answer that is one, or ends in one", () => {
+    expect(chunkIdOf("b5b0ab5251a91c49cf2e6411acf2050a")).toBe("b5b0ab5251a91c49cf2e6411acf2050a");
+    expect(chunkIdOf("Saved the article.\nb5b0ab5251a91c49cf2e6411acf2050a\n")).toBe("b5b0ab5251a91c49cf2e6411acf2050a");
+  });
+
+  it("is not fooled by prose, a short id, or an id mid-sentence", () => {
+    expect(chunkIdOf("The article is ready.")).toBeUndefined();
+    expect(chunkIdOf("b5b0ab52")).toBeUndefined();
+    expect(chunkIdOf("see b5b0ab5251a91c49cf2e6411acf2050a for it")).toBeUndefined();
   });
 });

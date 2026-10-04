@@ -196,6 +196,8 @@ export type { IssueLevel, Preflight, PreflightInput, PublishIssue } from "./lib/
 export type {
   CanvasMode,
   ChannelInfo,
+  ChunkContent,
+  DocumentTarget,
   DetachedRun,
   PublishOutcome,
   RunChatTarget,

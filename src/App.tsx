@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Library } from "@loomcycle/library";
-import { PathExplorer } from "@loomcycle/explorer";
+import { DocumentViewer, PathExplorer, type DocScope } from "@loomcycle/explorer";
+import type { DocumentTarget } from "@loomboard/workflow";
 import { MemoryView } from "@loomcycle/memory-view";
 import { Loomboard } from "@loomcycle/loomboard";
 import { ConnectionProvider, useConnection } from "./state/connection";
@@ -103,13 +104,36 @@ function LibraryArea() {
 // The Path VFS + chunked-graph Document explorer (@loomcycle/explorer). Same
 // connection/principal seam as the Library. Documents need SQL Memory enabled
 // server-side; when it's off the component surfaces the refusal via onError.
-function DocumentsArea() {
+//
+// `target` is one document another surface asked for (the canvas's "Open in
+// Documents" on a result): it opens straight in the viewer, by id — a document
+// id does not say where it sits in the Path tree, so the explorer cannot be
+// pointed at it.
+function DocumentsArea({ target, onClearTarget }: { target?: DocumentTarget; onClearTarget: () => void }) {
   const { settings, principal } = useConnection();
   const connection = useMemo<Connection | null>(
     () => (settings ? buildConnection(settings) : null),
     [settings],
   );
   if (!connection) return null;
+  if (target) {
+    return (
+      <section className="explorer-pane">
+        <header className="explorer-pane__bar">
+          <button type="button" onClick={onClearTarget}>
+            ← All documents
+          </button>
+        </header>
+        <DocumentViewer
+          connection={connection}
+          documentId={target.documentId}
+          scope={(target.scope ?? "user") as DocScope}
+          titleHint={target.title}
+          principal={principal ?? undefined}
+        />
+      </section>
+    );
+  }
   return (
     <section className="explorer-pane">
       <PathExplorer
@@ -178,6 +202,17 @@ function BoardArea() {
 function AppShell() {
   const { capabilities } = useConnection();
   const [view, setView] = useState<SidebarView>("chat");
+  // A document the canvas asked the Documents view to show. Picking any view
+  // from the rail drops it, so Documents opens on the explorer as usual.
+  const [docTarget, setDocTarget] = useState<DocumentTarget>();
+  const changeView = useCallback((v: SidebarView) => {
+    setDocTarget(undefined);
+    setView(v);
+  }, []);
+  const openDocument = useCallback((t: DocumentTarget) => {
+    setDocTarget(t);
+    setView("documents");
+  }, []);
   // Dev-only preview of the agent-tile board via `?board` — no nav entry yet.
   const devBoard =
     import.meta.env.DEV &&
@@ -195,13 +230,13 @@ function AppShell() {
     <ConversationsProvider>
       <ActiveChatProvider>
         <div className="app-shell">
-          <Sidebar view={view} onViewChange={setView} />
+          <Sidebar view={view} onViewChange={changeView} />
           {devBoard ? (
             <BoardArea />
           ) : showLibrary ? (
             <LibraryArea />
           ) : showDocuments ? (
-            <DocumentsArea />
+            <DocumentsArea target={docTarget} onClearTarget={() => setDocTarget(undefined)} />
           ) : showMemory ? (
             <MemoryArea />
           ) : showBoards ? (
@@ -209,7 +244,7 @@ function AppShell() {
           ) : showWorkflow ? (
             <WorkflowArea />
           ) : showCanvas ? (
-            <CanvasArea />
+            <CanvasArea onOpenDocument={openDocument} />
           ) : (
             <ChatArea />
           )}

@@ -1049,3 +1049,38 @@
   flex: 1;
   min-height: 0;
 }
+
+/* ---- the End node's result, in full (inspector/ResultPanel.tsx) ---- */
+.loomboard-workflow .lb-wf-result {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--lb-wf-border);
+}
+.loomboard-workflow .lb-wf-result__item + .lb-wf-result__item {
+  margin-top: 10px;
+}
+.loomboard-workflow .lb-wf-result__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0;
+}
+.loomboard-workflow .lb-wf-result__body {
+  margin: 0;
+  padding: 8px;
+  max-height: 46vh;
+  overflow: auto;
+  border: 1px solid var(--lb-wf-border);
+  border-radius: 5px;
+  background: var(--lb-wf-bg);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.loomboard-workflow .lb-wf-result__id {
+  display: block;
+  margin-top: 4px;
+  color: var(--lb-wf-muted);
+  font-size: 11px;
+}

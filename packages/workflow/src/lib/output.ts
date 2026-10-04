@@ -52,6 +52,14 @@ export function latestMessages(messages: readonly ChannelMessage[], limit = 10):
     .slice(0, limit);
 }
 
+/** The Document chunk an answer names, when it is one: its last line is a
+ *  bare chunk id (32 hex digits). Teams that write to a Document answer with
+ *  the id of what they wrote, sometimes after a line of preamble. */
+export function chunkIdOf(text: string): string | undefined {
+  const last = text.trim().split("\n").pop()?.trim() ?? "";
+  return /^[0-9a-f]{32}$/.test(last) ? last : undefined;
+}
+
 /** One entry of a walk's result, as the End node shows it. */
 export interface ResultItem {
   agent?: string;

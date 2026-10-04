@@ -7,7 +7,7 @@ import type {
   TeamSummary,
   WorkflowDataLayer,
 } from "@loomboard/workflow";
-import { queryChunks, queryDocuments } from "./workflowApi";
+import { getChunk, queryChunks, queryDocuments } from "./workflowApi";
 import { hookNamesOf } from "@loomboard/workflow";
 import { runLineFolder } from "./runLines";
 import type { PreviewLine } from "./tilePreview";
@@ -140,6 +140,21 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
         inputTokens: a.usage?.input_tokens,
         outputTokens: a.usage?.output_tokens,
       };
+    },
+
+    // A result that names a chunk: the team's own documents first (user
+    // scope), then the tenant's. The scope found goes back with the chunk so
+    // "Open in Documents" opens the same store.
+    async readChunk(id) {
+      for (const scope of ["user", "tenant"] as const) {
+        try {
+          const c = await getChunk(client, scope, id);
+          return { id: c.id, title: c.title, body: c.body ?? "", documentId: c.document_id, scope };
+        } catch (e) {
+          if (scope === "tenant") throw e;
+        }
+      }
+      throw new Error("unreachable");
     },
 
     async readRunPrompt(runId) {

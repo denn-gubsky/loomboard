@@ -68,6 +68,16 @@ describe("workflowDataLayer — run and channel reads", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("readChunk finds a chunk in the user's documents, else the tenant's, and says which", async () => {
+    const document = vi.fn(async (input: { scope: string; id: string }) => {
+      if (input.scope === "user") throw new Error("not found");
+      return { id: input.id, title: "T", body: "B", document_id: "d1", position: 0 };
+    });
+    const c = await workflowDataLayer(client({ document })).readChunk!("c1");
+    expect(c).toEqual({ id: "c1", title: "T", body: "B", documentId: "d1", scope: "tenant" });
+    expect(document.mock.calls.map((x) => x[0].scope)).toEqual(["user", "tenant"]);
+  });
+
   it("readRunPrompt flattens text blocks and NAMES an image rather than dropping it", async () => {
     const getRunPrompt = vi.fn(async () => ({
       run_id: "r1",
