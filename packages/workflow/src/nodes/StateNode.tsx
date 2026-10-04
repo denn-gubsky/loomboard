@@ -67,7 +67,7 @@ export function StateNode({ data, selected }: NodeProps) {
           it never covers the face. */}
       {current && (
         <div className="lb-wf-node__marker" data-testid={`current-${node.id}`} aria-label="the walk is here">
-          ▼ now
+          ▼ now – {node.id}
         </div>
       )}
       {/* Three handle pairs, one per relation. A forward CONTROL edge runs
