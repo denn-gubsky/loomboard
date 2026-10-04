@@ -441,6 +441,34 @@
 .loomboard-workflow .lb-wf-edge--binding {
   pointer-events: none;
 }
+/* ---- variable nodes (lib/variables.ts): a named value with a source ---- */
+.loomboard-workflow {
+  --lb-wf-variable: #b45309;
+}
+.loomboard-workflow .lb-wf-node--variable {
+  min-width: 150px;
+  border-radius: 14px;
+  border-color: var(--lb-wf-variable);
+}
+.loomboard-workflow .lb-wf-node--variable .lb-wf-node__title {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--lb-wf-variable);
+}
+.loomboard-workflow .lb-wf-node--variable.is-unset {
+  border-style: dashed;
+}
+.loomboard-workflow .lb-wf-handle--variable {
+  background: var(--lb-wf-variable);
+}
+.loomboard-workflow .lb-wf-edge--variable .react-flow__edge-path {
+  stroke: var(--lb-wf-variable);
+  stroke-dasharray: 4 3;
+  stroke-width: 1.5;
+}
+/* Derived from the definition, so not draggable or deletable. */
+.loomboard-workflow .lb-wf-edge--variable {
+  pointer-events: none;
+}
 .loomboard-workflow .react-flow__minimap-node.is-binding {
   fill: var(--lb-wf-muted);
 }

@@ -39,7 +39,7 @@ describe("the palette — what it offers", () => {
     // work ENTERS — not because they share a shape.
     expect(entriesInGroup("Sources").map((e) => e.id)).toEqual(["starter", "input", "trigger"]);
     expect(entriesInGroup("Work").map((e) => e.id)).toEqual(["agent", "parallel", "consolidator"]);
-    expect(entriesInGroup("Data").map((e) => e.id)).toEqual(["vars", "channelref", "publish"]);
+    expect(entriesInGroup("Data").map((e) => e.id)).toEqual(["variable", "vars", "channelref", "publish"]);
     expect(entriesInGroup("End").map((e) => e.id)).toEqual(["terminal"]);
   });
 

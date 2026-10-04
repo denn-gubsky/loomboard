@@ -12,6 +12,7 @@ import {
   mergeMeasured,
   toDataEdges,
   toFlowEdges,
+  toVariableEdges,
   toFlowNodes,
   visibleEdges,
 } from "./flow";
@@ -19,6 +20,7 @@ import { fromDefinition } from "./model";
 import { channelNodes } from "./channelNodes";
 import { agentNodes } from "./agentNodes";
 import { validateModel } from "./validate";
+import { variableNodes } from "./variables";
 
 const model = fromDefinition({
   entry: "code",
@@ -527,5 +529,25 @@ describe("markTaken", () => {
     const edges = markTaken(toFlowEdges(m, []), new Set(["a success b"]));
     expect(edges.filter((e) => e.className?.includes("lb-wf-edge--taken")).map((e) => e.id)).toEqual(["a success b"]);
     expect(markTaken(edges, undefined)).toBe(edges);
+  });
+});
+
+describe("toVariableEdges", () => {
+  it("draws source → variable and variable → each state that reads it", () => {
+    const m = fromDefinition({
+      entry: "research",
+      states: [
+        { state: "research", handler: { kind: "starter", source: { channel: "in" }, fanout: { agent: "r", max: 1 }, capture: { notes: "$.results[0].output" } } },
+        { state: "edit", handler: { kind: "agent", agent: "e", input_template: "Notes: ${var.notes}", system_prompt: "Use ${var.notes}" } },
+      ],
+      transitions: [{ from: "research", to: "edit", on: "success" }],
+    });
+    const edges = toVariableEdges(variableNodes(m));
+    // One edge per state, however many of its fields name the variable.
+    expect(edges.map((e) => [e.source, e.target, e.sourceHandle, e.targetHandle])).toEqual([
+      ["research", "var:notes", HANDLE.sourceVar, "v-in"],
+      ["var:notes", "edit", "v-out", HANDLE.targetBind],
+    ]);
+    expect(edges.every((e) => e.deletable === false)).toBe(true);
   });
 });

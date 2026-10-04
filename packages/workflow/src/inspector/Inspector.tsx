@@ -6,6 +6,8 @@ import type { Finding } from "../lib/validate";
 import { channelBacklog, type ChannelNodeView } from "../lib/channelNodes";
 import type { ChannelSide } from "../lib/channels";
 import { MEMORY_VARIANTS, type BindingNodeView } from "../lib/bindings";
+import type { VariableNodeView } from "../lib/variables";
+import { sourceLabel } from "../nodes/VariableNode";
 import { HANDLER_OMIT_IN_LIST, fieldsForKind, teamHandlerRegistry } from "./registry";
 
 export interface InspectorProps {
@@ -27,6 +29,10 @@ export interface InspectorProps {
   onGrantChannel?: (channel: string, sides: ChannelSide[]) => void;
   /** A selected binding node, shown read-only. */
   binding?: BindingNodeView | null;
+  /** A selected variable node. */
+  variable?: VariableNodeView | null;
+  /** Add the variable to the start form. Absent: not offered (read-only). */
+  onAskAtStart?: (name: string) => void;
   /** While a walk is on screen: the selected node's runs (M3b). Rendered
    *  above the fields, because in Run mode they are what the operator came
    *  to see. */
@@ -61,6 +67,8 @@ export function Inspector({
   channel,
   onGrantChannel,
   binding,
+  variable,
+  onAskAtStart,
   runs,
   form,
   result,
@@ -86,6 +94,7 @@ export function Inspector({
     return [...HANDLER_OMIT_IN_LIST, ...hidden];
   }, [node]);
 
+  if (!node && variable) return <VariablePanel view={variable} disabled={disabled} onAskAtStart={onAskAtStart} />;
   if (!node && binding) return <BindingPanel view={binding} />;
   if (!node && channel) return <ChannelPanel view={channel} disabled={disabled} onGrant={onGrantChannel} />;
 
@@ -339,6 +348,48 @@ function ChannelPanel({
           Not wired yet. Drag a Starter&rsquo;s or publish node&rsquo;s top handle into this channel
           to publish to it, or from it to a Starter&rsquo;s top handle to read it. Delete removes it
           from the canvas.
+        </p>
+      )}
+    </aside>
+  );
+}
+
+/** A variable's details: where its value comes from, who reads it, and — when
+ *  nothing sets it — the one fix the canvas can make itself. */
+function VariablePanel({
+  view,
+  disabled,
+  onAskAtStart,
+}: {
+  view: VariableNodeView;
+  disabled?: boolean;
+  onAskAtStart?: (name: string) => void;
+}) {
+  const row = (label: string, value: string) => (
+    <div className="lb-wf-field">
+      <span className="lb-wf-field__label">{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+  return (
+    <aside className="lb-wf-inspector lb-wf-inspector--variable">
+      <h3 className="lb-wf-team__title">
+        Variable <code>{view.name}</code>
+      </h3>
+      <p className="lb-wf-team__hint">
+        A named value any prompt can use. It is asked for when the team starts unless something in the team sets it.
+      </p>
+      {row("Use it as", `\${var.${view.name}}`)}
+      {row("Value comes from", view.sources.length ? view.sources.map(sourceLabel).join("; ") : "nothing — it expands to empty")}
+      {row("Read by", view.readers.length ? view.readers.map((r) => `${r.state} (${r.field})`).join(", ") : "no prompt yet")}
+      {view.sources.length === 0 && onAskAtStart && (
+        <button type="button" className="lb-wf-btn lb-wf-btn--primary" disabled={disabled} onClick={() => onAskAtStart(view.name)}>
+          Ask at Start
+        </button>
+      )}
+      {view.sources.some((s) => s.kind === "start") && (
+        <p className="lb-wf-team__hint">
+          Its label, type and picker are edited on the start form: select the team's entry node.
         </p>
       )}
     </aside>
