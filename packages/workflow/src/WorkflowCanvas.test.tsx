@@ -1029,3 +1029,50 @@ describe("WorkflowCanvas — a Starter reading the walk's input (loomcycle #1579
     expect(publishChannel).not.toHaveBeenCalled();
   });
 });
+
+describe("WorkflowCanvas — variable nodes (RFC CZ Data nodes)", () => {
+  const blog = (editExtra: Record<string, unknown> = {}) => ({
+    entry: "draft",
+    states: [
+      { state: "draft", handler: { kind: "agent", agent: "marketing/writer" } },
+      { state: "edit", handler: { kind: "agent", agent: "marketing/editor", ...editExtra } },
+      { state: "published", handler: { kind: "terminal" } },
+    ],
+    transitions: [
+      { from: "draft", to: "edit", on: "success" },
+      { from: "edit", to: "published", on: "success" },
+    ],
+  });
+  const layer = (definition: unknown, o: Partial<WorkflowDataLayer> = {}) =>
+    stubLayer({
+      getActiveTeamDef: async () => ({ def_id: "d1", name: "blog", version: 1, definition }),
+      getTeamDef: async () => ({ def_id: "d1", name: "blog", version: 1, definition }),
+      ...o,
+    });
+
+  it("places a Variable anywhere — it is asked at Start, not a step the walk must reach", async () => {
+    // Regression: the only "variable" was a `vars` STATE, which dropped loose
+    // came up "unreachable from entry" and blocked the save.
+    render(<WorkflowCanvas dataLayer={layer(blog())} teamName="blog" />);
+    await screen.findByTestId("node-draft");
+    fireEvent.click(screen.getByRole("button", { name: "Variable" }));
+    const node = await screen.findByTestId("variable-var1");
+    expect(node.textContent).toContain("${var.var1}");
+    expect(node.textContent).toContain("asked at Start");
+    expect(screen.queryByText(/unreachable from entry/)).toBeNull();
+    expect(screen.queryByText(/\d+ problems?/)).toBeNull();
+    // The team got a front door whose form asks for it.
+    expect((await screen.findByTestId("node-input-1")).textContent).toContain("${var.var1}");
+  });
+
+  it("draws a variable a prompt reads and nothing sets, and Ask at Start fixes it", async () => {
+    render(<WorkflowCanvas dataLayer={layer(blog({ input_template: "Tone: ${var.tone}" }))} teamName="blog" />);
+    const node = await screen.findByTestId("variable-tone");
+    expect(node.textContent).toContain("not set");
+    expect(node.textContent).toContain("read by 1 node");
+    fireEvent.click(node);
+    fireEvent.click(await screen.findByRole("button", { name: "Ask at Start" }));
+    await waitFor(() => expect(screen.getByTestId("variable-tone").textContent).toContain("asked at Start"));
+    expect(screen.queryByRole("button", { name: "Ask at Start" })).toBeNull();
+  });
+});

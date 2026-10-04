@@ -11,7 +11,7 @@ import {
 import { Inspector } from "./inspector/Inspector";
 import { PublishComposer } from "./PublishComposer";
 import { Palette } from "./Palette";
-import { newStateRaw, type PaletteEntry } from "./lib/palette";
+import { PALETTE, newStateRaw, type PaletteEntry } from "./lib/palette";
 import { fieldsPatch, inputFields, placeInput, startFindings, startPlan, type FormResult } from "./lib/inputForm";
 import { InputDialog } from "./InputDialog";
 import { walkProgress, type WalkProgress } from "./lib/progress";
@@ -25,6 +25,8 @@ import {
   toAgentFlowNodes,
   toBindingEdges,
   toBindingFlowNodes,
+  toVariableEdges,
+  toVariableFlowNodes,
   toChannelFlowNodes,
   toDataEdges,
   markTaken,
@@ -49,6 +51,8 @@ import { outputChannels, walkResult, type ResultItem } from "./lib/output";
 import { OutputPanel } from "./OutputPanel";
 import { RunsPanel } from "./inspector/RunsPanel";
 import { BindingNode } from "./nodes/BindingNode";
+import { VariableNode } from "./nodes/VariableNode";
+import { askAtStart, nextVariableName, variableFindings, variableNodeId, variableNodes } from "./lib/variables";
 import { channelNodes } from "./lib/channelNodes";
 import { agentNodes, agentOwner, dispatchesAgent } from "./lib/agentNodes";
 import { AgentNode } from "./nodes/AgentNode";
@@ -83,7 +87,7 @@ import { StateNode } from "./nodes/StateNode";
 import { handlerChannels } from "./lib/model";
 import type { ChannelInfo, SavedTeam, WorkflowCanvasProps } from "./types";
 
-const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode, agent: AgentNode };
+const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode, agent: AgentNode, variable: VariableNode };
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -273,13 +277,22 @@ function WorkflowCanvasInner({
   // save, so the operator sees one list.
   const findings = useMemo(
     () =>
-      model ? [...validateModel(model), ...aclFindings(model), ...bindingFindings(model), ...startFindings(model)] : [],
+      model
+        ? [
+            ...validateModel(model),
+            ...aclFindings(model),
+            ...bindingFindings(model),
+            ...startFindings(model),
+            ...variableFindings(variableNodes(model)),
+          ]
+        : [],
     [model],
   );
   // The channels the graph names, as nodes its data edges route through.
   const channelViews = useMemo(() => (model ? channelNodes(model, channels) : []), [model, channels]);
   // The Documents and Memory the prompts pull in, as nodes feeding them (P3).
   const bindingViews = useMemo(() => (model ? bindingNodes(model) : []), [model]);
+  const variableViews = useMemo(() => (model ? variableNodes(model) : []), [model]);
   // Each Starter's agent, as the node between it and its sink (C2 amended).
   const agentViews = useMemo(() => (model ? agentNodes(model) : []), [model]);
   // For onNodesChange, which must not re-create on every model change: an
@@ -358,9 +371,10 @@ function WorkflowCanvasInner({
             }),
             ...toChannelFlowNodes(channelViews, selectedId, measured),
             ...toBindingFlowNodes(bindingViews, selectedId, measured),
+            ...toVariableFlowNodes(variableViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews, bindingViews, agentViews, pulses, progress, runLines, endedAt, result, plan, canRun, openStart],
+    [model, findings, selectedId, measured, channelViews, bindingViews, variableViews, agentViews, pulses, progress, runLines, endedAt, result, plan, canRun, openStart],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
@@ -377,11 +391,12 @@ function WorkflowCanvasInner({
               ...markTaken(toFlowEdges(model, findings), progress?.taken),
               ...toDataEdges(channelViews, agentViews),
               ...toBindingEdges(bindingViews),
+              ...toVariableEdges(variableViews),
             ],
             showTransitions,
           )
         : [],
-    [model, findings, channelViews, bindingViews, agentViews, showTransitions, progress],
+    [model, findings, channelViews, bindingViews, variableViews, agentViews, showTransitions, progress],
   );
 
   const selected = useMemo(
@@ -587,12 +602,35 @@ function WorkflowCanvasInner({
     [selectedId],
   );
 
+  // Ask for a variable at Start: a field of the start form, bound to it. A
+  // team with no front door gets an Input node as its entry.
+  const askVariable = useCallback(
+    (name: string) => {
+      if (!editable) return;
+      setModel((m) => {
+        if (!m) return m;
+        const inputRaw = newStateRaw(m, PALETTE.find((e) => e.id === "input")!);
+        const derived = [...channelNodes(m, channels), ...agentNodes(m)].map((v) => v.position);
+        return { ...askAtStart(m, name, inputRaw, derived).model, layoutDirty: true };
+      });
+    },
+    [editable, channels],
+  );
+
   // Placing a node from the palette (C12). Replaces "Add state": the operator
   // picks a ROLE, and which `states[]` kind that compiles to is the wire
   // format's business, not theirs.
   const placeNode = useCallback(
     (entry: PaletteEntry) => {
       if (!editable || !model) return;
+      if (entry.variable) {
+        // A variable is not a state: a new one is a field of the start form,
+        // so Start asks for it (lib/variables.ts).
+        const name = nextVariableName(variableViews);
+        askVariable(name);
+        setSelectedId(variableNodeId(name));
+        return;
+      }
       const raw = newStateRaw(model, entry);
       if (entry.kind === "input") {
         // The Input node is the walk's ENTRY, wired into the old one — placed
@@ -632,7 +670,7 @@ function WorkflowCanvasInner({
       // inspector is where that gets fixed.
       setSelectedId(id);
     },
-    [editable, model, channelViews, agentViews],
+    [editable, model, channelViews, agentViews, variableViews, askVariable],
   );
 
   const relayout = useCallback(() => {
@@ -959,6 +997,8 @@ function WorkflowCanvasInner({
             onWalkHooksChange={onWalkHooksChange}
             channel={channelViews.find((v) => v.id === selectedId) ?? null}
             binding={bindingViews.find((v) => v.id === selectedId) ?? null}
+            variable={variableViews.find((v) => v.id === selectedId) ?? null}
+            onAskAtStart={editable ? askVariable : undefined}
             runs={
               walk && selected ? (
                 <>

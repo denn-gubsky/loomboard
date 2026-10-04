@@ -47,6 +47,9 @@ export interface PaletteEntry {
    *  definition — a channel. It adds no state: it asks which existing channel
    *  and draws it, to be wired by drag (lib/channelWiring.ts). */
   reference?: boolean;
+  /** A team variable: not a state. Placing one adds a field to the start
+   *  form (lib/variables.ts askAtStart). */
+  variable?: boolean;
 }
 
 export const PALETTE: readonly PaletteEntry[] = [
@@ -100,11 +103,20 @@ export const PALETTE: readonly PaletteEntry[] = [
 
   // ---- Data: what the walk carries ----
   {
+    id: "variable",
+    label: "Variable",
+    group: "Data",
+    variable: true,
+    hint:
+      "A named value any prompt can use as ${var.name}. New ones are asked for when the team " +
+      "starts; a variable read from an agent's output is not.",
+  },
+  {
     id: "vars",
-    label: "Variables",
+    label: "Set variables",
     group: "Data",
     kind: "vars",
-    hint: "Assigns ${var.*}. Its own node kind so an assignment is visible rather than hidden.",
+    hint: "A step that computes ${var.*} when the walk passes through it. It must be on the walk's path.",
   },
   {
     id: "channelref",
@@ -136,7 +148,7 @@ export const PALETTE: readonly PaletteEntry[] = [
 
 /** Entries that place a node into the definition's `states[]`. */
 export function placeableEntries(): PaletteEntry[] {
-  return PALETTE.filter((e) => !e.external && !e.reference);
+  return PALETTE.filter((e) => !e.external && !e.reference && !e.variable);
 }
 
 export function entriesInGroup(group: PaletteGroup): PaletteEntry[] {

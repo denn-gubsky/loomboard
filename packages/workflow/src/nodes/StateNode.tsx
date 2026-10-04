@@ -95,6 +95,18 @@ export function StateNode({ data, selected }: NodeProps) {
           is set, because dragging to a channel node is how it gets set
           (lib/channelWiring.ts). An unconditional pair would put dead dots on
           every agent tile, implying a connection the kind cannot make. */}
+      {/* A variable read from this state (a form field, a capture, a set)
+          leaves from the bottom, at the far end from the binding handle. */}
+      {!node.opaque && node.kind !== "terminal" && (
+        <Handle
+          id={HANDLE.sourceVar}
+          type="source"
+          position={Position.Bottom}
+          className="lb-wf-handle lb-wf-handle--variable"
+          style={{ left: "88%" }}
+          isConnectable={false}
+        />
+      )}
       {/* Bindings feed in from below, beside the loop handle rather than on
           it, so a binding edge and a pushback loop never share a path. */}
       {takesBindings && (

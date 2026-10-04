@@ -25,6 +25,7 @@ import type { BindingNodeView } from "./bindings";
 import { agentNodeId, dispatchesAgent, type AgentNodeView } from "./agentNodes";
 import type { ResultItem } from "./output";
 import type { RunLine } from "../types";
+import type { VariableNodeView } from "./variables";
 
 /** Which relation an edge represents. `control` is a transition the operator
  *  drew; `data` is derived from channel wiring and is never draggable. */
@@ -146,6 +147,9 @@ export const HANDLE = {
   /** Where a Starter dispatches its agent (its right side), or a publish node
    *  publishes (its top). */
   dataOut: "d-out",
+  /** Where a variable is read FROM this state (its capture, form or set):
+   *  the bottom, at the far end from the binding handle. */
+  sourceVar: "s-var",
   /** Where a binding (a Document / Memory its prompt names) feeds in: the
    *  bottom, offset from the loop handle so a binding edge cannot stack on a
    *  pushback loop. Only on kinds that carry a prompt. */
@@ -598,6 +602,72 @@ export function toBindingEdges(views: readonly BindingNodeView[]): FlowEdge[] {
         deletable: false,
         data: { kind: "data" as const, on: "", findings: [] },
       });
+    }
+  }
+  return out;
+}
+
+/** Handle ids on a variable node: its sources arrive on the left, and it
+ *  feeds the states that read it from the top. */
+export const VARIABLE_HANDLE = { in: "v-in", out: "v-out" } as const;
+
+export interface VariableFlowData {
+  view: VariableNodeView;
+  [k: string]: unknown;
+}
+
+export interface VariableFlowNode {
+  id: string;
+  type: "variable";
+  position: { x: number; y: number };
+  data: VariableFlowData;
+  selected?: boolean;
+  deletable: false;
+  connectable: false;
+  measured?: { width: number; height: number };
+}
+
+export function toVariableFlowNodes(
+  views: readonly VariableNodeView[],
+  selectedId?: string | null,
+  measured?: Measured,
+): VariableFlowNode[] {
+  return views.map((v) => ({
+    id: v.id,
+    type: "variable" as const,
+    position: v.position,
+    selected: v.id === selectedId,
+    deletable: false as const,
+    connectable: false as const,
+    data: { view: v },
+    ...(measured?.[v.id] ? { measured: measured[v.id] } : {}),
+  }));
+}
+
+/** A variable's lines: one from each state it is read FROM, and one to each
+ *  state whose prompt reads it. Derived from the definition, so neither is
+ *  draggable or deletable. */
+export function toVariableEdges(views: readonly VariableNodeView[]): FlowEdge[] {
+  const edge = (id: string, source: string, target: string, sourceHandle: string, targetHandle: string): FlowEdge => ({
+    id,
+    source,
+    target,
+    sourceHandle,
+    targetHandle,
+    type: "smoothstep" as const,
+    label: "",
+    className: "lb-wf-edge lb-wf-edge--variable",
+    markerEnd: { type: ARROW, width: 14, height: 14, color: ARROW_COLOR },
+    deletable: false,
+    data: { kind: "data" as const, on: "", findings: [] },
+  });
+  const out: FlowEdge[] = [];
+  for (const v of views) {
+    for (const state of [...new Set(v.sources.map((s) => s.state))]) {
+      out.push(edge(`var:${state} > ${v.id}`, state, v.id, HANDLE.sourceVar, VARIABLE_HANDLE.in));
+    }
+    for (const state of [...new Set(v.readers.map((r) => r.state))]) {
+      out.push(edge(`var:${v.id} > ${state}`, v.id, state, VARIABLE_HANDLE.out, HANDLE.targetBind));
     }
   }
   return out;
