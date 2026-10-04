@@ -755,7 +755,8 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     await waitFor(() => expect(edit.className).toContain("is-active"));
     expect(screen.getByTestId("agent-edit").className).toContain("is-active");
     expect(screen.getByTestId("node-research").className).toContain("is-passed");
-    expect(screen.getByTestId("current-edit")).toBeTruthy();
+    // The marker names the state the walk is in.
+    expect(screen.getByTestId("current-edit").textContent).toContain("now – edit");
     expect(screen.queryByTestId("current-research")).toBeNull();
 
     act(() => push([walkRow("completed", "2026-10-01T10:03:00Z")]));
@@ -819,6 +820,64 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     expect(screen.queryByTestId("lines-research")).toBeNull();
     // Its conversation is still there to read, now as a finished run.
     expect((await screen.findByTestId("host-chat")).textContent).toBe("marketing/researcher m1 false");
+  });
+
+  it("shows the chunk a walk wrote when its End node is selected, with a link to the host's Documents view", async () => {
+    let push: (rows: WalkRunRow[]) => void = () => undefined;
+    const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {
+      push = onRows;
+      return () => undefined;
+    });
+    const ID = "b5b0ab5251a91c49cf2e6411acf2050a";
+    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText: `[sub-agent agent_id=a_1]\n${ID}`, terminal: "done" }));
+    const readChunk = vi.fn(async (id: string) => ({ id, title: "Article: RTX 4070 Super", body: "# 1440p Power\n<b>not markup</b>", documentId: "doc-parts", scope: "user" }));
+    const onOpenDocument = vi.fn();
+    const { container } = render(
+      <WorkflowCanvas
+        dataLayer={base({ watchWalk, readRun, readChunk, runTeamDetached: async () => ({ run_id: "r_walk", status: "running" }) })}
+        teamName="sdlc"
+        onOpenDocument={onOpenDocument}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(watchWalk).toHaveBeenCalled());
+    act(() => push([{ runId: "r_walk", agentId: "w", agent: "team:sdlc", status: "completed", ts: "2026-10-01T10:03:00Z" }]));
+    await screen.findByTestId("result-done");
+    fireEvent.click(screen.getByTestId("node-done"));
+    const panel = await screen.findByRole("region", { name: "Result" });
+    expect(await within(panel).findByText("Article: RTX 4070 Super")).toBeTruthy();
+    expect(readChunk).toHaveBeenCalledWith(ID);
+    // The body is model output: shown as text, never parsed as markup.
+    expect(panel.textContent).toContain("<b>not markup</b>");
+    expect(container.querySelector(".lb-wf-result b")).toBeNull();
+    fireEvent.click(within(panel).getByRole("button", { name: "Open in Documents" }));
+    expect(onOpenDocument).toHaveBeenCalledWith({ documentId: "doc-parts", chunkId: ID, scope: "user", title: "Article: RTX 4070 Super" });
+  });
+
+  it("falls back to the answer's text when it is not a chunk the caller can read", async () => {
+    let push: (rows: WalkRunRow[]) => void = () => undefined;
+    const watchWalk = vi.fn((_id: string, onRows: (rows: WalkRunRow[]) => void) => {
+      push = onRows;
+      return () => undefined;
+    });
+    const ID = "b5b0ab5251a91c49cf2e6411acf2050a";
+    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText: ID, terminal: "done" }));
+    const readChunk = vi.fn(async () => Promise.reject(new Error("not found")));
+    render(
+      <WorkflowCanvas
+        dataLayer={base({ watchWalk, readRun, readChunk, runTeamDetached: async () => ({ run_id: "r_walk", status: "running" }) })}
+        teamName="sdlc"
+        onOpenDocument={vi.fn()}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await waitFor(() => expect(watchWalk).toHaveBeenCalled());
+    act(() => push([{ runId: "r_walk", agentId: "w", agent: "team:sdlc", status: "completed", ts: "2026-10-01T10:03:00Z" }]));
+    await screen.findByTestId("result-done");
+    fireEvent.click(screen.getByTestId("node-done"));
+    const panel = await screen.findByRole("region", { name: "Result" });
+    await waitFor(() => expect(panel.textContent).toContain(ID));
+    expect(within(panel).queryByRole("button", { name: "Open in Documents" })).toBeNull();
   });
 
   it("puts the result on the End node the RUNTIME says the walk reached, not the one its success edge leads to (G14)", async () => {

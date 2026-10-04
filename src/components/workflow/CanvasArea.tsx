@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { WorkflowCanvas, type RunChatTarget, type TeamSummary } from "@loomboard/workflow";
+import { WorkflowCanvas, type DocumentTarget, type RunChatTarget, type TeamSummary } from "@loomboard/workflow";
 import "@loomboard/workflow/styles.css";
 import { useConnection, useLoomcycle } from "../../state/connection";
 import { buildConnection } from "../../lib/buildConnection";
@@ -17,7 +17,7 @@ import { workflowDataLayer } from "../../lib/workflowCanvasData";
 // carry — a chat for a member run in Run mode. Everything about the graph —
 // editing, validation, layout, save — belongs to the package.
 
-export default function CanvasArea() {
+export default function CanvasArea({ onOpenDocument }: { onOpenDocument?: (target: DocumentTarget) => void }) {
   const client = useLoomcycle();
   const dataLayer = useMemo(() => workflowDataLayer(client), [client]);
   // Run mode's chat for a member run: the app's own <Chat>, which the package
@@ -88,6 +88,7 @@ export default function CanvasArea() {
           teamName={selected}
           onSaved={() => setReloadKey((k) => k + 1)}
           renderRunChat={connection ? renderRunChat : undefined}
+          onOpenDocument={onOpenDocument}
         />
       ) : (
         !loading && (

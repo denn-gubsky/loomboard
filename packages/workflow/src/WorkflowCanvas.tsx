@@ -18,6 +18,7 @@ import { walkProgress, type WalkProgress } from "./lib/progress";
 import { useRunLines } from "./useRunLines";
 import { RunChatColumn } from "./RunChatColumn";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
+import { ResultPanel } from "./inspector/ResultPanel";
 import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
 import {
   edgeId,
@@ -96,6 +97,7 @@ function WorkflowCanvasInner({
   theme,
   className,
   renderRunChat,
+  onOpenDocument,
 }: WorkflowCanvasProps) {
   const [model, setModel] = useState<CanvasModel | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -973,6 +975,11 @@ function WorkflowCanvasInner({
                     readRunPrompt={dataLayer.readRunPrompt}
                   />
                 </>
+              ) : undefined
+            }
+            result={
+              selected && result && selected.id === endedAt ? (
+                <ResultPanel items={result.items} readChunk={dataLayer.readChunk} onOpenDocument={onOpenDocument} />
               ) : undefined
             }
             form={

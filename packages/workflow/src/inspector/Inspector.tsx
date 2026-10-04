@@ -34,6 +34,8 @@ export interface InspectorProps {
   /** The Input node's form editor (fields, pickers, variables). Rendered
    *  above the raw fields, which still show the schema it writes. */
   form?: ReactNode;
+  /** The End node a walk finished at: what it produced, in full. */
+  result?: ReactNode;
 }
 
 /** The node inspector: the state id and kind rendered by hand, everything else
@@ -61,6 +63,7 @@ export function Inspector({
   binding,
   runs,
   form,
+  result,
 }: InspectorProps) {
   const value = useMemo<DefValue>(() => {
     if (!node) return {};
@@ -147,6 +150,7 @@ export function Inspector({
         </select>
       </label>
 
+      {result}
       {runs}
       {form}
 

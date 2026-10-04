@@ -232,6 +232,10 @@ export interface WorkflowDataLayer {
    *  row in the inspector and for the walk's own result. */
   readRun?(runId: string): Promise<RunDetail>;
 
+  /** One Document chunk, by id — for a result that names the chunk a team
+   *  wrote. Rejects when the caller cannot read it. */
+  readChunk?(id: string): Promise<ChunkContent>;
+
   /** The exact prompt a run was sent (RFC DI `/prompt`), text blocks only. */
   readRunPrompt?(runId: string): Promise<RunPrompt>;
 
@@ -274,6 +278,28 @@ export interface WorkflowCanvasProps {
    *  state that ran is selected. The package has no chat of its own — a host
    *  renders its transcript and composer. Without it, the Inspector shows. */
   renderRunChat?: (run: RunChatTarget) => ReactNode;
+  /** Show a document in the host's Documents view — offered on a result that
+   *  is a chunk. Without it the chunk is shown with no link. */
+  onOpenDocument?: (target: DocumentTarget) => void;
+}
+
+/** A Document chunk, as the result panel shows it. `scope` is the host's own
+ *  word for where it found the chunk, handed back in DocumentTarget. */
+export interface ChunkContent {
+  id: string;
+  title: string;
+  /** Markdown source. Untrusted: render as text. */
+  body: string;
+  documentId: string;
+  scope?: string;
+}
+
+/** What "Open in Documents" asks the host to show. */
+export interface DocumentTarget {
+  documentId: string;
+  chunkId: string;
+  scope?: string;
+  title?: string;
 }
 
 /** One line of a run's conversation, compact: a user turn, or one part of an
