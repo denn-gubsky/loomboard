@@ -35,7 +35,7 @@ import {
   toFlowNodes,
   visibleEdges,
 } from "./lib/flow";
-import { bindingFindings, bindingNodes } from "./lib/bindings";
+import { bindingFindings, bindingNodeId, bindingNodes } from "./lib/bindings";
 import {
   emptyWalk,
   liveRunByState,
@@ -53,6 +53,7 @@ import { OutputPanel } from "./OutputPanel";
 import { RunsPanel } from "./inspector/RunsPanel";
 import { BindingNode } from "./nodes/BindingNode";
 import { VariableNode } from "./nodes/VariableNode";
+import { applyDataWire, bindingRefError, dataConnection, losesHandoff, placeBinding, planDataWire, removeBinding } from "./lib/dataWiring";
 import { askAtStart, nextVariableName, variableFindings, variableNodeId, variableNodes } from "./lib/variables";
 import { channelNodes } from "./lib/channelNodes";
 import { agentNodes, agentOwner, dispatchesAgent } from "./lib/agentNodes";
@@ -461,8 +462,27 @@ function WorkflowCanvasInner({
   const onConnect = useCallback(
     (c: Connection) => {
       if (!editable || !c.source || !c.target) return;
+      // A data node dragged onto a state: its token goes into that state's
+      // user input. Said out loud when it costs the state its hand-off.
+      if (model) {
+        const w = planDataWire(model, c, variableNodes(model), bindingNodes(model));
+        if (w && losesHandoff(model, w)) {
+          setStatus(
+            `"${w.state}" now has its own input, so it no longer receives the previous state's output ` +
+              "(a loomcycle limit, gap G17). Add what it needs to its input template.",
+          );
+        }
+      }
       setModel((m) => {
         if (!m) return m;
+        const vars = variableNodes(m);
+        const binds = bindingNodes(m);
+        const data = dataConnection(m, c, vars, binds);
+        if (data === "invalid") return m;
+        if (data === "data") {
+          const w = planDataWire(m, c, vars, binds);
+          return w ? applyDataWire(m, w) : m;
+        }
         // A drag to or from a channel sets a name; a drag on a data handle is
         // never a transition. Classified against the model being updated, not
         // a render-time copy, so a fast second drag cannot act on stale views.
@@ -488,7 +508,7 @@ function WorkflowCanvasInner({
         };
       });
     },
-    [editable, channels],
+    [editable, channels, model],
   );
 
   const onEdgesDelete = useCallback(
@@ -513,6 +533,8 @@ function WorkflowCanvasInner({
         // refuses a wired one anyway.
         let next = m;
         for (const v of channelNodes(m, channels)) if (gone.has(v.id)) next = removeChannel(next, v);
+        // The same for a placed Document or Memory nothing reads.
+        for (const v of bindingNodes(m)) if (gone.has(v.id)) next = removeBinding(next, v);
         return {
           ...next,
           nodes: next.nodes.filter((n) => !gone.has(n.id)),
@@ -533,6 +555,19 @@ function WorkflowCanvasInner({
     [editable, channels],
   );
 
+  // Place a Document or Memory node by name, to be wired by drag. Returns why
+  // it cannot be placed, for the palette to show.
+  const onPlaceBinding = useCallback(
+    (kind: "document" | "memory", ref: string) => {
+      const why = bindingRefError(kind, ref);
+      if (why || !editable) return why;
+      setModel((m) => (m ? placeBinding(m, bindingNodes(m), kind, ref).model : m));
+      setSelectedId(bindingNodeId({ kind, ref: ref.trim() }));
+      return undefined;
+    },
+    [editable],
+  );
+
   // The channel panel's "grant" action: adds the sides a channel needs to the
   // team ACL. Authority, so it is an explicit click and forks on save.
   const onGrantChannel = useCallback(
@@ -546,8 +581,9 @@ function WorkflowCanvasInner({
   // Feedback while dragging: xyflow greys out a target the drop would refuse.
   const isValidConnection = useCallback(
     (c: { source: string | null; target: string | null; sourceHandle?: string | null; targetHandle?: string | null }) =>
-      !!model && connectionKind(model, channelViews, c, agentViews) !== "invalid",
-    [model, channelViews, agentViews],
+      !!model &&
+      (dataConnection(model, c, variableViews, bindingViews) ?? connectionKind(model, channelViews, c, agentViews)) !== "invalid",
+    [model, channelViews, agentViews, variableViews, bindingViews],
   );
 
   const onPatch = useCallback(
@@ -928,6 +964,7 @@ function WorkflowCanvasInner({
             disabled={!model || busy}
             onPlaceChannel={onPlaceChannel}
             channelNames={channels?.map((c) => c.name)}
+            onPlaceBinding={onPlaceBinding}
           />
         )}
 

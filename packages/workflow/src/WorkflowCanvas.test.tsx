@@ -1124,6 +1124,22 @@ describe("WorkflowCanvas — variable nodes (RFC CZ Data nodes)", () => {
     expect((await screen.findByTestId("node-input-1")).textContent).toContain("${var.var1}");
   });
 
+  it("places a Document by name as an unwired node — and refuses a name the runtime would not expand", async () => {
+    render(<WorkflowCanvas dataLayer={layer(blog())} teamName="blog" />);
+    await screen.findByTestId("node-draft");
+    fireEvent.click(screen.getByRole("button", { name: "Document" }));
+    const input = await screen.findByLabelText("Document name");
+    fireEvent.change(input, { target: { value: "{{nope}}" } });
+    fireEvent.click(screen.getByRole("button", { name: "Place" }));
+    expect(await screen.findByText(/path or id/)).toBeTruthy();
+    fireEvent.change(input, { target: { value: "/guides/style" } });
+    fireEvent.click(screen.getByRole("button", { name: "Place" }));
+    const node = await screen.findByTestId("binding-document-/guides/style");
+    expect(node.textContent).toContain("not wired yet");
+    // Placing changes no content: nothing to validate, nothing broken.
+    expect(screen.queryByText(/\d+ problems?/)).toBeNull();
+  });
+
   it("draws a variable a prompt reads and nothing sets, and Ask at Start fixes it", async () => {
     render(<WorkflowCanvas dataLayer={layer(blog({ input_template: "Tone: ${var.tone}" }))} teamName="blog" />);
     const node = await screen.findByTestId("variable-tone");

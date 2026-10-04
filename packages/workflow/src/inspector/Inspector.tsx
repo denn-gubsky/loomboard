@@ -417,7 +417,12 @@ function BindingPanel({ view }: { view: BindingNodeView }) {
         it and cannot decline to read it.
       </p>
       {row("Placeholder", placeholder)}
-      {row("Read by", view.readers.map((r) => `${r.state} (${r.field})`).join(", "))}
+      {row(
+        "Read by",
+        view.readers.length
+          ? view.readers.map((r) => `${r.state} (${r.field})`).join(", ")
+          : "nothing yet — drag its top handle onto a node, or select it and press Delete to remove it",
+      )}
       {view.kind === "document" &&
         row(
           "Delivered as",

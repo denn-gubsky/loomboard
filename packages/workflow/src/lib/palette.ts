@@ -50,6 +50,9 @@ export interface PaletteEntry {
   /** A team variable: not a state. Placing one adds a field to the start
    *  form (lib/variables.ts askAtStart). */
   variable?: boolean;
+  /** A Document or Memory node: not a state. Placed by name, then wired
+   *  (lib/dataWiring.ts). */
+  binding?: "document" | "memory";
 }
 
 export const PALETTE: readonly PaletteEntry[] = [
@@ -112,6 +115,24 @@ export const PALETTE: readonly PaletteEntry[] = [
       "starts; a variable read from an agent's output is not.",
   },
   {
+    id: "docref",
+    label: "Document",
+    group: "Data",
+    binding: "document",
+    hint:
+      "A document, or one #Heading of it, injected into the input of every node it is wired to. " +
+      "Named by path or id; drag its top handle onto a node.",
+  },
+  {
+    id: "memref",
+    label: "Memory",
+    group: "Data",
+    binding: "memory",
+    hint:
+      "A memory section (e.g. core_blocks), key:<key> or search:<query>, injected into the input " +
+      "of every node it is wired to.",
+  },
+  {
     id: "vars",
     label: "Set variables",
     group: "Data",
@@ -148,7 +169,7 @@ export const PALETTE: readonly PaletteEntry[] = [
 
 /** Entries that place a node into the definition's `states[]`. */
 export function placeableEntries(): PaletteEntry[] {
-  return PALETTE.filter((e) => !e.external && !e.reference && !e.variable);
+  return PALETTE.filter((e) => !e.external && !e.reference && !e.variable && !e.binding);
 }
 
 export function entriesInGroup(group: PaletteGroup): PaletteEntry[] {

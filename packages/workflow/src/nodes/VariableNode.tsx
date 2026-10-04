@@ -51,7 +51,6 @@ export function VariableNode({ data, selected }: NodeProps) {
         type="source"
         position={Position.Top}
         className="lb-wf-handle lb-wf-handle--variable"
-        isConnectable={false}
       />
     </div>
   );

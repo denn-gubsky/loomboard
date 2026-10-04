@@ -187,6 +187,21 @@ export function bindingUses(model: CanvasModel): BindingUse[] {
   return out;
 }
 
+function placedBindingKeys(model: CanvasModel): string[] {
+  const states = new Set(model.nodes.map((n) => n.id));
+  const removed = new Set(model.channelsRemoved ?? []);
+  const layout = model.source.layout;
+  const saved =
+    typeof layout === "object" && layout !== null && !Array.isArray(layout)
+      ? (layout as Record<string, unknown>).nodes
+      : undefined;
+  const keys = new Set([
+    ...Object.keys(typeof saved === "object" && saved !== null ? saved : {}),
+    ...Object.keys(model.derivedPositions ?? {}),
+  ]);
+  return [...keys].filter((k) => k.startsWith(BINDING_LAYOUT_PREFIX) && !states.has(k) && !removed.has(k));
+}
+
 export function bindingNodes(model: CanvasModel): BindingNodeView[] {
   const byId = new Map<string, { b: Binding; readers: { state: string; field: PromptField }[] }>();
   for (const u of bindingUses(model)) {
@@ -196,6 +211,15 @@ export function bindingNodes(model: CanvasModel): BindingNodeView[] {
       e.readers.push({ state: u.state, field: u.field });
     }
     byId.set(id, e);
+  }
+  // Placed bindings: a `binding:` layout key (saved, or placed this session)
+  // that no prompt names and nobody removed. Drawn with no readers — that is
+  // how a Document or Memory is placed first and wired after
+  // (lib/dataWiring.ts).
+  for (const key of placedBindingKeys(model)) {
+    if (byId.has(key)) continue;
+    const m = /^(document|memory):(.+)$/.exec(key.slice(BINDING_LAYOUT_PREFIX.length));
+    if (m) byId.set(key, { b: { kind: m[1] as BindingKind, ref: m[2] }, readers: [] });
   }
 
   const pos = new Map(model.nodes.map((n) => [n.id, n.position]));
@@ -210,7 +234,7 @@ export function bindingNodes(model: CanvasModel): BindingNodeView[] {
     if (!position) {
       const pts = readers.map((r) => pos.get(r.state)).filter(isXY);
       const x = pts.reduce((a, p) => a + p.x, 0) / Math.max(1, pts.length);
-      const y = Math.max(...pts.map((p) => p.y)) + BINDING_DROP;
+      const y = pts.length ? Math.max(...pts.map((p) => p.y)) + BINDING_DROP : BINDING_DROP;
       position = { x: Math.round(x), y: Math.round(Number.isFinite(y) ? y : BINDING_DROP) };
       while (overlaps(position)) position = { x: position.x + BINDING_CLEARANCE.x, y: position.y };
     }
