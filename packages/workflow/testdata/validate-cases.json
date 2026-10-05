@@ -20,8 +20,8 @@
     "than the runtime. Any case where they differ must say why in why_divergent.",
     "",
     "VERIFIED: every go_valid below was checked by RUNNING these cases through",
-    "loomcycle's own json decoder + teamgraph.Validate at tag v1.102.0 \u2014 not by",
-    "hand, and not by reading the validator. All 146 agree; the hook cases",
+    "loomcycle's own json decoder + teamgraph.Validate at tag v1.103.0 \u2014 not by",
+    "hand, and not by reading the validator. All 156 agree; the hook cases",
     "(RFC DK) were added and run on 2026-09-28. Decoding counts:",
     "several hook shapes are refused while unmarshalling, before Validate runs.",
     "",
@@ -5268,6 +5268,346 @@
               "kind": "agent",
               "agent": "a",
               "payload": "raw"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "thread.output in an agent input_template",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "w",
+              "input_template": "Tone: ${var.tone}\n\n{{thread.output}}"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "thread.output in a parallel input_template",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "parallel",
+              "agents": [
+                "a",
+                "b"
+              ],
+              "consolidator": "j",
+              "input_template": "{{thread.output}}"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "thread.output in a consolidator input_template",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "consolidator",
+              "agent": "j",
+              "input_template": "{{thread.output}}"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "thread.output in an agent system_prompt",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "w",
+              "system_prompt": "Follow: {{thread.output}}"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "thread.output in a system_prompt even with it in input_template",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "w",
+              "system_prompt": "{{thread.output}}",
+              "input_template": "{{thread.output}}"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "thread.output in a starter prompt.input",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "in"
+              },
+              "fanout": {
+                "agent": "a",
+                "max": 1
+              },
+              "prompt": {
+                "input": "Review {{thread.output}}"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "thread.output in a starter prompt.system",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "in"
+              },
+              "fanout": {
+                "agent": "a",
+                "max": 1
+              },
+              "prompt": {
+                "system": "{{thread.output}}"
+              }
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter.message in an agent input_template",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "w",
+              "input_template": "Do {{starter.message}}"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starter.messages in an agent system_prompt",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "agent",
+              "agent": "w",
+              "system_prompt": "{{starter.messages}}"
+            }
+          },
+          {
+            "state": "done",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "s",
+            "to": "done",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a starter's own slots in its own prompt",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "s",
+        "states": [
+          {
+            "state": "s",
+            "handler": {
+              "kind": "starter",
+              "source": {
+                "channel": "in"
+              },
+              "fanout": {
+                "agent": "a",
+                "max": 1
+              },
+              "prompt": {
+                "system": "Batch: {{starter.messages}}",
+                "input": "Review {{starter.message}}"
+              }
             }
           },
           {

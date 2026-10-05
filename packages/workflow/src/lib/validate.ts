@@ -508,6 +508,49 @@ function validateHandler(n: CanvasNode): string[] {
 
   const timeout = h.timeout_ms;
   if (typeof timeout === "number" && timeout < 0) out.push("handler timeout_ms must be >= 0");
+  out.push(...validatePromptSlots(n.kind, h));
+  return out;
+}
+
+/** The reserved data-slot markers a walk fills after a prompt's placeholders
+ *  are expanded (loomcycle #1608). */
+export const THREAD_OUTPUT_SLOT = "{{thread.output}}";
+const STARTER_SLOTS = ["{{starter.message}}", "{{starter.messages}}"] as const;
+
+/** Mirrors validatePromptSlots: a slot marker written where the walk would
+ *  not fill it, or must not. The hand-off is another agent's output, so it is
+ *  refused in a system prompt on every kind; a Starter threads nothing to its
+ *  runs, and only a Starter has a work item. */
+function validatePromptSlots(kind: string, h: JsonObject): string[] {
+  const out: string[] = [];
+  if (str(h.system_prompt).includes(THREAD_OUTPUT_SLOT)) {
+    out.push(
+      `\`system_prompt\` contains ${THREAD_OUTPUT_SLOT} — the previous state's output is another agent's text ` +
+        "and may only go in the user prompt; put it in `input_template`",
+    );
+  }
+  if (kind === "starter") {
+    const prompt = obj(h.prompt);
+    for (const [name, text] of [["prompt.system", str(prompt?.system)], ["prompt.input", str(prompt?.input)]] as const) {
+      if (text.includes(THREAD_OUTPUT_SLOT)) {
+        out.push(
+          `starter \`${name}\` contains ${THREAD_OUTPUT_SLOT} — a starter hands each run its work item, not the ` +
+            `previous state's output; use ${STARTER_SLOTS[0]} (${STARTER_SLOTS[1]} for per=once)`,
+        );
+      }
+    }
+    return out;
+  }
+  for (const [name, text] of [["system_prompt", str(h.system_prompt)], ["input_template", str(h.input_template)]] as const) {
+    for (const marker of STARTER_SLOTS) {
+      if (text.includes(marker)) {
+        out.push(
+          `\`${name}\` contains ${marker} but is kind ${JSON.stringify(kind)} — only a starter has a work item; ` +
+            `the previous state's output is ${THREAD_OUTPUT_SLOT}, in \`input_template\``,
+        );
+      }
+    }
+  }
   return out;
 }
 
