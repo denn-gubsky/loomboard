@@ -27,7 +27,6 @@ export function VariableNode({ data, selected }: NodeProps) {
         type="target"
         position={Position.Left}
         className="lb-wf-handle lb-wf-handle--variable"
-        isConnectable={false}
       />
       <div className="lb-wf-node__head">
         <span className="lb-wf-node__title" title={`\${var.${view.name}}`}>

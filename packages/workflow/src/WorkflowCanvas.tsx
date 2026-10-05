@@ -53,7 +53,16 @@ import { OutputPanel } from "./OutputPanel";
 import { RunsPanel } from "./inspector/RunsPanel";
 import { BindingNode } from "./nodes/BindingNode";
 import { VariableNode } from "./nodes/VariableNode";
-import { applyDataWire, bindingRefError, dataConnection, losesHandoff, placeBinding, planDataWire, removeBinding } from "./lib/dataWiring";
+import {
+  applyCaptureWire,
+  applyDataWire,
+  bindingRefError,
+  dataConnection,
+  placeBinding,
+  planCaptureWire,
+  planDataWire,
+  removeBinding,
+} from "./lib/dataWiring";
 import { askAtStart, nextVariableName, variableFindings, variableNodeId, variableNodes } from "./lib/variables";
 import { channelNodes } from "./lib/channelNodes";
 import { agentNodes, agentOwner, dispatchesAgent } from "./lib/agentNodes";
@@ -462,17 +471,6 @@ function WorkflowCanvasInner({
   const onConnect = useCallback(
     (c: Connection) => {
       if (!editable || !c.source || !c.target) return;
-      // A data node dragged onto a state: its token goes into that state's
-      // user input. Said out loud when it costs the state its hand-off.
-      if (model) {
-        const w = planDataWire(model, c, variableNodes(model), bindingNodes(model));
-        if (w && losesHandoff(model, w)) {
-          setStatus(
-            `"${w.state}" now has its own input, so it no longer receives the previous state's output ` +
-              "(a loomcycle limit, gap G17). Add what it needs to its input template.",
-          );
-        }
-      }
       setModel((m) => {
         if (!m) return m;
         const vars = variableNodes(m);
@@ -482,6 +480,11 @@ function WorkflowCanvasInner({
         if (data === "data") {
           const w = planDataWire(m, c, vars, binds);
           return w ? applyDataWire(m, w) : m;
+        }
+        // A state dragged onto a variable: its output becomes the variable.
+        if (data === "capture") {
+          const w = planCaptureWire(m, c, vars);
+          return w ? applyCaptureWire(m, w) : m;
         }
         // A drag to or from a channel sets a name; a drag on a data handle is
         // never a transition. Classified against the model being updated, not
@@ -508,7 +511,7 @@ function WorkflowCanvasInner({
         };
       });
     },
-    [editable, channels, model],
+    [editable, channels],
   );
 
   const onEdgesDelete = useCallback(

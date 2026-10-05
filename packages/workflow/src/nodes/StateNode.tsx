@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { HANDLE, type FlowNodeData } from "../lib/flow";
+import { defaultCapturePath } from "../lib/dataWiring";
 import { RunLines } from "./RunLines";
 import { promptFields } from "../lib/bindings";
 import { inputFields } from "../lib/inputForm";
@@ -104,7 +105,9 @@ export function StateNode({ data, selected }: NodeProps) {
           position={Position.Bottom}
           className="lb-wf-handle lb-wf-handle--variable"
           style={{ left: "88%" }}
-          isConnectable={false}
+          // A drag from here onto a variable captures this state's output —
+          // for the kinds that have one (lib/dataWiring.ts).
+          isConnectable={!!defaultCapturePath(node)}
         />
       )}
       {/* Bindings feed in from below, beside the loop handle rather than on

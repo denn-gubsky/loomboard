@@ -14,11 +14,16 @@
 // (a Starter). The runtime expands it when it composes the prompt, so the
 // agent receives the content and cannot decline to read it.
 //
-// THE HAND-OFF. On loomcycle up to 1.102.0 an `input_template` REPLACES what
-// the previous state handed over, and a template cannot include it (gap G17).
-// So the first token wired into a state that had no template stops that state
-// receiving the previous output. `losesHandoff` says when; the canvas warns.
-// A Starter is not affected: its prompt.input is always a template.
+// THE HAND-OFF. An `input_template` REPLACES what the previous state handed
+// over unless it names `{{thread.output}}` (loomcycle 1.103.0, #1608). So the
+// first token wired into an agent-kind state that had no template is written
+// AFTER that marker: the state keeps receiving the previous output (the walk's
+// input, on the entry state) and gains the data. A Starter needs none of it:
+// its prompt.input is always a template, with its own `{{starter.message}}`.
+//
+// The reverse wire, a state dragged onto a VARIABLE, sets that state's
+// `capture`: its output becomes the variable (`$` binds a plain-text answer
+// whole since #1607), and the variable is no longer asked for at Start.
 //
 // Documents and Memory are placed first and wired after, like channels: a
 // placed one is only a layout position until a prompt names it.
@@ -29,6 +34,8 @@ import { bindingNodeId, promptText, type Binding, type BindingKind, type Binding
 import { BINDING_HANDLE, HANDLE, VARIABLE_HANDLE } from "./flow";
 import { handlerOf, patchHandler, type CanvasModel, type CanvasNode, type JsonObject } from "./model";
 import type { VariableNodeView } from "./variables";
+import { fieldsPatch, inputFields, startPlan } from "./inputForm";
+import { THREAD_OUTPUT_SLOT } from "./validate";
 import type { WireAttempt } from "./channelWiring";
 
 /** The field that is a state's user input, or undefined for a kind that
@@ -92,13 +99,20 @@ export function dataConnection(
   c: WireAttempt,
   variables: readonly VariableNodeView[],
   bindings: readonly BindingNodeView[],
-): "data" | "invalid" | null {
-  if (touchesDataNode(c, variables, bindings)) return planDataWire(model, c, variables, bindings) ? "data" : "invalid";
-  return c.targetHandle === HANDLE.targetBind ? "invalid" : null;
+): "data" | "capture" | "invalid" | null {
+  if (touchesDataNode(c, variables, bindings)) {
+    if (planDataWire(model, c, variables, bindings)) return "data";
+    return planCaptureWire(model, c, variables) ? "capture" : "invalid";
+  }
+  // The data handles take data wires only: a state-to-state drag on one is
+  // never a transition.
+  return c.targetHandle === HANDLE.targetBind || c.sourceHandle === HANDLE.sourceVar ? "invalid" : null;
 }
 
 /** Write the token into the state's user input, on its own line at the end.
- *  A state that already names it is left as it is. */
+ *  A state that already names it is left as it is. An agent-kind state with
+ *  no template yet gets the hand-off marker first, so it goes on receiving
+ *  what the previous state handed over. */
 export function applyDataWire(model: CanvasModel, w: DataWire): CanvasModel {
   return {
     ...model,
@@ -106,7 +120,8 @@ export function applyDataWire(model: CanvasModel, w: DataWire): CanvasModel {
       if (n.id !== w.state) return n;
       const text = promptText(n, w.field);
       if (text.includes(w.token)) return n;
-      const next = text.trim() ? `${text.replace(/\s+$/, "")}\n${w.token}` : w.token;
+      const base = text.trim() || w.field !== "input_template" ? text : THREAD_OUTPUT_SLOT;
+      const next = base.trim() ? `${base.replace(/\s+$/, "")}\n${w.token}` : w.token;
       if (w.field === "input_template") return patchHandler(n, { input_template: next });
       const prompt = handlerOf(n).prompt;
       const block = typeof prompt === "object" && prompt !== null && !Array.isArray(prompt) ? (prompt as JsonObject) : {};
@@ -115,14 +130,61 @@ export function applyDataWire(model: CanvasModel, w: DataWire): CanvasModel {
   };
 }
 
-/** True when this wire gives an agent-kind state its FIRST template, so it
- *  stops receiving the previous state's output (loomcycle G17). */
-export function losesHandoff(model: CanvasModel, w: DataWire): boolean {
-  if (w.field !== "input_template") return false;
-  const n = model.nodes.find((x) => x.id === w.state);
-  if (!n || promptText(n, w.field).trim()) return false;
-  // Only a state something hands over to has a hand-off to lose.
-  return model.edges.some((e) => e.to === w.state);
+export interface CaptureWire {
+  state: string;
+  variable: string;
+  /** The JSONPath the state's `capture` reads. */
+  path: string;
+}
+
+/** What a state's output offers a capture by default. A Starter's is the
+ *  envelope of its runs' results; every other run-producing state's is its
+ *  agent's answer, which `$` binds whole — as text when it is not JSON
+ *  (loomcycle #1607). Undefined for a kind with no output to capture. */
+export function defaultCapturePath(n: CanvasNode): string | undefined {
+  if (n.opaque) return undefined;
+  if (n.kind === "starter") return "$.results[0].output";
+  if (n.kind === "agent" || n.kind === "parallel" || n.kind === "consolidator") return "$";
+  return undefined;
+}
+
+/** A state dragged onto a variable: that state's output becomes the
+ *  variable. Null unless the drag runs from a run-producing state's variable
+ *  handle to a variable node's source handle. */
+export function planCaptureWire(model: CanvasModel, c: WireAttempt, variables: readonly VariableNodeView[]): CaptureWire | null {
+  const variable = variables.find((v) => v.id === c.target);
+  if (!variable || c.sourceHandle !== HANDLE.sourceVar || c.targetHandle !== VARIABLE_HANDLE.in) return null;
+  const n = model.nodes.find((x) => x.id === c.source);
+  const path = n && defaultCapturePath(n);
+  if (!n || !path) return null;
+  return { state: n.id, variable: variable.name, path };
+}
+
+/** Set the state's `capture` for the variable, keeping its other captures —
+ *  and stop asking for the variable at Start: it has a source now, and a
+ *  value typed at Start would only be overwritten when the state runs. A
+ *  state that already captures it keeps its own path. */
+export function applyCaptureWire(model: CanvasModel, w: CaptureWire): CanvasModel {
+  const front = model.nodes.find((n) => n.id === startPlan(model)?.input);
+  let nodes = model.nodes;
+  if (front) {
+    const fields = inputFields(front);
+    const kept = fields.filter((f) => f.variable !== w.variable);
+    if (kept.length !== fields.length) {
+      const patched = patchHandler(front, fieldsPatch(front, kept));
+      nodes = nodes.map((n) => (n.id === front.id ? patched : n));
+    }
+  }
+  return {
+    ...model,
+    nodes: nodes.map((n) => {
+      if (n.id !== w.state) return n;
+      const cur = handlerOf(n).capture;
+      const capture = typeof cur === "object" && cur !== null && !Array.isArray(cur) ? (cur as JsonObject) : {};
+      if (typeof capture[w.variable] === "string") return n;
+      return patchHandler(n, { capture: { ...capture, [w.variable]: w.path } });
+    }),
+  };
 }
 
 const REF_OK: Record<BindingKind, RegExp> = {

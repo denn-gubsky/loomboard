@@ -4,13 +4,17 @@ import {
   applyDataWire,
   bindingRefError,
   dataConnection,
-  losesHandoff,
+  applyCaptureWire,
+  defaultCapturePath,
+  planCaptureWire,
   placeBinding,
   planDataWire,
   removeBinding,
 } from "./dataWiring";
 import { BINDING_HANDLE, HANDLE, VARIABLE_HANDLE } from "./flow";
-import { fromDefinition, toDefinition, type CanvasModel } from "./model";
+import { inputFields } from "./inputForm";
+import { fromDefinition, handlerOf, toDefinition, type CanvasModel } from "./model";
+import { validateModel } from "./validate";
 import { askAtStart, variableNodes } from "./variables";
 
 const blog = (edit: Record<string, unknown> = {}) =>
@@ -61,7 +65,7 @@ describe("planDataWire / applyDataWire", () => {
       expect(w?.token).toBe(token);
       m = applyDataWire(m, w!);
     }
-    expect(promptText(node(m, "edit"), "input_template")).toBe("{{document:/guides/style#Tone}}\n{{memory:core_blocks}}");
+    expect(promptText(node(m, "edit"), "input_template")).toBe("{{thread.output}}\n{{document:/guides/style#Tone}}\n{{memory:core_blocks}}");
     expect(bindingNodes(m).map((b) => b.readers.map((r) => r.state))).toEqual([["edit"], ["edit"]]);
   });
 
@@ -82,19 +86,60 @@ describe("planDataWire / applyDataWire", () => {
   });
 });
 
-describe("losesHandoff", () => {
-  it("warns when the first token gives an agent state a template — it stops receiving the previous output (G17)", () => {
+describe("the hand-off (loomcycle 1.103.0)", () => {
+  it("keeps it: the first token wired into an agent state goes AFTER {{thread.output}}", () => {
+    // Regression: the wire wrote a bare template, which replaced what the
+    // previous state handed over — the editor lost the draft.
     const m = withTone(blog());
-    expect(losesHandoff(m, planDataWire(m, varDrag("edit"), ...views(m))!)).toBe(true);
+    const next = applyDataWire(m, planDataWire(m, varDrag("edit"), ...views(m))!);
+    expect(promptText(node(next, "edit"), "input_template")).toBe("{{thread.output}}\n${var.tone}");
+    // The runtime accepts it there.
+    expect(validateModel(next).filter((f) => f.level === "error" && f.nodeId !== "intake")).toEqual([]);
   });
 
-  it("does not warn for a state that already had a template, an entry nothing hands over to, or a Starter", () => {
+  it("leaves a template the author already wrote as they wrote it, and never gives a Starter the marker", () => {
     const templated = withTone(blog({ input_template: "Edit." }));
-    expect(losesHandoff(templated, planDataWire(templated, varDrag("edit"), ...views(templated))!)).toBe(false);
+    const a = applyDataWire(templated, planDataWire(templated, varDrag("edit"), ...views(templated))!);
+    expect(promptText(node(a, "edit"), "input_template")).toBe("Edit.\n${var.tone}");
     const m = withTone(blog());
-    expect(losesHandoff(m, planDataWire(m, varDrag("intake"), ...views(m))!)).toBe(false);
-    const plain = blog();
-    expect(losesHandoff(plain, { state: "draft", field: "input_template", token: "${var.x}" })).toBe(false);
+    const b = applyDataWire(m, planDataWire(m, varDrag("intake"), ...views(m))!);
+    expect(promptText(node(b, "intake"), "prompt.input")).not.toContain("{{thread.output}}");
+  });
+});
+
+describe("planCaptureWire / applyCaptureWire — a state's output becomes the variable", () => {
+  const stateDrag = (source: string) => ({ source, target: "var:tone", sourceHandle: HANDLE.sourceVar, targetHandle: VARIABLE_HANDLE.in });
+
+  it("captures an agent's whole answer with $, and stops asking for the variable at Start", () => {
+    const m = withTone(blog({ input_template: "Tone: ${var.tone}" }));
+    const w = planCaptureWire(m, stateDrag("draft"), variableNodes(m));
+    expect(w).toEqual({ state: "draft", variable: "tone", path: "$" });
+    const next = applyCaptureWire(m, w!);
+    const tone = variableNodes(next).find((v) => v.name === "tone")!;
+    expect(tone.sources).toEqual([{ kind: "capture", state: "draft", path: "$" }]);
+    // No longer a field of the start form — and still read by the editor.
+    expect(inputFields(node(next, "input-1"))).toEqual([]);
+    expect(tone.readers).toEqual([{ state: "edit", field: "input_template" }]);
+    expect(validateModel(next).filter((f) => f.level === "error" && f.nodeId !== "intake")).toEqual([]);
+  });
+
+  it("reads a Starter's first result, and keeps the state's other captures", () => {
+    const m = withTone(blog());
+    expect(planCaptureWire(m, stateDrag("intake"), variableNodes(m))?.path).toBe("$.results[0].output");
+    const kept = withTone(blog({ capture: { score: "$.score" } }));
+    const next = applyCaptureWire(kept, { state: "edit", variable: "tone", path: "$" });
+    expect(handlerOf(node(next, "edit")).capture).toEqual({ score: "$.score", tone: "$" });
+  });
+
+  it("offers no capture from a state with no output, or from the wrong handle", () => {
+    const m = withTone(blog());
+    expect(defaultCapturePath(node(m, "published"))).toBeUndefined();
+    expect(defaultCapturePath(node(m, "input-1"))).toBeUndefined();
+    expect(planCaptureWire(m, stateDrag("published"), variableNodes(m))).toBeNull();
+    expect(planCaptureWire(m, { ...stateDrag("draft"), sourceHandle: HANDLE.sourceRight }, variableNodes(m))).toBeNull();
+    expect(dataConnection(m, stateDrag("draft"), ...views(m))).toBe("capture");
+    // A drag from the variable handle to another STATE is no transition.
+    expect(dataConnection(m, { source: "draft", target: "edit", sourceHandle: HANDLE.sourceVar, targetHandle: HANDLE.targetLeft }, ...views(m))).toBe("invalid");
   });
 });
 
