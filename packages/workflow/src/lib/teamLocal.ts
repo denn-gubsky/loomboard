@@ -202,3 +202,70 @@ export function validateTeamLocal(
   }
   return out;
 }
+
+/** What the team declares for itself, as the team pane lists it: one row per
+ *  entry, with the few facts an operator reads it for. Read-only — the
+ *  canvas does not edit `local` yet. */
+export interface TeamOwnEntry {
+  kind: LocalKind;
+  name: string;
+  /** How the graph refers to it: "./name". */
+  ref: string;
+  /** Short facts, e.g. "ollama-local/ornith-1.5:35b", "scope user". */
+  facts: string[];
+  /** Something the operator should know, e.g. a name it shadows. */
+  note?: string;
+}
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+/** Every entry the team declares, by kind. `globalAgents` is the runtime's
+ *  agent list, for the one consequence a team's own agent has on others: a
+ *  name a model writes in the Agent tool resolves to the team's agent first,
+ *  for every agent in the walk (RFC DV). */
+export function teamOwnEntries(model: CanvasModel, team: string, globalAgents: readonly string[] = []): TeamOwnEntry[] {
+  const out: TeamOwnEntry[] = [];
+  const shadowed = new Set(globalAgents);
+  for (const kind of LOCAL_KINDS) {
+    for (const name of localNames(model, kind)) {
+      const b = localEntry(model, kind, name) ?? {};
+      const facts: string[] = [];
+      let note: string | undefined;
+      if (kind === "agents") {
+        const pin = [str(b.provider), str(b.model)].filter(Boolean).join("/");
+        facts.push(pin || (str(b.tier) ? `tier ${str(b.tier)}` : "default model"));
+        const tools = Array.isArray(b.tools) ? b.tools.filter((t): t is string => typeof t === "string") : [];
+        facts.push(tools.length ? `tools: ${tools.join(", ")}` : "no tools");
+        const skills = Array.isArray(b.skills) ? b.skills.filter((t): t is string => typeof t === "string") : [];
+        if (skills.length) facts.push(`skills: ${skills.join(", ")}`);
+        facts.push(`runs as ${team}/${name}`);
+        if (shadowed.has(name)) {
+          note =
+            `A global agent is also named "${name}". Inside this team's walks, an Agent-tool call to "${name}" — from any ` +
+            "agent in the walk — runs this one.";
+        }
+      } else if (kind === "skills") {
+        if (str(b.description)) facts.push(str(b.description));
+        const tools = Array.isArray(b.tools) ? b.tools.filter((t): t is string => typeof t === "string") : [];
+        if (tools.length) facts.push(`needs: ${tools.join(", ")}`);
+      } else if (kind === "channels") {
+        facts.push(`scope ${str(b.scope) || "tenant"}`);
+        if (b.hold === true) facts.push("held");
+        if (str(b.description)) facts.push(str(b.description));
+      } else if (kind === "schedules") {
+        facts.push(str(b.schedule), `→ ${str(b.channel)}`);
+        note = "Ticks only while a walk of this team runs.";
+      } else if (kind === "webhooks") {
+        const auth = obj(b.auth) ?? {};
+        const kindOfAuth = str(auth.kind) || "hmac";
+        const env = str(auth.signing_secret_env) || str(auth.bearer_token_env);
+        facts.push(`POST /v1/_teams/{tenant}/${team}/webhooks/${name}`, `→ ${str(b.channel)}`, `auth ${kindOfAuth}${env ? ` (${env})` : ""}`);
+        note = "Open only while a walk of this team runs, and only on the instance running it; otherwise 404.";
+      }
+      out.push({ kind, name, ref: `${LOCAL_REF_PREFIX}${name}`, facts: facts.filter(Boolean), note });
+    }
+  }
+  return out;
+}

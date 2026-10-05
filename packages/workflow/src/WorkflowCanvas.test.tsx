@@ -1190,6 +1190,20 @@ describe("WorkflowCanvas — starting a team with declared variables (RFC DV)", 
     expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d9", input: "", vars: { tone: "pirate" } });
   });
 
+  it("lists the team's own definitions, and offers its own agent as ./name in the agent field", async () => {
+    const { container } = render(
+      <WorkflowCanvas dataLayer={layer({ listAgents: async () => ["writer", "marketing/editor"] })} teamName="local" />,
+    );
+    const pane = await screen.findByRole("region", { name: "The team's own definitions" });
+    expect(within(pane).getByTestId("own-agents-writer").textContent).toContain("runs as local/writer");
+    // The global "writer" is a different agent, which this team's takes over
+    // inside its walks.
+    await waitFor(() => expect(within(pane).getByTestId("own-agents-writer").textContent).toMatch(/runs this one/));
+    fireEvent.click(screen.getByTestId("node-write"));
+    await waitFor(() => expect(container.querySelector('#lb-wf-agents option[value="./writer"]')).not.toBeNull());
+    expect(container.querySelector('#lb-wf-agents option[value="writer"]')).not.toBeNull();
+  });
+
   it("refuses a value the runtime would refuse, before anything starts", async () => {
     const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
     render(<WorkflowCanvas dataLayer={layer({ runTeamDetached })} teamName="local" />);
