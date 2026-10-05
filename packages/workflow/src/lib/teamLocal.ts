@@ -51,8 +51,10 @@ export function localRef(ref: string): string | undefined {
   return ref.startsWith(LOCAL_REF_PREFIX) ? ref.slice(LOCAL_REF_PREFIX.length) : undefined;
 }
 
-/** The team's declared variables, name → default. */
+/** The team's declared variables, name → default — the operator's edit if
+ *  there is one, otherwise what the definition carries. */
 export function teamVars(model: CanvasModel): Record<string, string> {
+  if (model.varsPatch) return model.varsPatch;
   const v = obj(model.source.vars);
   const out: Record<string, string> = {};
   for (const [k, val] of Object.entries(v ?? {})) out[k] = typeof val === "string" ? val : "";

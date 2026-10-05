@@ -1112,3 +1112,16 @@
   color: var(--lb-wf-muted);
   font-size: 11px;
 }
+
+/* The Start dialog's declared variables (RFC DV). */
+.loomboard-workflow .lb-wf-start__vars {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--lb-wf-border);
+  border-radius: 6px;
+}
+.loomboard-workflow .lb-wf-start__vars legend {
+  padding: 0 4px;
+  color: var(--lb-wf-muted);
+  font-size: 12px;
+}

@@ -25,7 +25,7 @@ import type { BindingNodeView } from "./bindings";
 import { agentNodeId, dispatchesAgent, type AgentNodeView } from "./agentNodes";
 import type { ResultItem } from "./output";
 import type { RunLine } from "../types";
-import type { VariableNodeView } from "./variables";
+import { fromState, type VariableNodeView } from "./variables";
 
 /** Which relation an edge represents. `control` is a transition the operator
  *  drew; `data` is derived from channel wiring and is never draggable. */
@@ -665,7 +665,7 @@ export function toVariableEdges(views: readonly VariableNodeView[]): FlowEdge[] 
   });
   const out: FlowEdge[] = [];
   for (const v of views) {
-    for (const state of [...new Set(v.sources.map((s) => s.state))]) {
+    for (const state of [...new Set(v.sources.filter(fromState).map((s) => s.state))]) {
       out.push(edge(`var:${state} > ${v.id}`, state, v.id, HANDLE.sourceVar, VARIABLE_HANDLE.in));
     }
     for (const state of [...new Set(v.readers.map((r) => r.state))]) {

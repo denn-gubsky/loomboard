@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { chunkOptions, formInput, type ChunkOption, type FormResult, type InputField } from "./lib/inputForm";
 import type { DocumentOption, WorkflowDataLayer } from "./types";
+import { varValueError } from "./lib/teamLocal";
 
 // The Start dialog of the Input node (RFC CZ "The Input node"): the team's
 // form, filled in by the person starting it, then sent.
@@ -13,20 +14,29 @@ import type { DocumentOption, WorkflowDataLayer } from "./types";
 
 export interface InputDialogProps {
   fields: InputField[];
+  /** The team's declared variables, name → default (RFC DV). Each is offered
+   *  prefilled; only the changed ones are sent. */
+  vars?: Record<string, string>;
   listDocuments?: WorkflowDataLayer["listDocuments"];
   listChunks?: WorkflowDataLayer["listChunks"];
   busy?: boolean;
   /** Why Start cannot be pressed (unsaved changes, a live walk…). */
   blocked?: string;
   error?: string;
-  onStart: (form: FormResult) => void;
+  onStart: (form: FormResult, vars?: Record<string, string>) => void;
   onClose: () => void;
 }
 
 type Values = Record<string, string | boolean | undefined>;
 
-export function InputDialog({ fields, listDocuments, listChunks, busy, blocked, error, onStart, onClose }: InputDialogProps) {
+export function InputDialog({ fields, vars, listDocuments, listChunks, busy, blocked, error, onStart, onClose }: InputDialogProps) {
   const [values, setValues] = useState<Values>({});
+  const [varValues, setVarValues] = useState<Record<string, string>>(() => ({ ...(vars ?? {}) }));
+  const varNames = Object.keys(vars ?? {}).sort();
+  const varErrors = Object.fromEntries(varNames.flatMap((n) => {
+    const why = varValueError(varValues[n] ?? "");
+    return why ? [[n, why]] : [];
+  }));
   const [plain, setPlain] = useState("");
   const [shown, setShown] = useState<Record<string, string>>({});
   // Choosing another document clears the chunks picked from the last one: a
@@ -41,7 +51,12 @@ export function InputDialog({ fields, listDocuments, listChunks, busy, blocked, 
   const submit = () => {
     const form = formInput(fields, values, plain);
     setShown(form.errors);
-    if (!Object.keys(form.errors).length) onStart(form);
+    if (Object.keys(form.errors).length || Object.keys(varErrors).length) return;
+    // Only what differs from the default: the walk records exactly what the
+    // person chose (spec.team.vars), and an untouched default stays the
+    // definition's.
+    const changed = Object.fromEntries(varNames.filter((n) => varValues[n] !== vars![n]).map((n) => [n, varValues[n]]));
+    onStart(form, Object.keys(changed).length ? changed : undefined);
   };
 
   return (
@@ -82,6 +97,27 @@ export function InputDialog({ fields, listDocuments, listChunks, busy, blocked, 
             {shown[f.name] && <div className="lb-wf-finding lb-wf-finding--error">{shown[f.name]}</div>}
           </div>
         ))
+      )}
+
+      {varNames.length > 0 && (
+        <fieldset className="lb-wf-start__vars">
+          <legend>Variables</legend>
+          {varNames.map((n) => (
+            <div key={n} className="lb-wf-start__field">
+              <label htmlFor={`lb-wf-var-${n}`}>
+                <code>{`\${var.${n}}`}</code>
+                {varValues[n] !== vars![n] && <span className="lb-wf-team__hint"> · changed</span>}
+              </label>
+              <input
+                id={`lb-wf-var-${n}`}
+                value={varValues[n] ?? ""}
+                placeholder="(empty)"
+                onChange={(e) => setVarValues((cur) => ({ ...cur, [n]: e.target.value }))}
+              />
+              {varErrors[n] && <div className="lb-wf-finding lb-wf-finding--error">{varErrors[n]}</div>}
+            </div>
+          ))}
+        </fieldset>
       )}
 
       {error && <div className="lb-wf-finding lb-wf-finding--error">{error}</div>}
