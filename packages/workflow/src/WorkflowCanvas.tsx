@@ -16,7 +16,7 @@ import { fieldsPatch, inputFields, placeInput, startFindings, startPlan, type Fo
 import { InputDialog } from "./InputDialog";
 import { walkProgress, type WalkProgress } from "./lib/progress";
 import { useRunLines } from "./useRunLines";
-import { teamVars } from "./lib/teamLocal";
+import { localNames, teamOwnEntries, teamVars } from "./lib/teamLocal";
 import { RunChatColumn } from "./RunChatColumn";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
 import { ResultPanel } from "./inspector/ResultPanel";
@@ -328,6 +328,16 @@ function WorkflowCanvasInner({
   // on screen is what it declares.
   const savedVars = useMemo(() => (model ? teamVars(model) : {}), [model]);
   const declaresVars = Object.keys(savedVars).length > 0;
+  // The team's own agents and channels are offered beside the global ones, as
+  // "./name" — the only spelling that means the team's own (RFC DV).
+  const agentChoices = useMemo(
+    () => [...(model ? localNames(model, "agents").map((n) => `./${n}`) : []), ...(agentNames ?? [])],
+    [model, agentNames],
+  );
+  const teamOwn = useMemo(
+    () => (model ? teamOwnEntries(model, loadedName.current ?? teamName ?? "", agentNames) : []),
+    [model, agentNames, teamName],
+  );
   const unsaved = useMemo(() => !!model && contentKey(model) !== savedKey.current, [model]);
   const canRun = !readonly && !!dataLayer.runTeamDetached && canStart(session);
   // The End node the result belongs on: the one the runtime says the walk
@@ -982,7 +992,7 @@ function WorkflowCanvasInner({
             onPlace={placeNode}
             disabled={!model || busy}
             onPlaceChannel={onPlaceChannel}
-            channelNames={channels?.map((c) => c.name)}
+            channelNames={[...(model ? localNames(model, "channels").map((n) => `./${n}`) : []), ...(channels?.map((c) => c.name) ?? [])]}
             onPlaceBinding={onPlaceBinding}
           />
         )}
@@ -1044,7 +1054,8 @@ function WorkflowCanvasInner({
           <Inspector
             node={selected}
             findings={findings}
-            agentNames={agentNames}
+            agentNames={agentChoices}
+            teamOwn={teamOwn}
             disabled={busy || !editable}
             onPatch={onPatch}
             onRename={onRename}

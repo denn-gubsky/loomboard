@@ -1125,3 +1125,17 @@
   color: var(--lb-wf-muted);
   font-size: 12px;
 }
+
+/* The team's own definitions (RFC DV), read-only in the team pane. */
+.loomboard-workflow .lb-wf-team-own__kind h4 {
+  margin: 8px 0 2px;
+  font-size: 12px;
+}
+.loomboard-workflow .lb-wf-team-own__kind ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.loomboard-workflow .lb-wf-team-own__facts {
+  color: var(--lb-wf-muted);
+  font-size: 12px;
+}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { aclFindings } from "./channels";
 import { channelNodes } from "./channelNodes";
 import { fromDefinition, toDefinition } from "./model";
-import { localNames, localRef, teamVars, varValueError } from "./teamLocal";
+import { localNames, localRef, teamOwnEntries, teamVars, varValueError } from "./teamLocal";
 
 const team = (extra: Record<string, unknown> = {}) =>
   fromDefinition({
@@ -54,5 +54,41 @@ describe("a team's own definitions (RFC DV)", () => {
     expect(varValueError("{{memory:core_blocks}}")).toMatch(/placeholder/);
     expect(varValueError("${run.user_bearer}")).toMatch(/credentials/);
     expect(varValueError("é".repeat(2049))).toMatch(/4098 bytes/);
+  });
+});
+
+describe("teamOwnEntries", () => {
+  const own = fromDefinition({
+    entry: "w",
+    states: [{ state: "w", handler: { kind: "agent", agent: "./writer" } }],
+    transitions: [],
+    local: {
+      agents: { writer: { provider: "ollama-local", model: "ornith-1.5:35b", tools: [], skills: ["./style"] } },
+      skills: { style: { body: "Write plainly.", description: "House style" } },
+      channels: { notes: { scope: "user" } },
+      schedules: { tick: { schedule: "@hourly", channel: "./notes" } },
+      webhooks: { hook: { auth: { kind: "bearer", bearer_token_env: "HOOK_TOKEN" }, channel: "./notes" } },
+    },
+  });
+
+  it("lists each kind with what an operator reads it for", () => {
+    const e = teamOwnEntries(own, "blog");
+    expect(e.map((x) => [x.kind, x.ref])).toEqual([
+      ["agents", "./writer"],
+      ["skills", "./style"],
+      ["channels", "./notes"],
+      ["schedules", "./tick"],
+      ["webhooks", "./hook"],
+    ]);
+    expect(e[0].facts).toEqual(["ollama-local/ornith-1.5:35b", "no tools", "skills: ./style", "runs as blog/writer"]);
+    expect(e[2].facts).toEqual(["scope user"]);
+    // A webhook names env vars only, and says when it answers.
+    expect(e[4].facts).toEqual(["POST /v1/_teams/{tenant}/blog/webhooks/hook", "→ ./notes", "auth bearer (HOOK_TOKEN)"]);
+    expect(e[4].note).toMatch(/only while a walk/);
+  });
+
+  it("says when a team's own agent takes over a global agent's name inside its walks", () => {
+    expect(teamOwnEntries(own, "blog", ["writer"])[0].note).toMatch(/runs this one/);
+    expect(teamOwnEntries(own, "blog", ["editor"])[0].note).toBeUndefined();
   });
 });

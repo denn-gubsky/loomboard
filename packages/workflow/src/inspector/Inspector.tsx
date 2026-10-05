@@ -7,7 +7,7 @@ import { channelBacklog, type ChannelNodeView } from "../lib/channelNodes";
 import type { ChannelSide } from "../lib/channels";
 import { MEMORY_VARIANTS, type BindingNodeView } from "../lib/bindings";
 import type { VariableNodeView } from "../lib/variables";
-import { varValueError } from "../lib/teamLocal";
+import { varValueError, type TeamOwnEntry } from "../lib/teamLocal";
 import { sourceLabel } from "../nodes/VariableNode";
 import { HANDLER_OMIT_IN_LIST, fieldsForKind, teamHandlerRegistry } from "./registry";
 
@@ -32,6 +32,9 @@ export interface InspectorProps {
   binding?: BindingNodeView | null;
   /** A selected variable node. */
   variable?: VariableNodeView | null;
+  /** What the team declares for itself (`local`, RFC DV), shown read-only in
+   *  the team pane. */
+  teamOwn?: TeamOwnEntry[];
   /** Declare the variable in the team's `vars`, edit its default, remove it.
    *  Absent: not offered (read-only). */
   onDeclareVariable?: (name: string) => void;
@@ -72,6 +75,7 @@ export function Inspector({
   onGrantChannel,
   binding,
   variable,
+  teamOwn,
   onDeclareVariable,
   onSetVariableDefault,
   onUndeclareVariable,
@@ -121,6 +125,7 @@ export function Inspector({
     return (
       <aside className="lb-wf-inspector lb-wf-inspector--team">
         <p className="lb-wf-inspector__hint">Select a node to edit it.</p>
+        {teamOwn && teamOwn.length > 0 && <TeamOwnPanel entries={teamOwn} />}
         {channels && onChannelsChange && (
           <TeamChannelPanel value={channels} disabled={disabled} onChange={onChannelsChange} />
         )}
@@ -367,6 +372,45 @@ function ChannelPanel({
         </p>
       )}
     </aside>
+  );
+}
+
+const OWN_TITLES: Record<TeamOwnEntry["kind"], string> = {
+  agents: "Agents",
+  skills: "Skills",
+  channels: "Channels",
+  schedules: "Schedules",
+  webhooks: "Webhooks",
+};
+
+/** The team's own agents, skills, channels, schedules and webhooks. Named in
+ *  the graph as "./name"; a bare name is always the global entry. */
+function TeamOwnPanel({ entries }: { entries: TeamOwnEntry[] }) {
+  const kinds = [...new Set(entries.map((e) => e.kind))];
+  return (
+    <section className="lb-wf-team lb-wf-team-own" aria-label="The team's own definitions">
+      <h3 className="lb-wf-team__title">The team's own</h3>
+      <p className="lb-wf-team__hint">
+        Declared in this team and nowhere else. The graph names them as <code>./name</code>; a bare name is always the
+        global entry.
+      </p>
+      {kinds.map((k) => (
+        <div key={k} className="lb-wf-team-own__kind">
+          <h4>{OWN_TITLES[k]}</h4>
+          <ul>
+            {entries
+              .filter((e) => e.kind === k)
+              .map((e) => (
+                <li key={e.ref} data-testid={`own-${k}-${e.name}`}>
+                  <code>{e.ref}</code>
+                  {e.facts.length > 0 && <span className="lb-wf-team-own__facts"> — {e.facts.join(" · ")}</span>}
+                  {e.note && <div className="lb-wf-team__hint">{e.note}</div>}
+                </li>
+              ))}
+          </ul>
+        </div>
+      ))}
+    </section>
   );
 }
 
