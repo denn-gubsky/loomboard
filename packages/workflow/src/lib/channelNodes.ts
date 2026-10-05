@@ -18,6 +18,7 @@
 // Pure: no React, no network.
 
 import type { ChannelInfo } from "../types";
+import { localNames, localRef } from "./teamLocal";
 import { channelAllowed, channelRefs, grantList, type ChannelSide } from "./channels";
 import { CHANNEL_LAYOUT_PREFIX, storedDerivedPosition, type CanvasModel, type XY } from "./model";
 
@@ -146,8 +147,10 @@ export function channelNodes(model: CanvasModel, infos?: readonly ChannelInfo[])
     taken.push(position);
 
     const grants: Partial<Record<ChannelSide, boolean>> = {};
-    if (publishers.size) grants.publish = channelAllowed(channel, grantList(model, "publish"));
-    if (readers.size) grants.subscribe = channelAllowed(channel, grantList(model, "subscribe"));
+    // The team may always publish to and read its own channel: no ACL entry.
+    const own = localRef(channel) !== undefined;
+    if (publishers.size) grants.publish = own || channelAllowed(channel, grantList(model, "publish"));
+    if (readers.size) grants.subscribe = own || channelAllowed(channel, grantList(model, "subscribe"));
 
     const info = infos?.find((c) => c.name === channel);
     out.push({
@@ -160,7 +163,9 @@ export function channelNodes(model: CanvasModel, infos?: readonly ChannelInfo[])
       wired: publishers.size + readers.size > 0,
       grants,
       info,
-      declared: infos ? !!info : undefined,
+      // The team's own channel is declared by the team itself (local.channels),
+      // and never appears in the channel listing (RFC DV).
+      declared: localRef(channel) !== undefined ? localNames(model, "channels").includes(localRef(channel)!) : infos ? !!info : undefined,
     });
   }
   return out;

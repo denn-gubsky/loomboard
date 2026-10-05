@@ -21,6 +21,8 @@ import type { CanvasModel, CanvasNode, JsonObject } from "./model";
 import { handlerOf } from "./model";
 import { parseJsonPath } from "./jsonpath";
 import { validateStateHooks, validateWalkHooks } from "./hooks";
+import { validateTeamLocal } from "./teamLocal";
+import { channelRefs } from "./channels";
 
 /** Mirrors teamgraph.MaxAllowedIterations. */
 export const MAX_ALLOWED_ITERATIONS = 1000;
@@ -48,6 +50,25 @@ function str(v: unknown): string {
 function agentsOf(n: CanvasNode): string[] {
   const raw = handlerOf(n).agents;
   return Array.isArray(raw) ? raw.map((a) => (typeof a === "string" ? a : "")) : [];
+}
+
+/** refs.go visitAgentRefs: every field of a state that names an agent. */
+export function agentRefs(model: CanvasModel): { state: string; field: string; agent: string }[] {
+  const out: { state: string; field: string; agent: string }[] = [];
+  for (const n of model.nodes) {
+    if (n.opaque) continue;
+    const h = handlerOf(n);
+    const push = (field: string, v: unknown) => typeof v === "string" && v && out.push({ state: n.id, field, agent: v });
+    push("agent", h.agent);
+    for (const a of agentsOf(n)) push("agents", a);
+    push("consolidator", h.consolidator);
+    const f = obj(h.fanout);
+    if (f) {
+      push("fanout.agent", f.agent);
+      for (const a of Array.isArray(f.agents) ? f.agents : []) push("fanout.agents", a);
+    }
+  }
+  return out;
 }
 
 function obj(v: unknown): JsonObject | undefined {
@@ -619,6 +640,10 @@ export function validateModel(model: CanvasModel): Finding[] {
       );
     }
   });
+
+  // A team's own variables and definitions (RFC DV), and the "./name"
+  // references the graph makes to them.
+  for (const m of validateTeamLocal(model.source, agentRefs(model), channelRefs(model))) err(m);
 
   const maxIter = model.source.max_iterations;
   if (typeof maxIter === "number") {
