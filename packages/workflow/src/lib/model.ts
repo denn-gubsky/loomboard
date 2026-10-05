@@ -303,17 +303,20 @@ export function toDefinition(model: CanvasModel): JsonObject {
       const list = model.channelsPatch[key]?.map((c) => c.trim()).filter(Boolean);
       if (list?.length) next[key] = list;
     }
-    // An ACL emptied all the way out is REMOVED rather than written as `{}`.
-    // Go tags both lists omitempty, so `{}` and absent mean the same thing to
-    // the runtime — but only one of them round-trips byte-identically against
-    // a definition that never had the key.
-    if (Object.keys(next).length) out.channels = next;
+    // An ACL emptied all the way out is written as `{}` when the saved
+    // definition had one. A save is a FORK, and a fork keeps the parent's value
+    // for every key its overlay omits (teamdef.go applyTeamOverlay) — dropping
+    // the key would leave the old ACL in force. A definition that never had
+    // the key stays without it, so an untouched one round-trips byte-identically.
+    if (Object.keys(next).length || "channels" in model.source) out.channels = next;
     else delete out.channels;
   }
 
   if (model.walkHooksPatch) {
     const h = model.walkHooksPatch.hooks;
+    // Cleared is `{}`, not a dropped key, for the reason the ACL gives above.
     if (h && Object.keys(h).length) out.hooks = clone(h);
+    else if ("hooks" in model.source) out.hooks = {};
     else delete out.hooks;
   }
 

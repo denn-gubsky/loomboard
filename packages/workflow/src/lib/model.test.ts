@@ -318,12 +318,13 @@ describe("team channels", () => {
     expect(toDefinition(m).channels).toEqual({ subscribe: ["a", "b"] });
   });
 
-  it("REMOVES the key when the ACL is emptied, rather than writing {}", () => {
-    // Go tags both lists omitempty, so {} and absent mean the same thing to the
-    // runtime — but only absent round-trips byte-identically against a team
-    // that never had the key, and the content hash sees the difference.
+  it("writes {} when the ACL is emptied — a save is a fork, and a fork keeps the parent's value for an omitted key", () => {
+    // Regression: the key was dropped, so the emptied ACL never reached the
+    // runtime (teamdef.go applyTeamOverlay replaces Channels only when sent).
     const m = { ...fromDefinition(withACL), channelsPatch: { subscribe: [], publish: [] } };
-    expect("channels" in toDefinition(m)).toBe(false);
+    expect(toDefinition(m).channels).toEqual({});
+    // A team that never had an ACL gains no key.
+    expect("channels" in toDefinition({ ...fromDefinition(MINIMAL), channelsPatch: { subscribe: [] } })).toBe(false);
   });
 
   it("an edited ACL survives alongside everything else the canvas preserves", () => {
@@ -359,13 +360,15 @@ describe("walk hooks (RFC DK-P4c)", () => {
     expect(toDefinition(m).hooks).toEqual({ run_end: ["page-oncall"] });
   });
 
-  it("REMOVES the key when the operator clears it, rather than writing {}", () => {
-    // Go tags Definition.Hooks omitempty, so {} and absent mean the same — but
-    // only absent round-trips against a definition that never had the key.
+  it("writes {} when the operator clears them — a fork keeps the parent's hooks for an omitted key", () => {
+    // Regression: the key was dropped, so cleared hooks stayed in force.
     const m = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: undefined } };
-    expect("hooks" in toDefinition(m)).toBe(false);
+    expect(toDefinition(m).hooks).toEqual({});
     const empty = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: {} } };
-    expect("hooks" in toDefinition(empty)).toBe(false);
+    expect(toDefinition(empty).hooks).toEqual({});
+    // A definition that never had hooks gains no key.
+    const { hooks: _h, ...none } = withHooks;
+    expect("hooks" in toDefinition({ ...fromDefinition(none), walkHooksPatch: { hooks: undefined } })).toBe(false);
   });
 });
 
