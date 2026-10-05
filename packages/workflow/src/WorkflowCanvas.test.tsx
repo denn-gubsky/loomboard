@@ -1204,6 +1204,30 @@ describe("WorkflowCanvas — starting a team with declared variables (RFC DV)", 
     expect(container.querySelector('#lb-wf-agents option[value="writer"]')).not.toBeNull();
   });
 
+  it("edits the team's own definitions in the team pane, and saves them with the team", async () => {
+    const forkTeam = vi.fn(async () => ({ def_id: "d10", name: "local", version: 2 }));
+    render(<WorkflowCanvas dataLayer={layer({ forkTeam })} teamName="local" />);
+    const pane = await screen.findByRole("region", { name: "The team's own definitions" });
+    // Add a channel, make it per-user.
+    fireEvent.change(within(pane).getByLabelText("New channel name"), { target: { value: "notes" } });
+    fireEvent.click(within(within(pane).getByTestId("own-kind-channels")).getByRole("button", { name: "Add" }));
+    fireEvent.change(await within(pane).findByLabelText("Scope"), { target: { value: "user" } });
+    // Add a webhook into it: it asks for the env var's NAME, and says so until given one.
+    fireEvent.change(within(pane).getByLabelText("New webhook name"), { target: { value: "inbound" } });
+    fireEvent.click(within(within(pane).getByTestId("own-kind-webhooks")).getByRole("button", { name: "Add" }));
+    expect(await screen.findByText(/auth\.kind=hmac requires auth\.signing_secret_env/)).toBeTruthy();
+    fireEvent.change(within(pane).getByLabelText("Signing secret env var"), { target: { value: "INBOUND_SECRET" } });
+    await waitFor(() => expect(screen.queryByText(/requires auth\.signing_secret_env/)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+    await waitFor(() => expect(forkTeam).toHaveBeenCalled());
+    const saved = (forkTeam.mock.calls[0] as unknown as [string, Record<string, unknown>])[1];
+    expect(saved.local).toEqual({
+      agents: { writer: { tier: "low" } },
+      channels: { notes: { scope: "user" } },
+      webhooks: { inbound: { auth: { kind: "hmac", signing_secret_env: "INBOUND_SECRET" }, channel: "./notes" } },
+    });
+  });
+
   it("refuses a value the runtime would refuse, before anything starts", async () => {
     const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
     render(<WorkflowCanvas dataLayer={layer({ runTeamDetached })} teamName="local" />);
