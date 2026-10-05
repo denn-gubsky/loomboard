@@ -18,6 +18,7 @@
 import type { CanvasModel } from "./model";
 import { handlerOf } from "./model";
 import type { Finding } from "./validate";
+import { localRef } from "./teamLocal";
 
 export type ChannelSide = "publish" | "subscribe";
 
@@ -132,6 +133,9 @@ export function aclFindings(model: CanvasModel): Finding[] {
 
   for (const ref of channelRefs(model)) {
     if (opaque.has(ref.state)) continue;
+    // The team's own channel ("./name") needs no ACL entry: the team may always
+    // publish to and read it (RFC DV). Whether it is declared is validateModel's.
+    if (localRef(ref.channel) !== undefined) continue;
     if (channelAllowed(ref.channel, grantList(model, ref.side))) continue;
     out.push({
       level: "error",
