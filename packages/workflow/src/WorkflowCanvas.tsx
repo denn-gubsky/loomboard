@@ -17,7 +17,7 @@ import { InputDialog } from "./InputDialog";
 import { walkProgress, type WalkProgress } from "./lib/progress";
 import { useRunLines } from "./useRunLines";
 import { LOCAL_KINDS, localKind, localNames, teamOwnEntries, teamVars, type LocalKind } from "./lib/teamLocal";
-import { addLocal, localBodyFindings, localNameError, removeLocal, setLocal } from "./lib/localEdit";
+import { addLocal, localBodyFindings, localNameError, removeLocal, renameLocal, setLocal } from "./lib/localEdit";
 import { RunChatColumn } from "./RunChatColumn";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
 import { ResultPanel } from "./inspector/ResultPanel";
@@ -336,6 +336,13 @@ function WorkflowCanvasInner({
     () => [...(model ? localNames(model, "agents").map((n) => `./${n}`) : []), ...(agentNames ?? [])],
     [model, agentNames],
   );
+  // Which of the team's own entries the team pane opens on: set by a node's
+  // "Edit ./name" link, which also clears the selection to show that pane.
+  const [ownFocus, setOwnFocus] = useState<{ key: string }>();
+  const editOwnAgent = useCallback((name: string) => {
+    setSelectedId(null);
+    setOwnFocus({ key: `agents/${name}` });
+  }, []);
   // Editing the team's own definitions (RFC DV). Content: each forks on save.
   const teamOwnEdit = useMemo(
     () => ({
@@ -350,8 +357,14 @@ function WorkflowCanvasInner({
       },
       onSet: (kind: LocalKind, name: string, body: JsonObject) => setModel((m) => (m ? setLocal(m, kind, name, body) : m)),
       onRemove: (kind: LocalKind, name: string) => setModel((m) => (m ? removeLocal(m, kind, name) : m)),
+      onRename: (kind: LocalKind, from: string, to: string) => {
+        const why = model ? localNameError(model, kind, to) : "no team loaded";
+        if (!why) setModel((m) => (m ? renameLocal(m, kind, from, to) : m));
+        return why;
+      },
+      focus: ownFocus,
     }),
-    [model],
+    [model, ownFocus],
   );
   const teamOwn = useMemo(
     () => (model ? teamOwnEntries(model, loadedName.current ?? teamName ?? "", agentNames) : []),
@@ -1076,6 +1089,7 @@ function WorkflowCanvasInner({
             agentNames={agentChoices}
             teamOwn={teamOwn}
             teamOwnEdit={editable ? teamOwnEdit : undefined}
+            onEditOwnAgent={editable ? editOwnAgent : undefined}
             disabled={busy || !editable}
             onPatch={onPatch}
             onRename={onRename}

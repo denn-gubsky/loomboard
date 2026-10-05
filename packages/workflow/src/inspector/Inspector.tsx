@@ -38,6 +38,9 @@ export interface InspectorProps {
   teamOwn?: TeamOwnEntry[];
   /** Edit the team's own definitions. Absent: the list is read-only. */
   teamOwnEdit?: Omit<TeamOwnEditorProps, "entries" | "disabled">;
+  /** Open one of the team's own agents in the team pane (from a node that
+   *  runs it as ./name). */
+  onEditOwnAgent?: (name: string) => void;
   /** Declare the variable in the team's `vars`, edit its default, remove it.
    *  Absent: not offered (read-only). */
   onDeclareVariable?: (name: string) => void;
@@ -80,6 +83,7 @@ export function Inspector({
   variable,
   teamOwn,
   teamOwnEdit,
+  onEditOwnAgent,
   onDeclareVariable,
   onSetVariableDefault,
   onUndeclareVariable,
@@ -191,6 +195,12 @@ export function Inspector({
       {result}
       {runs}
       {form}
+      {onEditOwnAgent &&
+        ownAgentsOf(node).map((name) => (
+          <button key={name} type="button" className="lb-wf-btn" onClick={() => onEditOwnAgent(name)}>
+            Edit ./{name} — the team's own agent
+          </button>
+        ))}
 
       {node.opaque ? (
         // An opaque node is deliberately NOT editable field-by-field: this
@@ -420,6 +430,15 @@ function TeamOwnPanel({ entries }: { entries: TeamOwnEntry[] }) {
       ))}
     </section>
   );
+}
+
+/** The team's own agents a node runs ("./name" in any agent field). */
+function ownAgentsOf(node: CanvasNode): string[] {
+  if (node.opaque) return [];
+  const h = handlerOf(node);
+  const f = h.fanout && typeof h.fanout === "object" && !Array.isArray(h.fanout) ? (h.fanout as JsonObject) : {};
+  const refs = [h.agent, h.consolidator, f.agent, ...(Array.isArray(h.agents) ? h.agents : []), ...(Array.isArray(f.agents) ? f.agents : [])];
+  return [...new Set(refs.flatMap((r) => (typeof r === "string" && r.startsWith("./") ? [r.slice(2)] : [])))];
 }
 
 /** A variable's details: where its value comes from, who reads it, and —
