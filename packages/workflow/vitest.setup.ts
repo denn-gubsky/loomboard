@@ -50,3 +50,12 @@ if (hasDOM) {
     dispatchEvent: () => false,
   })) as unknown as typeof globalThis.matchMedia;
 }
+
+// CodeMirror (the JSON view, RFC DX) measures text through Range geometry,
+// which jsdom does not implement either. Empty geometry is enough for it to
+// mount and edit; nothing here asserts on layout.
+if (hasDOM && typeof Range !== "undefined") {
+  const empty = () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+  Range.prototype.getClientRects ??= empty;
+  Range.prototype.getBoundingClientRect ??= () => new DOMRect(0, 0, 0, 0);
+}
