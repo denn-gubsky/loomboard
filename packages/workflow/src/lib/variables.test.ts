@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { forkOverlay } from "./fork";
 import { fromDefinition, toDefinition } from "./model";
 import { declareVariable, nextVariableName, setVariableDefault, undeclareVariable, variableFindings, variableNodes } from "./variables";
 
@@ -117,10 +118,11 @@ describe("declared variables (the team's `vars`, RFC DV)", () => {
     expect(toDefinition(undeclareVariable(m, "tone")).vars).toBeUndefined();
   });
 
-  it("writes {} when the last declared variable is removed — a fork that omits `vars` keeps the parent's", () => {
-    const saved = fromDefinition({ ...toDefinition(blog()), vars: { tone: "formal" } });
-    const cleared = undeclareVariable(saved, "tone");
-    expect(toDefinition(cleared).vars).toEqual({});
+  it("the save sends vars: {} when the last declared variable is removed — a fork that omits `vars` keeps the parent's", () => {
+    const savedDef = { ...toDefinition(blog()), vars: { tone: "formal" } };
+    const cleared = undeclareVariable(fromDefinition(savedDef), "tone");
+    expect("vars" in toDefinition(cleared)).toBe(false);
+    expect(forkOverlay(savedDef, toDefinition(cleared)).vars).toEqual({});
     // An untouched definition with no `vars` gains none.
     expect("vars" in toDefinition(blog())).toBe(false);
   });

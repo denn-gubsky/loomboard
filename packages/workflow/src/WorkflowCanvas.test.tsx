@@ -1257,3 +1257,40 @@ describe("WorkflowCanvas — starting a team with declared variables (RFC DV)", 
     expect(runTeamDetached).not.toHaveBeenCalled();
   });
 });
+
+describe("WorkflowCanvas — saving clears against the version the fork merges over (RFC DX)", () => {
+  it("clears a variable added and saved earlier in the same session", async () => {
+    // Regression: the clear was decided against the definition loaded when
+    // the canvas opened. After a save that added `vars`, removing them again
+    // and saving sent no `vars` at all — and a fork keeps the parent's.
+    let active = {
+      def_id: "d1",
+      name: "blog",
+      version: 1,
+      definition: {
+        entry: "w",
+        states: [{ state: "w", handler: { kind: "agent", agent: "x" } }, { state: "done", handler: { kind: "terminal" } }],
+        transitions: [{ from: "w", to: "done", on: "success" }],
+      } as Record<string, unknown>,
+    };
+    const forkTeam = vi.fn(async (_name: string, def: unknown) => {
+      active = { def_id: `d${active.version + 1}`, name: "blog", version: active.version + 1, definition: def as Record<string, unknown> };
+      return { def_id: active.def_id, name: "blog", version: active.version };
+    });
+    const layer = stubLayer({ getActiveTeamDef: async () => active, getTeamDef: async () => active, forkTeam });
+    render(<WorkflowCanvas dataLayer={layer} teamName="blog" />);
+    await screen.findByTestId("node-w");
+    fireEvent.click(screen.getByRole("button", { name: "Variable" }));
+    await screen.findByTestId("variable-var1");
+    fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+    await waitFor(() => expect(forkTeam).toHaveBeenCalledTimes(1));
+    expect((forkTeam.mock.calls[0][1] as { vars?: unknown }).vars).toEqual({ var1: "" });
+
+    fireEvent.click(await screen.findByTestId("variable-var1"));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove from the team" }));
+    await waitFor(() => expect(screen.queryByTestId("variable-var1")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+    await waitFor(() => expect(forkTeam).toHaveBeenCalledTimes(2));
+    expect((forkTeam.mock.calls[1][1] as { vars?: unknown }).vars).toEqual({});
+  });
+});

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { forkOverlay } from "./fork";
+import type { JsonObject } from "./model";
 import {
   contentKey,
   fromDefinition,
@@ -318,11 +320,12 @@ describe("team channels", () => {
     expect(toDefinition(m).channels).toEqual({ subscribe: ["a", "b"] });
   });
 
-  it("writes {} when the ACL is emptied — a save is a fork, and a fork keeps the parent's value for an omitted key", () => {
-    // Regression: the key was dropped, so the emptied ACL never reached the
-    // runtime (teamdef.go applyTeamOverlay replaces Channels only when sent).
+  it("an emptied ACL leaves the draft, and the save sends {} — a fork keeps the parent's value for an omitted key", () => {
+    // Regression (#105): the emptied ACL never reached the runtime
+    // (teamdef.go applyTeamOverlay replaces Channels only when sent).
     const m = { ...fromDefinition(withACL), channelsPatch: { subscribe: [], publish: [] } };
-    expect(toDefinition(m).channels).toEqual({});
+    expect("channels" in toDefinition(m)).toBe(false);
+    expect(forkOverlay(withACL as unknown as JsonObject, toDefinition(m)).channels).toEqual({});
     // A team that never had an ACL gains no key.
     expect("channels" in toDefinition({ ...fromDefinition(MINIMAL), channelsPatch: { subscribe: [] } })).toBe(false);
   });
@@ -360,12 +363,13 @@ describe("walk hooks (RFC DK-P4c)", () => {
     expect(toDefinition(m).hooks).toEqual({ run_end: ["page-oncall"] });
   });
 
-  it("writes {} when the operator clears them — a fork keeps the parent's hooks for an omitted key", () => {
-    // Regression: the key was dropped, so cleared hooks stayed in force.
+  it("cleared hooks leave the draft, and the save sends {} — a fork keeps the parent's hooks for an omitted key", () => {
+    // Regression (#105): cleared hooks stayed in force.
     const m = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: undefined } };
-    expect(toDefinition(m).hooks).toEqual({});
+    expect("hooks" in toDefinition(m)).toBe(false);
+    expect(forkOverlay(withHooks as unknown as JsonObject, toDefinition(m)).hooks).toEqual({});
     const empty = { ...fromDefinition(withHooks), walkHooksPatch: { hooks: {} } };
-    expect(toDefinition(empty).hooks).toEqual({});
+    expect(forkOverlay(withHooks as unknown as JsonObject, toDefinition(empty)).hooks).toEqual({});
     // A definition that never had hooks gains no key.
     const { hooks: _h, ...none } = withHooks;
     expect("hooks" in toDefinition({ ...fromDefinition(none), walkHooksPatch: { hooks: undefined } })).toBe(false);

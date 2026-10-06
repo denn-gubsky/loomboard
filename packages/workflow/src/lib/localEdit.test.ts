@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addLocal, defaultLocalBody, localBodyFindings, localNameError, removeLocal, renameLocal, setLocal } from "./localEdit";
+import { forkOverlay } from "./fork";
 import { fromDefinition, toDefinition } from "./model";
 import { localNames } from "./teamLocal";
 import { canSave, validateModel } from "./validate";
@@ -40,15 +41,18 @@ describe("editing a team's own definitions", () => {
     });
     expect(setLocal(saved, "agents", "nobody", {})).toBe(saved);
     const gone = removeLocal(saved, "channels", "inbox");
-    expect(toDefinition(gone).local).toEqual({ agents: { writer: { tier: "low" } }, channels: {} });
+    expect(toDefinition(gone).local).toEqual({ agents: { writer: { tier: "low" } } });
+    expect(forkOverlay(toDefinition(saved), toDefinition(gone)).local).toEqual({ agents: { writer: { tier: "low" } }, channels: {} });
   });
 
-  it("writes an emptied kind as {} — a fork keeps every kind its overlay omits — and adds none it never had", () => {
+  it("the save sends an emptied kind as {} — a fork keeps every kind its overlay omits — and adds none it never had", () => {
     const saved = base({ agents: { writer: {} } });
-    expect(toDefinition(removeLocal(saved, "agents", "writer")).local).toEqual({ agents: {} });
+    const emptied = toDefinition(removeLocal(saved, "agents", "writer"));
+    expect("local" in emptied).toBe(false);
+    expect(forkOverlay(toDefinition(saved), emptied).local).toEqual({ agents: {} });
     // Added then removed in one session: the kind was never saved, so no key.
     const none = removeLocal(addLocal(base(), "skills", "style"), "skills", "style");
-    expect("local" in toDefinition(none)).toBe(false);
+    expect("local" in forkOverlay(toDefinition(base()), toDefinition(none))).toBe(false);
   });
 
   it("is checked as it stands: removing an agent a state runs is reported before the save", () => {

@@ -310,45 +310,38 @@ export function toDefinition(model: CanvasModel): JsonObject {
       const list = model.channelsPatch[key]?.map((c) => c.trim()).filter(Boolean);
       if (list?.length) next[key] = list;
     }
-    // An ACL emptied all the way out is written as `{}` when the saved
-    // definition had one. A save is a FORK, and a fork keeps the parent's value
-    // for every key its overlay omits (teamdef.go applyTeamOverlay) — dropping
-    // the key would leave the old ACL in force. A definition that never had
-    // the key stays without it, so an untouched one round-trips byte-identically.
-    if (Object.keys(next).length || "channels" in model.source) out.channels = next;
+    // An emptied ACL leaves the draft. Clearing it on the RUNTIME takes an
+    // explicit `{}` in the fork, which lib/fork.ts forkOverlay adds at save,
+    // against the version the fork merges over.
+    if (Object.keys(next).length) out.channels = next;
     else delete out.channels;
   }
 
   if (model.walkHooksPatch) {
     const h = model.walkHooksPatch.hooks;
-    // Cleared is `{}`, not a dropped key, for the reason the ACL gives above.
+    // Cleared leaves the draft; forkOverlay clears it on the runtime.
     if (h && Object.keys(h).length) out.hooks = clone(h);
-    else if ("hooks" in model.source) out.hooks = {};
     else delete out.hooks;
   }
 
   if (model.localPatch) {
-    // Per kind, wholesale within one, as a fork applies it. An emptied kind
-    // the saved definition declared is written as `{}` — a fork keeps every
-    // kind its overlay omits — and one it never declared is left out, so an
-    // untouched definition round-trips.
+    // Per kind, wholesale within one. An emptied kind leaves the draft;
+    // forkOverlay clears it on the runtime.
     const saved = isObj(model.source.local) ? model.source.local : {};
     const local: JsonObject = { ...clone(saved) };
     for (const [kind, entries] of Object.entries(model.localPatch)) {
       if (!entries) continue;
-      if (Object.keys(entries).length || kind in saved) local[kind] = clone(entries);
+      if (Object.keys(entries).length) local[kind] = clone(entries);
       else delete local[kind];
     }
-    if (Object.keys(local).length || "local" in model.source) out.local = local;
+    if (Object.keys(local).length) out.local = local;
     else delete out.local;
   }
 
   if (model.varsPatch) {
-    // Emptied is written as `{}`, never dropped: a save is a fork, and a fork
-    // that omits `vars` KEEPS the parent's (RFC DV) — dropping the key would
-    // bring the deleted variables back. Absent stays absent for a definition
-    // that never had the key, so an untouched one round-trips byte-identically.
-    if (Object.keys(model.varsPatch).length || "vars" in model.source) out.vars = { ...model.varsPatch };
+    // Emptied leaves the draft; forkOverlay clears it on the runtime.
+    if (Object.keys(model.varsPatch).length) out.vars = { ...model.varsPatch };
+    else delete out.vars;
   }
 
   return out;
@@ -487,7 +480,23 @@ export function handlerChannels(n: CanvasNode): { source?: string; sink?: string
  *  loaded or saved key, it says whether Run would start something other than
  *  what is on screen. */
 export function contentKey(model: CanvasModel): string {
-  const { layout: _layout, colors: _colors, ...content } = toDefinition(model);
+  return definitionKey(toDefinition(model));
+}
+
+/** contentKey over a definition. An empty section and an absent one are the
+ *  same team — `{}` is only how a fork spells "none" — so both key alike. */
+export function definitionKey(def: JsonObject): string {
+  const { layout: _layout, colors: _colors, ...rest } = def;
+  const content: JsonObject = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if (isObj(v) && !Object.keys(v).length && ["channels", "hooks", "vars", "local"].includes(k)) continue;
+    if (k === "local" && isObj(v)) {
+      const kinds = Object.fromEntries(Object.entries(v).filter(([, e]) => !(isObj(e) && !Object.keys(e).length)));
+      if (Object.keys(kinds).length) content[k] = kinds;
+      continue;
+    }
+    content[k] = v;
+  }
   const stable = (v: unknown): unknown =>
     Array.isArray(v)
       ? v.map(stable)

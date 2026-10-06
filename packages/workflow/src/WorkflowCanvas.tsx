@@ -16,6 +16,7 @@ import { fieldsPatch, inputFields, placeInput, startFindings, startPlan, type Fo
 import { InputDialog } from "./InputDialog";
 import { walkProgress, type WalkProgress } from "./lib/progress";
 import { useRunLines } from "./useRunLines";
+import { forkOverlay } from "./lib/fork";
 import { LOCAL_KINDS, localKind, localNames, teamOwnEntries, teamVars, type LocalKind } from "./lib/teamLocal";
 import { addLocal, localBodyFindings, localNameError, removeLocal, renameLocal, setLocal } from "./lib/localEdit";
 import { RunChatColumn } from "./RunChatColumn";
@@ -797,7 +798,12 @@ function WorkflowCanvasInner({
         );
         return;
       }
-      const saved: SavedTeam = await dataLayer.forkTeam(name, toDefinition(model));
+      // The fork merges over the ACTIVE version, so that is what a dropped
+      // section is cleared against — not what was loaded, which after one
+      // save in this session is no longer the parent (lib/fork.ts).
+      const d = current.definition;
+      const parent = typeof d === "object" && d !== null && !Array.isArray(d) ? (d as JsonObject) : {};
+      const saved: SavedTeam = await dataLayer.forkTeam(name, forkOverlay(parent, toDefinition(model)));
       parentDefId.current = saved.def_id;
       savedKey.current = contentKey(model);
       setStatus(`Saved version ${saved.version}.`);
