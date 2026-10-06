@@ -88,7 +88,7 @@ export const WEBHOOK_SECRET_FIELD: Record<string, "signing_secret_env" | "bearer
 export function localBodyFindings(model: CanvasModel): Finding[] {
   const out: Finding[] = [];
   const err = (kind: LocalKind, name: string, message: string) =>
-    out.push({ level: "error", message: `local.${kind}[${JSON.stringify(name)}]: ${message}` });
+    out.push({ level: "error", path: ["local", kind, name], message: `local.${kind}[${JSON.stringify(name)}]: ${message}` });
 
   for (const [name, b] of Object.entries(localKind(model, "skills"))) {
     if (!str(b.body).trim()) err("skills", name, "body is required and must contain non-whitespace content");
