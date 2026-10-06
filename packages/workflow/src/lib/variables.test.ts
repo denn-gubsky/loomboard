@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { inputFields } from "./inputForm";
-import { fromDefinition, handlerOf, toDefinition } from "./model";
-import { askAtStart, nextVariableName, variableFindings, variableNodes } from "./variables";
+import { fromDefinition, toDefinition } from "./model";
+import { declareVariable, nextVariableName, setVariableDefault, undeclareVariable, variableFindings, variableNodes } from "./variables";
 
-const INPUT_RAW = { state: "input-1", handler: { kind: "input" } };
 
 // The screenshot team: draft → edit → published, with a revise loop.
 const blog = (edit: Record<string, unknown> = {}) =>
@@ -96,40 +94,42 @@ describe("variableFindings", () => {
     const [f] = variableFindings(variableNodes(m));
     expect(f).toMatchObject({ level: "info", nodeId: "edit" });
     expect(f.message).toContain("${var.tone}");
-    const asked = askAtStart(m, "tone", INPUT_RAW).model;
-    expect(variableFindings(variableNodes(asked))).toEqual([]);
+    const declared = declareVariable(m, "tone");
+    expect(variableFindings(variableNodes(declared))).toEqual([]);
   });
 });
 
-describe("askAtStart", () => {
-  it("gives a team with no form an Input entry that asks for the variable — and binds it", () => {
-    const { model, front } = askAtStart(blog({ input_template: "Tone: ${var.tone}" }), "tone", INPUT_RAW);
-    expect(model.entry).toBe("input-1");
-    expect(front).toBe("input-1");
-    const node = model.nodes.find((n) => n.id === front)!;
-    expect(inputFields(node)).toEqual([{ name: "tone", type: "string", required: true, variable: "tone" }]);
-    // What the runtime sees: a schema field, required, captured into the variable.
-    const h = handlerOf(node);
-    expect(h.capture).toEqual({ tone: "$.tone" });
-    expect((h.schema as { required: string[] }).required).toEqual(["tone"]);
-    expect(toDefinition(model).transitions).toContainEqual({ from: "input-1", to: "draft", on: "success" });
-    expect(variableNodes(model).find((v) => v.name === "tone")!.sources).toEqual([{ kind: "start", state: "input-1", field: "tone" }]);
+describe("declared variables (the team's `vars`, RFC DV)", () => {
+  it("draws a declared variable with its default — a source, no graph edge, and no start-form field", () => {
+    const m = declareVariable(blog({ input_template: "Tone: ${var.tone}" }), "tone", "formal");
+    const tone = variableNodes(m).find((v) => v.name === "tone")!;
+    expect(tone.sources).toEqual([{ kind: "declared", value: "formal" }]);
+    expect(tone.readers).toEqual([{ state: "edit", field: "input_template" }]);
+    // The graph is untouched: no Input entry is added for it any more.
+    expect(m.entry).toBe("draft");
+    expect(toDefinition(m).vars).toEqual({ tone: "formal" });
   });
 
-  it("adds to the form a team already has, and does not ask twice", () => {
-    const once = askAtStart(blog(), "tone", INPUT_RAW).model;
-    const twice = askAtStart(once, "audience", { state: "input-2", handler: { kind: "input" } }).model;
-    expect(twice.nodes.filter((n) => n.kind === "input")).toHaveLength(1);
-    expect(inputFields(twice.nodes.find((n) => n.id === "input-1")!).map((f) => f.name)).toEqual(["tone", "audience"]);
-    const again = askAtStart(twice, "tone", INPUT_RAW).model;
-    expect(inputFields(again.nodes.find((n) => n.id === "input-1")!)).toHaveLength(2);
+  it("declares once, edits the default, and removes it", () => {
+    const m = declareVariable(blog(), "tone", "formal");
+    expect(declareVariable(m, "tone", "warm")).toBe(m);
+    expect(toDefinition(setVariableDefault(m, "tone", "warm")).vars).toEqual({ tone: "warm" });
+    expect(toDefinition(undeclareVariable(m, "tone")).vars).toBeUndefined();
+  });
+
+  it("writes {} when the last declared variable is removed — a fork that omits `vars` keeps the parent's", () => {
+    const saved = fromDefinition({ ...toDefinition(blog()), vars: { tone: "formal" } });
+    const cleared = undeclareVariable(saved, "tone");
+    expect(toDefinition(cleared).vars).toEqual({});
+    // An untouched definition with no `vars` gains none.
+    expect("vars" in toDefinition(blog())).toBe(false);
   });
 });
 
 describe("nextVariableName", () => {
   it("is the first free var<N>", () => {
     expect(nextVariableName([])).toBe("var1");
-    const m = askAtStart(blog(), "var1", INPUT_RAW).model;
+    const m = declareVariable(blog(), "var1");
     expect(nextVariableName(variableNodes(m))).toBe("var2");
   });
 });

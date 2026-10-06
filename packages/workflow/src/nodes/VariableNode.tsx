@@ -7,7 +7,8 @@ import type { VariableSource } from "../lib/variables";
 // decides whether Start asks for it — and how many nodes read it.
 
 export function sourceLabel(s: VariableSource): string {
-  if (s.kind === "start") return "asked at Start";
+  if (s.kind === "declared") return s.value ? `default: ${s.value}` : "default: (empty)";
+  if (s.kind === "start") return "from the start form";
   if (s.kind === "set") return `set by ${s.state}`;
   return `from ${s.state}${s.path ? ` · ${s.path}` : ""}`;
 }

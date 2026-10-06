@@ -1112,3 +1112,66 @@
   color: var(--lb-wf-muted);
   font-size: 11px;
 }
+
+/* The Start dialog's declared variables (RFC DV). */
+.loomboard-workflow .lb-wf-start__vars {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--lb-wf-border);
+  border-radius: 6px;
+}
+.loomboard-workflow .lb-wf-start__vars legend {
+  padding: 0 4px;
+  color: var(--lb-wf-muted);
+  font-size: 12px;
+}
+
+/* The team's own definitions (RFC DV), read-only in the team pane. */
+.loomboard-workflow .lb-wf-team-own__kind h4 {
+  margin: 8px 0 2px;
+  font-size: 12px;
+}
+.loomboard-workflow .lb-wf-team-own__kind ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.loomboard-workflow .lb-wf-team-own__facts {
+  color: var(--lb-wf-muted);
+  font-size: 12px;
+}
+.loomboard-workflow .lb-wf-team-own__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.loomboard-workflow .lb-wf-team-own__kind ul {
+  list-style: none;
+  padding-left: 0;
+}
+.loomboard-workflow .lb-wf-team-own__kind li {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--lb-wf-border);
+}
+.loomboard-workflow .lb-wf-team-own__editor {
+  margin: 6px 0;
+  padding: 6px;
+  border-radius: 5px;
+  background: var(--lb-wf-bg);
+}
+.loomboard-workflow .lb-wf-team-own__field {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.loomboard-workflow .lb-wf-team-own__field input,
+.loomboard-workflow .lb-wf-team-own__field select,
+.loomboard-workflow .lb-wf-team-own__field textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.loomboard-workflow .lb-wf-team-own__add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}

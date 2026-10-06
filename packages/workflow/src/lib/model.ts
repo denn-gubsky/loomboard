@@ -106,6 +106,13 @@ export interface CanvasModel {
    *  and the key leaves the definition. A wrapper, because "untouched" and
    *  "cleared" must not both be `undefined`. Content: it forks on save. */
   walkHooksPatch?: { hooks?: JsonObject };
+  /** The team's declared variables (`vars`: name → default, RFC DV), once
+   *  edited. Content: it forks on save. */
+  varsPatch?: Record<string, string>;
+  /** The team's own definitions (`local`, RFC DV), per kind, once edited.
+   *  A kind present here replaces the saved one wholesale — the runtime's own
+   *  rule for a fork. Content: it forks on save. */
+  localPatch?: Partial<Record<"agents" | "skills" | "channels" | "schedules" | "webhooks", Record<string, JsonObject>>>;
   /** Positions the operator dragged for DERIVED nodes — channels
    *  (`channel:<name>`) and bindings (`binding:…`), nodes that exist because a
    *  state's config names them rather than in `states[]`. Presentation, like
@@ -318,6 +325,30 @@ export function toDefinition(model: CanvasModel): JsonObject {
     if (h && Object.keys(h).length) out.hooks = clone(h);
     else if ("hooks" in model.source) out.hooks = {};
     else delete out.hooks;
+  }
+
+  if (model.localPatch) {
+    // Per kind, wholesale within one, as a fork applies it. An emptied kind
+    // the saved definition declared is written as `{}` — a fork keeps every
+    // kind its overlay omits — and one it never declared is left out, so an
+    // untouched definition round-trips.
+    const saved = isObj(model.source.local) ? model.source.local : {};
+    const local: JsonObject = { ...clone(saved) };
+    for (const [kind, entries] of Object.entries(model.localPatch)) {
+      if (!entries) continue;
+      if (Object.keys(entries).length || kind in saved) local[kind] = clone(entries);
+      else delete local[kind];
+    }
+    if (Object.keys(local).length || "local" in model.source) out.local = local;
+    else delete out.local;
+  }
+
+  if (model.varsPatch) {
+    // Emptied is written as `{}`, never dropped: a save is a fork, and a fork
+    // that omits `vars` KEEPS the parent's (RFC DV) — dropping the key would
+    // bring the deleted variables back. Absent stays absent for a definition
+    // that never had the key, so an untouched one round-trips byte-identically.
+    if (Object.keys(model.varsPatch).length || "vars" in model.source) out.vars = { ...model.varsPatch };
   }
 
   return out;

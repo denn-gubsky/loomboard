@@ -11,7 +11,7 @@ import {
 } from "./dataWiring";
 import { BINDING_HANDLE, HANDLE, VARIABLE_HANDLE } from "./flow";
 import { fromDefinition, toDefinition, type CanvasModel } from "./model";
-import { askAtStart, variableNodes } from "./variables";
+import { declareVariable, variableNodes } from "./variables";
 
 const blog = (edit: Record<string, unknown> = {}) =>
   fromDefinition({
@@ -28,7 +28,7 @@ const blog = (edit: Record<string, unknown> = {}) =>
     ],
   });
 
-const withTone = (m: CanvasModel) => askAtStart(m, "tone", { state: "input-1", handler: { kind: "input" } }).model;
+const withTone = (m: CanvasModel) => declareVariable(m, "tone", "formal");
 const views = (m: CanvasModel) => [variableNodes(m), bindingNodes(m)] as const;
 const node = (m: CanvasModel, id: string) => m.nodes.find((n) => n.id === id)!;
 const varDrag = (target: string) => ({ source: "var:tone", target, sourceHandle: VARIABLE_HANDLE.out, targetHandle: HANDLE.targetBind });

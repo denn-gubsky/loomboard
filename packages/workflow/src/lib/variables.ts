@@ -1,36 +1,33 @@
-// Variable nodes (RFC CZ "Data nodes"): a team's ${var.*} drawn as nodes — a
-// named value with a SOURCE, not a step in the walk.
+// Variable nodes: a team's ${var.*} drawn as nodes — a named value with a
+// SOURCE, not a step in the walk.
 //
 // DERIVED, like channel and binding nodes: a variable node exists because the
-// definition sets or reads the variable. Where its value comes from decides
-// what it is in the definition:
+// definition declares, sets or reads the variable. Its sources:
 //
-//   - asked at Start: a field of the team's start form bound to the variable
-//     (an Input state's `capture`, or an input Starter's `binds`);
+//   - declared: the team's `vars` section (loomcycle RFC DV, 1.104.0) — a
+//     default every walk starts with, which the person starting a walk may
+//     change in the Start dialog;
+//   - from the start form: a form field bound to it (an Input state's
+//     `capture`, or an input Starter's `binds`);
 //   - captured: `capture` (or a channel Starter's `binds`) on the state whose
 //     output or message it is read from;
 //   - set: an assignment on a `vars` state.
 //
-// A variable some prompt reads and nothing sets expands to EMPTY at run time.
-// That is the case the canvas exists to catch: it is flagged, and
-// `askAtStart` turns it into a form field, so Start asks for it.
+// A variable some prompt reads and nothing declares or sets expands to EMPTY
+// at run time. That is the case the canvas exists to catch: it is flagged, and
+// `declareVariable` adds it to `vars`, so it has a default and Start shows it.
 //
 // Pure: no React, no network.
 
 import { promptFields, promptText, type PromptField } from "./bindings";
-import { fieldsPatch, inputFields, placeInput, startPlan } from "./inputForm";
-import {
-  handlerOf,
-  patchHandler,
-  storedDerivedPosition,
-  VARIABLE_LAYOUT_PREFIX,
-  type CanvasModel,
-  type JsonObject,
-  type XY,
-} from "./model";
+import { inputFields, startPlan } from "./inputForm";
+import { handlerOf, storedDerivedPosition, VARIABLE_LAYOUT_PREFIX, type CanvasModel, type JsonObject, type XY } from "./model";
+import { teamVars } from "./teamLocal";
 import type { Finding } from "./validate";
 
 export type VariableSource =
+  /** Declared in the team's `vars`, with its default. */
+  | { kind: "declared"; value: string }
   /** A field of the start form: the person starting the team is asked. */
   | { kind: "start"; state: string; field: string }
   /** Read from a state's output (or a Starter's message) by JSONPath. */
@@ -47,6 +44,11 @@ export interface VariableNodeView {
   readers: { state: string; field: PromptField }[];
   position: XY;
   placed: boolean;
+}
+
+/** A source that is a state of the graph — every kind but a declaration. */
+export function fromState(s: VariableSource): s is Exclude<VariableSource, { kind: "declared" }> {
+  return s.kind !== "declared";
 }
 
 export function variableNodeId(name: string): string {
@@ -75,6 +77,11 @@ export function variableNodes(model: CanvasModel): VariableNodeView[] {
       order.push(name);
     }
   };
+
+  for (const [name, value] of Object.entries(teamVars(model))) {
+    touch(name);
+    sources.get(name)!.push({ kind: "declared", value });
+  }
 
   // The start form's bound fields: the front door's own mapping.
   const front = model.nodes.find((n) => n.id === startPlan(model)?.input);
@@ -129,7 +136,7 @@ export function variableNodes(model: CanvasModel): VariableNodeView[] {
     let position = stored;
     if (!position) {
       // Under what it touches: its readers, else its sources.
-      const near = (readers.get(name)!.length ? readers.get(name)! : sources.get(name)!)
+      const near = (readers.get(name)!.length ? readers.get(name)! : sources.get(name)!.filter(fromState))
         .map((r) => pos.get(r.state))
         .filter((p): p is XY => !!p);
       const x = near.reduce((a, p) => a + p.x, 0) / Math.max(1, near.length);
@@ -152,7 +159,7 @@ export function variableFindings(views: readonly VariableNodeView[]): Finding[] 
       nodeId: v.readers[0]?.state,
       message:
         `\${var.${v.name}} is read by ${[...new Set(v.readers.map((r) => JSON.stringify(r.state)))].join(", ")} ` +
-        "but nothing sets it — it expands to empty. Select the variable and choose Ask at Start, or set it.",
+        "but nothing declares or sets it — it expands to empty. Select the variable and choose Declare.",
     }));
 }
 
@@ -162,28 +169,27 @@ export function nextVariableName(views: readonly VariableNodeView[]): string {
   for (let i = 1; ; i++) if (!used.has(`var${i}`)) return `var${i}`;
 }
 
-/** Make `name` a field of the team's start form, bound to the variable, so
- *  Start asks for it — and every caller must send it, since the runtime checks
- *  a walk's input against the form's schema. A team with no front door gets an
- *  Input node as its entry (`inputRaw`, a fresh input state). A variable the
- *  form already asks for is left as it is. */
-export function askAtStart(
-  model: CanvasModel,
-  name: string,
-  inputRaw: JsonObject,
-  derived: readonly XY[] = [],
-): { model: CanvasModel; front: string } {
-  const placed = placeInput(model, inputRaw, derived);
-  const front = placed.model.nodes.find((n) => n.id === placed.id)!;
-  const fields = inputFields(front);
-  if (fields.some((f) => f.variable === name)) return { model: placed.model, front: front.id };
-  // A field of that name may exist unbound: bind it rather than add a twin.
-  const next = fields.some((f) => f.name === name)
-    ? fields.map((f) => (f.name === name ? { ...f, variable: name } : f))
-    : [...fields, { name, type: "string" as const, required: true, variable: name }];
-  const patched = patchHandler(front, fieldsPatch(front, next));
-  return {
-    model: { ...placed.model, nodes: placed.model.nodes.map((n) => (n.id === front.id ? patched : n)) },
-    front: front.id,
-  };
+/** Add a variable to the team's `vars` with a default, so every walk has a
+ *  value for it and the Start dialog offers it. One already declared keeps
+ *  its default. */
+export function declareVariable(model: CanvasModel, name: string, value = ""): CanvasModel {
+  const vars = teamVars(model);
+  if (name in vars) return model;
+  return { ...model, varsPatch: { ...vars, [name]: value } };
+}
+
+/** Change a declared variable's default. */
+export function setVariableDefault(model: CanvasModel, name: string, value: string): CanvasModel {
+  const vars = teamVars(model);
+  if (!(name in vars) || vars[name] === value) return model;
+  return { ...model, varsPatch: { ...vars, [name]: value } };
+}
+
+/** Remove a variable from `vars`. Prompts that read it are left alone: the
+ *  variable is then flagged as read and not set. */
+export function undeclareVariable(model: CanvasModel, name: string): CanvasModel {
+  const vars = teamVars(model);
+  if (!(name in vars)) return model;
+  const { [name]: _gone, ...rest } = vars;
+  return { ...model, varsPatch: rest };
 }
