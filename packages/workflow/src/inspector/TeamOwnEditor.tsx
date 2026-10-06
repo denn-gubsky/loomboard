@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FoldedFieldList, agentDefRegistry, type DefValue } from "@loomcycle/def-fields";
 import type { JsonObject } from "../lib/model";
 import { LOCAL_KINDS, type LocalKind, type TeamOwnEntry } from "../lib/teamLocal";
@@ -39,10 +39,18 @@ export interface TeamOwnEditorProps {
   onAdd: (kind: LocalKind, name: string) => string | undefined;
   onSet: (kind: LocalKind, name: string, body: JsonObject) => void;
   onRemove: (kind: LocalKind, name: string) => void;
+  /** Rename an entry and every ./name reference to it; returns why not. */
+  onRename?: (kind: LocalKind, from: string, to: string) => string | undefined;
+  /** An entry to open, as "kind/name" (e.g. from a node's Edit link). A new
+   *  object each time it is asked for, so asking again reopens it. */
+  focus?: { key: string };
 }
 
-export function TeamOwnEditor({ entries, bodies, disabled, onAdd, onSet, onRemove }: TeamOwnEditorProps) {
-  const [open, setOpen] = useState<string>();
+export function TeamOwnEditor({ entries, bodies, disabled, onAdd, onSet, onRemove, onRename, focus }: TeamOwnEditorProps) {
+  const [open, setOpen] = useState<string | undefined>(focus?.key);
+  useEffect(() => {
+    if (focus) setOpen(focus.key);
+  }, [focus]);
   const ownChannels = Object.keys(bodies.channels).sort().map((n) => `./${n}`);
   return (
     <section className="lb-wf-team lb-wf-team-own" aria-label="The team's own definitions">
@@ -85,6 +93,18 @@ export function TeamOwnEditor({ entries, bodies, disabled, onAdd, onSet, onRemov
                     </div>
                     {e.facts.length > 0 && <div className="lb-wf-team-own__facts">{e.facts.join(" · ")}</div>}
                     {e.note && <div className="lb-wf-team__hint">{e.note}</div>}
+                    {open === key && onRename && (
+                      <RenameRow
+                        current={e.name}
+                        kind={kind}
+                        disabled={disabled}
+                        onRename={(to) => {
+                          const why = onRename(kind, e.name, to);
+                          if (!why) setOpen(`${kind}/${to}`);
+                          return why;
+                        }}
+                      />
+                    )}
                     {open === key && (
                       <BodyEditor
                         kind={kind}
@@ -106,6 +126,44 @@ export function TeamOwnEditor({ entries, bodies, disabled, onAdd, onSet, onRemov
         </div>
       ))}
     </section>
+  );
+}
+
+const RENAME_NOTES: Partial<Record<LocalKind, string>> = {
+  agents: "Every state that runs it is updated.",
+  skills: "Every agent of the team granted it is updated.",
+  channels: "Every state, schedule, webhook and agent grant naming it is updated.",
+  webhooks: "Its URL ends in its name: tell whoever sends to it.",
+};
+
+function RenameRow({
+  current,
+  kind,
+  disabled,
+  onRename,
+}: {
+  current: string;
+  kind: LocalKind;
+  disabled?: boolean;
+  onRename: (to: string) => string | undefined;
+}) {
+  const [to, setTo] = useState(current);
+  const [error, setError] = useState<string>();
+  return (
+    <form
+      className="lb-wf-team-own__add"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(onRename(to.trim()));
+      }}
+    >
+      <input className="lb-wf-input" aria-label="Rename to" value={to} disabled={disabled} onChange={(e) => setTo(e.target.value)} />
+      <button type="submit" className="lb-wf-btn" disabled={disabled || !to.trim() || to.trim() === current}>
+        Rename
+      </button>
+      {RENAME_NOTES[kind] && <div className="lb-wf-team__hint">{RENAME_NOTES[kind]}</div>}
+      {error && <div className="lb-wf-finding lb-wf-finding--error">{error}</div>}
+    </form>
   );
 }
 

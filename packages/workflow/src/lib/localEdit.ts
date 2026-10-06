@@ -14,7 +14,7 @@
 //
 // Pure: no React, no network.
 
-import type { CanvasModel, JsonObject } from "./model";
+import { CHANNEL_LAYOUT_PREFIX, handlerOf, patchHandler, storedDerivedPosition, type CanvasModel, type JsonObject } from "./model";
 import { LOCAL_REF_PREFIX, localKind, localNames, type LocalKind } from "./teamLocal";
 import type { Finding } from "./validate";
 
@@ -110,4 +110,100 @@ export function localBodyFindings(model: CanvasModel): Finding[] {
     if (field && !str(auth[field]).trim()) err("webhooks", name, `auth.kind=${kind} requires auth.${field}`);
   }
   return out;
+}
+
+/** Every place a definition can name a team's own entry of `kind`, rewritten
+ *  from "./from" to "./to":
+ *
+ *   agents    a state's agent, agents[], consolidator, fanout.agent / agents[]
+ *   skills    the team's own agents' `skills` grants
+ *   channels  a state's source / sink / channel / publish channel, the team's
+ *             own schedules' and webhooks' target, and the team's own agents'
+ *             `channels` grants (publish / subscribe)
+ *
+ *  Schedules and webhooks are named by nothing in the definition; a webhook's
+ *  URL ends in its name, so a sender must be told of the new one. Refused (the
+ *  model comes back unchanged) when `to` is not a free, valid name. */
+export function renameLocal(model: CanvasModel, kind: LocalKind, from: string, to: string): CanvasModel {
+  const entries = localKind(model, kind);
+  if (!(from in entries) || from === to || localNameError(model, kind, to)) return model;
+  const oldRef = `${LOCAL_REF_PREFIX}${from}`;
+  const newRef = `${LOCAL_REF_PREFIX}${to}`;
+  const swap = (v: unknown) => (v === oldRef ? newRef : v);
+  const swapList = (v: unknown) => (Array.isArray(v) ? v.map(swap) : v);
+
+  // The kind itself, keeping the entries' order.
+  let next = withKind(
+    model,
+    kind,
+    Object.fromEntries(Object.entries(entries).map(([k, v]) => [k === from ? to : k, v])) as Record<string, JsonObject>,
+  );
+
+  if (kind === "agents" || kind === "channels") {
+    next = {
+      ...next,
+      nodes: next.nodes.map((n) => {
+        if (n.opaque) return n;
+        const h = handlerOf(n);
+        const patch: Record<string, JsonObject[string]> = {};
+        if (kind === "agents") {
+          if (h.agent === oldRef) patch.agent = newRef;
+          if (h.consolidator === oldRef) patch.consolidator = newRef;
+          if (Array.isArray(h.agents) && h.agents.includes(oldRef)) patch.agents = swapList(h.agents) as JsonObject[string];
+          const f = obj(h.fanout);
+          if (f && (f.agent === oldRef || (Array.isArray(f.agents) && f.agents.includes(oldRef)))) {
+            patch.fanout = { ...f, ...(f.agent === oldRef ? { agent: newRef } : {}), ...(Array.isArray(f.agents) ? { agents: swapList(f.agents) as JsonObject[string] } : {}) };
+          }
+        } else {
+          for (const key of ["source", "sink", "publish"] as const) {
+            const b = obj(h[key]);
+            if (b?.channel === oldRef) patch[key] = { ...b, channel: newRef };
+          }
+          if (h.channel === oldRef) patch.channel = newRef;
+        }
+        return Object.keys(patch).length ? patchHandler(n, patch) : n;
+      }),
+    };
+  }
+
+  // References from the team's own entries.
+  const rewrite = (k: LocalKind, fn: (b: JsonObject) => JsonObject) => {
+    const cur = localKind(next, k);
+    let changed = false;
+    const out: Record<string, JsonObject> = {};
+    for (const [name, b] of Object.entries(cur)) {
+      const nb = fn(b);
+      if (nb !== b) changed = true;
+      out[name] = nb;
+    }
+    if (changed) next = withKind(next, k, out);
+  };
+  if (kind === "skills") {
+    rewrite("agents", (b) => (Array.isArray(b.skills) && b.skills.includes(oldRef) ? { ...b, skills: swapList(b.skills) as JsonObject[string] } : b));
+  }
+  if (kind === "channels") {
+    for (const k of ["schedules", "webhooks"] as const) {
+      rewrite(k, (b) => (b.channel === oldRef ? { ...b, channel: newRef } : b));
+    }
+    rewrite("agents", (b) => {
+      const ch = obj(b.channels);
+      if (!ch) return b;
+      const pub = swapList(ch.publish);
+      const sub = swapList(ch.subscribe);
+      if (JSON.stringify(pub) === JSON.stringify(ch.publish) && JSON.stringify(sub) === JSON.stringify(ch.subscribe)) return b;
+      return { ...b, channels: { ...ch, ...(pub !== undefined ? { publish: pub as JsonObject[string] } : {}), ...(sub !== undefined ? { subscribe: sub as JsonObject[string] } : {}) } };
+    });
+    // The channel node keeps where it was dragged.
+    const oldKey = `${CHANNEL_LAYOUT_PREFIX}${oldRef}`;
+    const pos = storedDerivedPosition(next, oldKey);
+    if (pos) {
+      next = {
+        ...next,
+        layoutDirty: true,
+        derivedPositions: { ...(next.derivedPositions ?? {}), [`${CHANNEL_LAYOUT_PREFIX}${newRef}`]: pos },
+        channelsRemoved: [...new Set([...(next.channelsRemoved ?? []), oldKey])],
+      };
+    }
+  }
+  return next;
 }

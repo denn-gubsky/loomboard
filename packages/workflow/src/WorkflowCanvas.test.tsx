@@ -1228,6 +1228,24 @@ describe("WorkflowCanvas — starting a team with declared variables (RFC DV)", 
     });
   });
 
+  it("opens the team's own agent from a node that runs it, and renames it with every reference", async () => {
+    const forkTeam = vi.fn(async () => ({ def_id: "d10", name: "local", version: 2 }));
+    render(<WorkflowCanvas dataLayer={layer({ forkTeam })} teamName="local" />);
+    fireEvent.click(await screen.findByTestId("node-write"));
+    fireEvent.click(await screen.findByRole("button", { name: /Edit \.\/writer/ }));
+    // The team pane, with that agent open.
+    const pane = await screen.findByRole("region", { name: "The team's own definitions" });
+    fireEvent.change(within(pane).getByLabelText("Rename to"), { target: { value: "author" } });
+    fireEvent.click(within(pane).getByRole("button", { name: "Rename" }));
+    await waitFor(() => expect(within(pane).getByTestId("own-agents-author")).toBeTruthy());
+    expect(screen.queryByText(/\d+ problems?/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+    await waitFor(() => expect(forkTeam).toHaveBeenCalled());
+    const saved = (forkTeam.mock.calls[0] as unknown as [string, Record<string, unknown>])[1];
+    expect((saved.local as { agents: object }).agents).toEqual({ author: { tier: "low" } });
+    expect((saved.states as { handler: { agent?: string } }[])[0].handler.agent).toBe("./author");
+  });
+
   it("refuses a value the runtime would refuse, before anything starts", async () => {
     const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
     render(<WorkflowCanvas dataLayer={layer({ runTeamDetached })} teamName="local" />);
