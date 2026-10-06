@@ -55,7 +55,13 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@xyflow/react": "^12.11.6"
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@xyflow/react": "^12.11.6",
+    "codemirror": "^6.0.2"
   },
   "devDependencies": {
     "@loomcycle/def-fields": "^0.2.0",
