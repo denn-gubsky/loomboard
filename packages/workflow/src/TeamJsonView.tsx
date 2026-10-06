@@ -54,7 +54,10 @@ export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, ha
   const readOnlyCompartment = useRef<import("@codemirror/state").Compartment | null>(null);
   // The values as of mount, for the editor's first state; later changes go
   // through the effects below.
-  const initial = useRef({ text, readOnly, foldAt });
+  const initial = useRef({ text, readOnly });
+  // `layout` is folded once, when the editor first has the text to fold —
+  // which can arrive after it loads.
+  const folded = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +74,7 @@ export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, ha
         cm.current = { view: viewMod, state, lint, language };
         const ro = new state.Compartment();
         readOnlyCompartment.current = ro;
-        const { text: doc, readOnly: r, foldAt: fold } = initial.current;
+        const { text: doc, readOnly: r } = initial.current;
         const v = new viewMod.EditorView({
           parent: host.current,
           state: state.EditorState.create({
@@ -93,7 +96,6 @@ export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, ha
           }),
         });
         view.current = v;
-        if (fold !== undefined) foldLineAt(v, language, fold);
         setLoaded(true);
       })
       .catch((e) => {
@@ -118,6 +120,13 @@ export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, ha
       external.current = false;
     }
   }, [text, loaded]);
+
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !cm.current || folded.current || foldAt === undefined || v.state.doc.toString() !== text) return;
+    folded.current = true;
+    foldLineAt(v, cm.current.language, foldAt);
+  }, [foldAt, text, loaded]);
 
   useEffect(() => {
     const v = view.current;

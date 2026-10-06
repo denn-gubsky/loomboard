@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";
+import { foldedRanges } from "@codemirror/language";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import { locate } from "./lib/teamJson";
@@ -66,6 +67,10 @@ describe("WorkflowCanvas — the JSON view (RFC DX)", () => {
     const shown = json(v);
     expect(shown.states).toEqual(definition.states);
     expect(Object.keys(shown.layout.nodes)).toEqual(["write", "done"]);
+    // Regression: the fold was taken before the text existed, so nothing folded.
+    await waitFor(() => expect(foldedRanges(v.state).size).toBe(1));
+    const line = v.state.doc.lineAt(foldedRanges(v.state).iter().from);
+    expect(line.text).toMatch(/"layout": \{/);
   });
 
   it("a canvas edit shows in the JSON, and a JSON edit shows on the canvas", async () => {
