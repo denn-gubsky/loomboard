@@ -21,7 +21,7 @@ import type { CanvasModel, CanvasNode, JsonObject } from "./model";
 import { handlerOf } from "./model";
 import { parseJsonPath } from "./jsonpath";
 import { validateStateHooks, validateWalkHooks } from "./hooks";
-import { validateTeamLocal } from "./teamLocal";
+import { effectiveLocal, validateTeamLocal } from "./teamLocal";
 import { channelRefs } from "./channels";
 
 /** Mirrors teamgraph.MaxAllowedIterations. */
@@ -643,7 +643,13 @@ export function validateModel(model: CanvasModel): Finding[] {
 
   // A team's own variables and definitions (RFC DV), and the "./name"
   // references the graph makes to them.
-  for (const m of validateTeamLocal(model.source, agentRefs(model), channelRefs(model))) err(m);
+  // Read as it stands — the operator's edits to vars, local and the ACL, not
+  // only what was last saved.
+  const team: JsonObject = { ...model.source };
+  if (model.varsPatch) team.vars = model.varsPatch;
+  if (model.localPatch) team.local = effectiveLocal(model) ?? {};
+  if (model.channelsPatch) team.channels = model.channelsPatch as unknown as JsonObject;
+  for (const m of validateTeamLocal(team, agentRefs(model), channelRefs(model))) err(m);
 
   const maxIter = model.source.max_iterations;
   if (typeof maxIter === "number") {

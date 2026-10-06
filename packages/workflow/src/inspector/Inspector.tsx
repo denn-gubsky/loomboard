@@ -8,6 +8,7 @@ import type { ChannelSide } from "../lib/channels";
 import { MEMORY_VARIANTS, type BindingNodeView } from "../lib/bindings";
 import type { VariableNodeView } from "../lib/variables";
 import { varValueError, type TeamOwnEntry } from "../lib/teamLocal";
+import { TeamOwnEditor, type TeamOwnEditorProps } from "./TeamOwnEditor";
 import { sourceLabel } from "../nodes/VariableNode";
 import { HANDLER_OMIT_IN_LIST, fieldsForKind, teamHandlerRegistry } from "./registry";
 
@@ -35,6 +36,8 @@ export interface InspectorProps {
   /** What the team declares for itself (`local`, RFC DV), shown read-only in
    *  the team pane. */
   teamOwn?: TeamOwnEntry[];
+  /** Edit the team's own definitions. Absent: the list is read-only. */
+  teamOwnEdit?: Omit<TeamOwnEditorProps, "entries" | "disabled">;
   /** Declare the variable in the team's `vars`, edit its default, remove it.
    *  Absent: not offered (read-only). */
   onDeclareVariable?: (name: string) => void;
@@ -76,6 +79,7 @@ export function Inspector({
   binding,
   variable,
   teamOwn,
+  teamOwnEdit,
   onDeclareVariable,
   onSetVariableDefault,
   onUndeclareVariable,
@@ -125,7 +129,11 @@ export function Inspector({
     return (
       <aside className="lb-wf-inspector lb-wf-inspector--team">
         <p className="lb-wf-inspector__hint">Select a node to edit it.</p>
-        {teamOwn && teamOwn.length > 0 && <TeamOwnPanel entries={teamOwn} />}
+        {teamOwnEdit ? (
+          <TeamOwnEditor entries={teamOwn ?? []} disabled={disabled} {...teamOwnEdit} />
+        ) : (
+          teamOwn && teamOwn.length > 0 && <TeamOwnPanel entries={teamOwn} />
+        )}
         {channels && onChannelsChange && (
           <TeamChannelPanel value={channels} disabled={disabled} onChange={onChannelsChange} />
         )}

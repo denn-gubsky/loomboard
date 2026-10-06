@@ -63,12 +63,32 @@ export function teamVars(model: CanvasModel): Record<string, string> {
 
 /** The names the team declares under local.<kind>, sorted. */
 export function localNames(model: CanvasModel, kind: LocalKind): string[] {
-  return Object.keys(obj(obj(model.source.local)?.[kind]) ?? {}).sort();
+  return Object.keys(localKind(model, kind)).sort();
 }
 
 /** One declared entry's body, or undefined. */
 export function localEntry(model: CanvasModel, kind: LocalKind, name: string): JsonObject | undefined {
-  return obj(obj(obj(model.source.local)?.[kind])?.[name]);
+  return obj(localKind(model, kind)[name]);
+}
+
+/** One kind's entries as they stand: the operator's edit, else the saved. */
+export function localKind(model: CanvasModel, kind: LocalKind): Record<string, JsonObject> {
+  const patched = model.localPatch?.[kind];
+  if (patched) return patched;
+  const saved = obj(obj(model.source.local)?.[kind]) ?? {};
+  const out: Record<string, JsonObject> = {};
+  for (const [k, v] of Object.entries(saved)) out[k] = obj(v) ?? {};
+  return out;
+}
+
+/** The `local` block as it stands, for the checks: the saved one with every
+ *  edited kind replaced. Undefined when the team has none. */
+export function effectiveLocal(model: CanvasModel): JsonObject | undefined {
+  const saved = model.source.local;
+  if (!model.localPatch) return obj(saved) ?? (saved as JsonObject | undefined);
+  const out: JsonObject = { ...(obj(saved) ?? {}) };
+  for (const kind of LOCAL_KINDS) if (model.localPatch[kind]) out[kind] = model.localPatch[kind]!;
+  return out;
 }
 
 function utf8Bytes(s: string): number {
