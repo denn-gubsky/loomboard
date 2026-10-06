@@ -7,6 +7,7 @@ import {
   ReactFlowProvider,
   type Connection,
   type NodeChange,
+  useReactFlow,
 } from "@xyflow/react";
 import { Inspector } from "./inspector/Inspector";
 import { PublishComposer } from "./PublishComposer";
@@ -174,6 +175,14 @@ function WorkflowCanvasInner({
   }, [dataLayer, walkDone]);
   // Canvas | JSON | Split (RFC DX): two views of the one team in `doc`.
   const [view, setView] = useState<"canvas" | "json" | "split">("canvas");
+  // The graph's space changes with the view: fit it again, or a graph fitted
+  // to the whole width stays where it was, half out of sight (or tiny).
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    if (view === "json") return;
+    const id = requestAnimationFrame(() => void fitView());
+    return () => cancelAnimationFrame(id);
+  }, [view, fitView]);
   const jsonDraft = useJsonDraft(model, setModel, findings, view !== "canvas");
   const jsonHandle = useRef<TeamJsonViewHandle>(null);
   // The session and the host decide whether the team may be edited at all;
