@@ -196,6 +196,9 @@ export interface WorkflowDataLayer {
     name?: string;
     defId?: string;
     input?: string;
+    /** Values for the team's declared variables, for this walk only (RFC DV).
+     *  Only those the person changed: a default is not repeated. */
+    vars?: Record<string, string>;
   }): Promise<DetachedRun>;
 
   /** The documents a form's document picker offers (`x-loomcycle-picker:

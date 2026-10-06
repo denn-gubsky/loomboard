@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { FoldedFieldList, HookEventsControl, type DefValue } from "@loomcycle/def-fields";
 import type { CanvasNode, Json, JsonObject, TeamChannels } from "../lib/model";
 import { KNOWN_KINDS, handlerOf } from "../lib/model";
@@ -7,6 +7,8 @@ import { channelBacklog, type ChannelNodeView } from "../lib/channelNodes";
 import type { ChannelSide } from "../lib/channels";
 import { MEMORY_VARIANTS, type BindingNodeView } from "../lib/bindings";
 import type { VariableNodeView } from "../lib/variables";
+import { varValueError, type TeamOwnEntry } from "../lib/teamLocal";
+import { TeamOwnEditor, type TeamOwnEditorProps } from "./TeamOwnEditor";
 import { sourceLabel } from "../nodes/VariableNode";
 import { HANDLER_OMIT_IN_LIST, fieldsForKind, teamHandlerRegistry } from "./registry";
 
@@ -31,8 +33,19 @@ export interface InspectorProps {
   binding?: BindingNodeView | null;
   /** A selected variable node. */
   variable?: VariableNodeView | null;
-  /** Add the variable to the start form. Absent: not offered (read-only). */
-  onAskAtStart?: (name: string) => void;
+  /** What the team declares for itself (`local`, RFC DV), shown read-only in
+   *  the team pane. */
+  teamOwn?: TeamOwnEntry[];
+  /** Edit the team's own definitions. Absent: the list is read-only. */
+  teamOwnEdit?: Omit<TeamOwnEditorProps, "entries" | "disabled">;
+  /** Open one of the team's own agents in the team pane (from a node that
+   *  runs it as ./name). */
+  onEditOwnAgent?: (name: string) => void;
+  /** Declare the variable in the team's `vars`, edit its default, remove it.
+   *  Absent: not offered (read-only). */
+  onDeclareVariable?: (name: string) => void;
+  onSetVariableDefault?: (name: string, value: string) => void;
+  onUndeclareVariable?: (name: string) => void;
   /** While a walk is on screen: the selected node's runs (M3b). Rendered
    *  above the fields, because in Run mode they are what the operator came
    *  to see. */
@@ -68,7 +81,12 @@ export function Inspector({
   onGrantChannel,
   binding,
   variable,
-  onAskAtStart,
+  teamOwn,
+  teamOwnEdit,
+  onEditOwnAgent,
+  onDeclareVariable,
+  onSetVariableDefault,
+  onUndeclareVariable,
   runs,
   form,
   result,
@@ -94,7 +112,17 @@ export function Inspector({
     return [...HANDLER_OMIT_IN_LIST, ...hidden];
   }, [node]);
 
-  if (!node && variable) return <VariablePanel view={variable} disabled={disabled} onAskAtStart={onAskAtStart} />;
+  if (!node && variable) {
+    return (
+      <VariablePanel
+        view={variable}
+        disabled={disabled}
+        onDeclare={onDeclareVariable}
+        onSetDefault={onSetVariableDefault}
+        onUndeclare={onUndeclareVariable}
+      />
+    );
+  }
   if (!node && binding) return <BindingPanel view={binding} />;
   if (!node && channel) return <ChannelPanel view={channel} disabled={disabled} onGrant={onGrantChannel} />;
 
@@ -105,6 +133,11 @@ export function Inspector({
     return (
       <aside className="lb-wf-inspector lb-wf-inspector--team">
         <p className="lb-wf-inspector__hint">Select a node to edit it.</p>
+        {teamOwnEdit ? (
+          <TeamOwnEditor entries={teamOwn ?? []} disabled={disabled} {...teamOwnEdit} />
+        ) : (
+          teamOwn && teamOwn.length > 0 && <TeamOwnPanel entries={teamOwn} />
+        )}
         {channels && onChannelsChange && (
           <TeamChannelPanel value={channels} disabled={disabled} onChange={onChannelsChange} />
         )}
@@ -162,6 +195,12 @@ export function Inspector({
       {result}
       {runs}
       {form}
+      {onEditOwnAgent &&
+        ownAgentsOf(node).map((name) => (
+          <button key={name} type="button" className="lb-wf-btn" onClick={() => onEditOwnAgent(name)}>
+            Edit ./{name} — the team's own agent
+          </button>
+        ))}
 
       {node.opaque ? (
         // An opaque node is deliberately NOT editable field-by-field: this
@@ -354,16 +393,69 @@ function ChannelPanel({
   );
 }
 
-/** A variable's details: where its value comes from, who reads it, and — when
- *  nothing sets it — the one fix the canvas can make itself. */
+const OWN_TITLES: Record<TeamOwnEntry["kind"], string> = {
+  agents: "Agents",
+  skills: "Skills",
+  channels: "Channels",
+  schedules: "Schedules",
+  webhooks: "Webhooks",
+};
+
+/** The team's own agents, skills, channels, schedules and webhooks. Named in
+ *  the graph as "./name"; a bare name is always the global entry. */
+function TeamOwnPanel({ entries }: { entries: TeamOwnEntry[] }) {
+  const kinds = [...new Set(entries.map((e) => e.kind))];
+  return (
+    <section className="lb-wf-team lb-wf-team-own" aria-label="The team's own definitions">
+      <h3 className="lb-wf-team__title">The team's own</h3>
+      <p className="lb-wf-team__hint">
+        Declared in this team and nowhere else. The graph names them as <code>./name</code>; a bare name is always the
+        global entry.
+      </p>
+      {kinds.map((k) => (
+        <div key={k} className="lb-wf-team-own__kind">
+          <h4>{OWN_TITLES[k]}</h4>
+          <ul>
+            {entries
+              .filter((e) => e.kind === k)
+              .map((e) => (
+                <li key={e.ref} data-testid={`own-${k}-${e.name}`}>
+                  <code>{e.ref}</code>
+                  {e.facts.length > 0 && <span className="lb-wf-team-own__facts"> — {e.facts.join(" · ")}</span>}
+                  {e.note && <div className="lb-wf-team__hint">{e.note}</div>}
+                </li>
+              ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/** The team's own agents a node runs ("./name" in any agent field). */
+function ownAgentsOf(node: CanvasNode): string[] {
+  if (node.opaque) return [];
+  const h = handlerOf(node);
+  const f = h.fanout && typeof h.fanout === "object" && !Array.isArray(h.fanout) ? (h.fanout as JsonObject) : {};
+  const refs = [h.agent, h.consolidator, f.agent, ...(Array.isArray(h.agents) ? h.agents : []), ...(Array.isArray(f.agents) ? f.agents : [])];
+  return [...new Set(refs.flatMap((r) => (typeof r === "string" && r.startsWith("./") ? [r.slice(2)] : [])))];
+}
+
+/** A variable's details: where its value comes from, who reads it, and —
+ *  for one the team declares — its default, which every walk starts with and
+ *  the Start dialog lets the person starting it change. */
 function VariablePanel({
   view,
   disabled,
-  onAskAtStart,
+  onDeclare,
+  onSetDefault,
+  onUndeclare,
 }: {
   view: VariableNodeView;
   disabled?: boolean;
-  onAskAtStart?: (name: string) => void;
+  onDeclare?: (name: string) => void;
+  onSetDefault?: (name: string, value: string) => void;
+  onUndeclare?: (name: string) => void;
 }) {
   const row = (label: string, value: string) => (
     <div className="lb-wf-field">
@@ -371,26 +463,47 @@ function VariablePanel({
       <span>{value}</span>
     </div>
   );
+  const declared = view.sources.find((s) => s.kind === "declared");
+  const others = view.sources.filter((s) => s.kind !== "declared");
+  const [draft, setDraft] = useState(declared?.kind === "declared" ? declared.value : "");
+  useEffect(() => setDraft(declared?.kind === "declared" ? declared.value : ""), [declared]);
+  const why = varValueError(draft);
   return (
     <aside className="lb-wf-inspector lb-wf-inspector--variable">
       <h3 className="lb-wf-team__title">
         Variable <code>{view.name}</code>
       </h3>
       <p className="lb-wf-team__hint">
-        A named value any prompt can use. It is asked for when the team starts unless something in the team sets it.
+        A named value any prompt can use. A declared variable starts every walk with its default, and the Start dialog
+        lets the person starting a walk change it.
       </p>
       {row("Use it as", `\${var.${view.name}}`)}
-      {row("Value comes from", view.sources.length ? view.sources.map(sourceLabel).join("; ") : "nothing — it expands to empty")}
+      {declared ? (
+        <label className="lb-wf-field">
+          <span className="lb-wf-field__label">Default</span>
+          <input
+            aria-label="Default value"
+            value={draft}
+            disabled={disabled || !onSetDefault}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => !why && onSetDefault?.(view.name, draft)}
+          />
+          {why && <span className="lb-wf-finding lb-wf-finding--error">{why}</span>}
+        </label>
+      ) : (
+        row("Declared", "no — it has no default")
+      )}
+      {others.length > 0 && row("Also set by", others.map(sourceLabel).join("; "))}
       {row("Read by", view.readers.length ? view.readers.map((r) => `${r.state} (${r.field})`).join(", ") : "no prompt yet")}
-      {view.sources.length === 0 && onAskAtStart && (
-        <button type="button" className="lb-wf-btn lb-wf-btn--primary" disabled={disabled} onClick={() => onAskAtStart(view.name)}>
-          Ask at Start
+      {!declared && onDeclare && (
+        <button type="button" className="lb-wf-btn lb-wf-btn--primary" disabled={disabled} onClick={() => onDeclare(view.name)}>
+          Declare
         </button>
       )}
-      {view.sources.some((s) => s.kind === "start") && (
-        <p className="lb-wf-team__hint">
-          Its label, type and picker are edited on the start form: select the team's entry node.
-        </p>
+      {declared && onUndeclare && (
+        <button type="button" className="lb-wf-btn" disabled={disabled} onClick={() => onUndeclare(view.name)}>
+          Remove from the team
+        </button>
       )}
     </aside>
   );

@@ -1109,7 +1109,7 @@ describe("WorkflowCanvas — variable nodes (RFC CZ Data nodes)", () => {
       ...o,
     });
 
-  it("places a Variable anywhere — it is asked at Start, not a step the walk must reach", async () => {
+  it("places a Variable anywhere — declared in the team's vars, not a step the walk must reach", async () => {
     // Regression: the only "variable" was a `vars` STATE, which dropped loose
     // came up "unreachable from entry" and blocked the save.
     render(<WorkflowCanvas dataLayer={layer(blog())} teamName="blog" />);
@@ -1117,11 +1117,11 @@ describe("WorkflowCanvas — variable nodes (RFC CZ Data nodes)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Variable" }));
     const node = await screen.findByTestId("variable-var1");
     expect(node.textContent).toContain("${var.var1}");
-    expect(node.textContent).toContain("asked at Start");
+    expect(node.textContent).toContain("default: (empty)");
     expect(screen.queryByText(/unreachable from entry/)).toBeNull();
     expect(screen.queryByText(/\d+ problems?/)).toBeNull();
-    // The team got a front door whose form asks for it.
-    expect((await screen.findByTestId("node-input-1")).textContent).toContain("${var.var1}");
+    // Declared, not a form field: the graph gains no Input node.
+    expect(screen.queryByTestId("node-input-1")).toBeNull();
   });
 
   it("places a Document by name as an unwired node — and refuses a name the runtime would not expand", async () => {
@@ -1140,14 +1140,120 @@ describe("WorkflowCanvas — variable nodes (RFC CZ Data nodes)", () => {
     expect(screen.queryByText(/\d+ problems?/)).toBeNull();
   });
 
-  it("draws a variable a prompt reads and nothing sets, and Ask at Start fixes it", async () => {
+  it("draws a variable a prompt reads and nothing sets, and Declare fixes it", async () => {
     render(<WorkflowCanvas dataLayer={layer(blog({ input_template: "Tone: ${var.tone}" }))} teamName="blog" />);
     const node = await screen.findByTestId("variable-tone");
     expect(node.textContent).toContain("not set");
     expect(node.textContent).toContain("read by 1 node");
     fireEvent.click(node);
-    fireEvent.click(await screen.findByRole("button", { name: "Ask at Start" }));
-    await waitFor(() => expect(screen.getByTestId("variable-tone").textContent).toContain("asked at Start"));
-    expect(screen.queryByRole("button", { name: "Ask at Start" })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Declare" }));
+    await waitFor(() => expect(screen.getByTestId("variable-tone").textContent).toContain("default: (empty)"));
+    expect(screen.queryByRole("button", { name: "Declare" })).toBeNull();
+    // Its default is edited in the panel.
+    fireEvent.change(screen.getByLabelText("Default value"), { target: { value: "warm" } });
+    fireEvent.blur(screen.getByLabelText("Default value"));
+    await waitFor(() => expect(screen.getByTestId("variable-tone").textContent).toContain("default: warm"));
+  });
+});
+
+describe("WorkflowCanvas — starting a team with declared variables (RFC DV)", () => {
+  const def = {
+    entry: "write",
+    vars: { tone: "formal", topic: "SSDs" },
+    states: [
+      { state: "write", handler: { kind: "agent", agent: "./writer", input_template: "Write about ${var.topic}, ${var.tone}." } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [{ from: "write", to: "done", on: "success" }],
+    local: { agents: { writer: { tier: "low" } } },
+  };
+  const layer = (o: Partial<WorkflowDataLayer> = {}) =>
+    stubLayer({
+      getActiveTeamDef: async () => ({ def_id: "d9", name: "local", version: 1, definition: def }),
+      getTeamDef: async () => ({ def_id: "d9", name: "local", version: 1, definition: def }),
+      ...o,
+    });
+
+  it("Run opens the Start dialog with each variable prefilled, and sends only the ones changed", async () => {
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    render(<WorkflowCanvas dataLayer={layer({ runTeamDetached })} teamName="local" />);
+    await screen.findByTestId("node-write");
+    // A team of its own agent and its own variables: valid as drawn.
+    expect(screen.queryByText(/\d+ problems?/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    const tone = (await screen.findByLabelText(/var\.tone/)) as HTMLInputElement;
+    expect(tone.value).toBe("formal");
+    expect((screen.getByLabelText(/var\.topic/) as HTMLInputElement).value).toBe("SSDs");
+    fireEvent.change(tone, { target: { value: "pirate" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(runTeamDetached).toHaveBeenCalled());
+    expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d9", input: "", vars: { tone: "pirate" } });
+  });
+
+  it("lists the team's own definitions, and offers its own agent as ./name in the agent field", async () => {
+    const { container } = render(
+      <WorkflowCanvas dataLayer={layer({ listAgents: async () => ["writer", "marketing/editor"] })} teamName="local" />,
+    );
+    const pane = await screen.findByRole("region", { name: "The team's own definitions" });
+    expect(within(pane).getByTestId("own-agents-writer").textContent).toContain("runs as local/writer");
+    // The global "writer" is a different agent, which this team's takes over
+    // inside its walks.
+    await waitFor(() => expect(within(pane).getByTestId("own-agents-writer").textContent).toMatch(/runs this one/));
+    fireEvent.click(screen.getByTestId("node-write"));
+    await waitFor(() => expect(container.querySelector('#lb-wf-agents option[value="./writer"]')).not.toBeNull());
+    expect(container.querySelector('#lb-wf-agents option[value="writer"]')).not.toBeNull();
+  });
+
+  it("edits the team's own definitions in the team pane, and saves them with the team", async () => {
+    const forkTeam = vi.fn(async () => ({ def_id: "d10", name: "local", version: 2 }));
+    render(<WorkflowCanvas dataLayer={layer({ forkTeam })} teamName="local" />);
+    const pane = await screen.findByRole("region", { name: "The team's own definitions" });
+    // Add a channel, make it per-user.
+    fireEvent.change(within(pane).getByLabelText("New channel name"), { target: { value: "notes" } });
+    fireEvent.click(within(within(pane).getByTestId("own-kind-channels")).getByRole("button", { name: "Add" }));
+    fireEvent.change(await within(pane).findByLabelText("Scope"), { target: { value: "user" } });
+    // Add a webhook into it: it asks for the env var's NAME, and says so until given one.
+    fireEvent.change(within(pane).getByLabelText("New webhook name"), { target: { value: "inbound" } });
+    fireEvent.click(within(within(pane).getByTestId("own-kind-webhooks")).getByRole("button", { name: "Add" }));
+    expect(await screen.findByText(/auth\.kind=hmac requires auth\.signing_secret_env/)).toBeTruthy();
+    fireEvent.change(within(pane).getByLabelText("Signing secret env var"), { target: { value: "INBOUND_SECRET" } });
+    await waitFor(() => expect(screen.queryByText(/requires auth\.signing_secret_env/)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+    await waitFor(() => expect(forkTeam).toHaveBeenCalled());
+    const saved = (forkTeam.mock.calls[0] as unknown as [string, Record<string, unknown>])[1];
+    expect(saved.local).toEqual({
+      agents: { writer: { tier: "low" } },
+      channels: { notes: { scope: "user" } },
+      webhooks: { inbound: { auth: { kind: "hmac", signing_secret_env: "INBOUND_SECRET" }, channel: "./notes" } },
+    });
+  });
+
+  it("opens the team's own agent from a node that runs it, and renames it with every reference", async () => {
+    const forkTeam = vi.fn(async () => ({ def_id: "d10", name: "local", version: 2 }));
+    render(<WorkflowCanvas dataLayer={layer({ forkTeam })} teamName="local" />);
+    fireEvent.click(await screen.findByTestId("node-write"));
+    fireEvent.click(await screen.findByRole("button", { name: /Edit \.\/writer/ }));
+    // The team pane, with that agent open.
+    const pane = await screen.findByRole("region", { name: "The team's own definitions" });
+    fireEvent.change(within(pane).getByLabelText("Rename to"), { target: { value: "author" } });
+    fireEvent.click(within(pane).getByRole("button", { name: "Rename" }));
+    await waitFor(() => expect(within(pane).getByTestId("own-agents-author")).toBeTruthy());
+    expect(screen.queryByText(/\d+ problems?/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+    await waitFor(() => expect(forkTeam).toHaveBeenCalled());
+    const saved = (forkTeam.mock.calls[0] as unknown as [string, Record<string, unknown>])[1];
+    expect((saved.local as { agents: object }).agents).toEqual({ author: { tier: "low" } });
+    expect((saved.states as { handler: { agent?: string } }[])[0].handler.agent).toBe("./author");
+  });
+
+  it("refuses a value the runtime would refuse, before anything starts", async () => {
+    const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
+    render(<WorkflowCanvas dataLayer={layer({ runTeamDetached })} teamName="local" />);
+    await screen.findByTestId("node-write");
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    fireEvent.change(await screen.findByLabelText(/var\.tone/), { target: { value: "{{memory:core_blocks}}" } });
+    expect(await screen.findByText(/placeholder/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    expect(runTeamDetached).not.toHaveBeenCalled();
   });
 });

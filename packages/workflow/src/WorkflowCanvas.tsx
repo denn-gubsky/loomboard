@@ -11,11 +11,13 @@ import {
 import { Inspector } from "./inspector/Inspector";
 import { PublishComposer } from "./PublishComposer";
 import { Palette } from "./Palette";
-import { PALETTE, newStateRaw, type PaletteEntry } from "./lib/palette";
+import { newStateRaw, type PaletteEntry } from "./lib/palette";
 import { fieldsPatch, inputFields, placeInput, startFindings, startPlan, type FormResult } from "./lib/inputForm";
 import { InputDialog } from "./InputDialog";
 import { walkProgress, type WalkProgress } from "./lib/progress";
 import { useRunLines } from "./useRunLines";
+import { LOCAL_KINDS, localKind, localNames, teamOwnEntries, teamVars, type LocalKind } from "./lib/teamLocal";
+import { addLocal, localBodyFindings, localNameError, removeLocal, renameLocal, setLocal } from "./lib/localEdit";
 import { RunChatColumn } from "./RunChatColumn";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
 import { ResultPanel } from "./inspector/ResultPanel";
@@ -54,7 +56,15 @@ import { RunsPanel } from "./inspector/RunsPanel";
 import { BindingNode } from "./nodes/BindingNode";
 import { VariableNode } from "./nodes/VariableNode";
 import { applyDataWire, bindingRefError, dataConnection, losesHandoff, placeBinding, planDataWire, removeBinding } from "./lib/dataWiring";
-import { askAtStart, nextVariableName, variableFindings, variableNodeId, variableNodes } from "./lib/variables";
+import {
+  declareVariable,
+  nextVariableName,
+  setVariableDefault,
+  undeclareVariable,
+  variableFindings,
+  variableNodeId,
+  variableNodes,
+} from "./lib/variables";
 import { channelNodes } from "./lib/channelNodes";
 import { agentNodes, agentOwner, dispatchesAgent } from "./lib/agentNodes";
 import { AgentNode } from "./nodes/AgentNode";
@@ -287,6 +297,7 @@ function WorkflowCanvasInner({
             ...bindingFindings(model),
             ...startFindings(model),
             ...variableFindings(variableNodes(model)),
+            ...localBodyFindings(model),
           ]
         : [],
     [model],
@@ -314,6 +325,51 @@ function WorkflowCanvasInner({
   useEffect(() => setSideTab("chat"), [selectedId]);
   // What Start does, when the team begins with an Input node.
   const plan = useMemo(() => (model ? startPlan(model) : undefined), [model]);
+  // The team's declared variables, offered in the Start dialog. Start runs the
+  // SAVED version and is refused while the graph differs from it, so what is
+  // on screen is what it declares.
+  const savedVars = useMemo(() => (model ? teamVars(model) : {}), [model]);
+  const declaresVars = Object.keys(savedVars).length > 0;
+  // The team's own agents and channels are offered beside the global ones, as
+  // "./name" — the only spelling that means the team's own (RFC DV).
+  const agentChoices = useMemo(
+    () => [...(model ? localNames(model, "agents").map((n) => `./${n}`) : []), ...(agentNames ?? [])],
+    [model, agentNames],
+  );
+  // Which of the team's own entries the team pane opens on: set by a node's
+  // "Edit ./name" link, which also clears the selection to show that pane.
+  const [ownFocus, setOwnFocus] = useState<{ key: string }>();
+  const editOwnAgent = useCallback((name: string) => {
+    setSelectedId(null);
+    setOwnFocus({ key: `agents/${name}` });
+  }, []);
+  // Editing the team's own definitions (RFC DV). Content: each forks on save.
+  const teamOwnEdit = useMemo(
+    () => ({
+      bodies: Object.fromEntries(LOCAL_KINDS.map((k) => [k, model ? localKind(model, k) : {}])) as Record<
+        LocalKind,
+        Record<string, JsonObject>
+      >,
+      onAdd: (kind: LocalKind, name: string) => {
+        const why = model ? localNameError(model, kind, name) : "no team loaded";
+        if (!why) setModel((m) => (m ? addLocal(m, kind, name) : m));
+        return why;
+      },
+      onSet: (kind: LocalKind, name: string, body: JsonObject) => setModel((m) => (m ? setLocal(m, kind, name, body) : m)),
+      onRemove: (kind: LocalKind, name: string) => setModel((m) => (m ? removeLocal(m, kind, name) : m)),
+      onRename: (kind: LocalKind, from: string, to: string) => {
+        const why = model ? localNameError(model, kind, to) : "no team loaded";
+        if (!why) setModel((m) => (m ? renameLocal(m, kind, from, to) : m));
+        return why;
+      },
+      focus: ownFocus,
+    }),
+    [model, ownFocus],
+  );
+  const teamOwn = useMemo(
+    () => (model ? teamOwnEntries(model, loadedName.current ?? teamName ?? "", agentNames) : []),
+    [model, agentNames, teamName],
+  );
   const unsaved = useMemo(() => !!model && contentKey(model) !== savedKey.current, [model]);
   const canRun = !readonly && !!dataLayer.runTeamDetached && canStart(session);
   // The End node the result belongs on: the one the runtime says the walk
@@ -640,19 +696,22 @@ function WorkflowCanvasInner({
     [selectedId],
   );
 
-  // Ask for a variable at Start: a field of the start form, bound to it. A
-  // team with no front door gets an Input node as its entry.
-  const askVariable = useCallback(
+  // A team's declared variables (`vars`, RFC DV): declare, set a default,
+  // remove. Content: each forks on save.
+  const declareVar = useCallback(
+    (name: string) => editable && setModel((m) => (m ? declareVariable(m, name) : m)),
+    [editable],
+  );
+  const setVarDefault = useCallback(
+    (name: string, value: string) => editable && setModel((m) => (m ? setVariableDefault(m, name, value) : m)),
+    [editable],
+  );
+  const undeclareVar = useCallback(
     (name: string) => {
       if (!editable) return;
-      setModel((m) => {
-        if (!m) return m;
-        const inputRaw = newStateRaw(m, PALETTE.find((e) => e.id === "input")!);
-        const derived = [...channelNodes(m, channels), ...agentNodes(m)].map((v) => v.position);
-        return { ...askAtStart(m, name, inputRaw, derived).model, layoutDirty: true };
-      });
+      setModel((m) => (m ? undeclareVariable(m, name) : m));
     },
-    [editable, channels],
+    [editable],
   );
 
   // Placing a node from the palette (C12). Replaces "Add state": the operator
@@ -662,10 +721,10 @@ function WorkflowCanvasInner({
     (entry: PaletteEntry) => {
       if (!editable || !model) return;
       if (entry.variable) {
-        // A variable is not a state: a new one is a field of the start form,
-        // so Start asks for it (lib/variables.ts).
+        // A variable is not a state: a new one is declared in the team's
+        // `vars`, with an empty default the Start dialog lets you change.
         const name = nextVariableName(variableViews);
-        askVariable(name);
+        declareVar(name);
         setSelectedId(variableNodeId(name));
         return;
       }
@@ -708,7 +767,7 @@ function WorkflowCanvasInner({
       // inspector is where that gets fixed.
       setSelectedId(id);
     },
-    [editable, model, channelViews, agentViews, variableViews, askVariable],
+    [editable, model, channelViews, agentViews, variableViews, declareVar],
   );
 
   const relayout = useCallback(() => {
@@ -754,7 +813,7 @@ function WorkflowCanvasInner({
   }, [dataLayer, model, onSaved, editable]);
 
   // ---- running ----
-  const startRun = useCallback(async (form?: FormResult) => {
+  const startRun = useCallback(async (form?: FormResult, vars?: Record<string, string>) => {
     if (!model || !dataLayer.runTeamDetached || !canStart(session)) return;
     const name = loadedName.current;
     if (!name) {
@@ -770,6 +829,7 @@ function WorkflowCanvasInner({
       const started = await dataLayer.runTeamDetached({
         defId: parentDefId.current ?? undefined,
         ...(form ? { input: form.input } : {}),
+        ...(vars ? { vars } : {}),
       });
       if (!started?.run_id) {
         // A host that quietly fell back to a blocking run returns a trace with
@@ -851,7 +911,7 @@ function WorkflowCanvasInner({
           <button
             className="lb-wf-btn"
             // A team with an Input node starts from its form.
-            onClick={() => (plan ? openStart() : void startRun())}
+            onClick={() => (plan || declaresVars ? openStart() : void startRun())}
             disabled={!model || busy || errorCount > 0}
             title={
               errorCount > 0
@@ -925,9 +985,10 @@ function WorkflowCanvasInner({
 
       {error && <div className="lb-wf-error">{error}</div>}
 
-      {startOpen && plan && model && (
+      {startOpen && (plan || declaresVars) && model && (
         <InputDialog
-          fields={inputFields(model.nodes.find((n) => n.id === plan.input)!)}
+          fields={plan ? inputFields(model.nodes.find((n) => n.id === plan.input)!) : []}
+          vars={savedVars}
           listDocuments={dataLayer.listDocuments}
           listChunks={dataLayer.listChunks}
           busy={busy}
@@ -939,7 +1000,7 @@ function WorkflowCanvasInner({
                 : undefined
           }
           error={startError}
-          onStart={(form) => void startRun(form)}
+          onStart={(form, vars) => void startRun(form, vars)}
           onClose={() => setStartOpen(false)}
         />
       )}
@@ -963,7 +1024,7 @@ function WorkflowCanvasInner({
             onPlace={placeNode}
             disabled={!model || busy}
             onPlaceChannel={onPlaceChannel}
-            channelNames={channels?.map((c) => c.name)}
+            channelNames={[...(model ? localNames(model, "channels").map((n) => `./${n}`) : []), ...(channels?.map((c) => c.name) ?? [])]}
             onPlaceBinding={onPlaceBinding}
           />
         )}
@@ -1025,7 +1086,10 @@ function WorkflowCanvasInner({
           <Inspector
             node={selected}
             findings={findings}
-            agentNames={agentNames}
+            agentNames={agentChoices}
+            teamOwn={teamOwn}
+            teamOwnEdit={editable ? teamOwnEdit : undefined}
+            onEditOwnAgent={editable ? editOwnAgent : undefined}
             disabled={busy || !editable}
             onPatch={onPatch}
             onRename={onRename}
@@ -1037,7 +1101,9 @@ function WorkflowCanvasInner({
             channel={channelViews.find((v) => v.id === selectedId) ?? null}
             binding={bindingViews.find((v) => v.id === selectedId) ?? null}
             variable={variableViews.find((v) => v.id === selectedId) ?? null}
-            onAskAtStart={editable ? askVariable : undefined}
+            onDeclareVariable={editable ? declareVar : undefined}
+            onSetVariableDefault={editable ? setVarDefault : undefined}
+            onUndeclareVariable={editable ? undeclareVar : undefined}
             runs={
               walk && selected ? (
                 <>

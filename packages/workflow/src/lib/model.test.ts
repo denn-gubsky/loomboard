@@ -393,3 +393,21 @@ describe("contentKey", () => {
     expect(contentKey(edited)).not.toBe(contentKey(m));
   });
 });
+
+describe("the team's own definitions (localPatch, RFC DV)", () => {
+  const withLocal = {
+    entry: "s",
+    states: [{ state: "s", handler: { kind: "agent", agent: "./a" } }, { state: "done", handler: { kind: "terminal" } }],
+    transitions: [{ from: "s", to: "done", on: "success" }],
+    local: { agents: { a: { tier: "low" } }, channels: { c: { scope: "tenant" } } },
+  };
+
+  it("round-trips an untouched local block byte-identically", () => {
+    expect(JSON.stringify(toDefinition(fromDefinition(withLocal)))).toBe(JSON.stringify(withLocal));
+  });
+
+  it("replaces only the kinds edited, wholesale", () => {
+    const m = { ...fromDefinition(withLocal), localPatch: { agents: { b: {} } } };
+    expect(toDefinition(m).local).toEqual({ agents: { b: {} }, channels: { c: { scope: "tenant" } } });
+  });
+});
