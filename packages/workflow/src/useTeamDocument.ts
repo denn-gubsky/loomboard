@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { aclFindings } from "./lib/channels";
 import { bindingFindings } from "./lib/bindings";
-import { forkOverlay } from "./lib/fork";
+import { forkOverlay, forkWarnings } from "./lib/fork";
 import { startFindings } from "./lib/inputForm";
 import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
 import { localBodyFindings } from "./lib/localEdit";
@@ -63,6 +63,9 @@ export function useTeamDocument(
   // The CONTENT last loaded or saved (lib/model contentKey). Run starts that
   // saved version, so any difference means Start would not run what is shown.
   const savedKey = useRef<string>("");
+  // The definition last loaded or saved — for what a save cannot do to it
+  // (forkWarnings).
+  const savedDef = useRef<JsonObject>({});
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
 
@@ -94,6 +97,7 @@ export function useTeamDocument(
           })
           .catch(() => undefined);
         savedKey.current = contentKey(next);
+        savedDef.current = toDefinition(next);
         setModel(next);
         onLoadedRef.current?.();
       } catch (e) {
@@ -119,6 +123,7 @@ export function useTeamDocument(
             ...startFindings(model),
             ...variableFindings(variableNodes(model)),
             ...localBodyFindings(model),
+            ...forkWarnings(savedDef.current, toDefinition(model)),
           ]
         : [],
     [model],
@@ -150,6 +155,7 @@ export function useTeamDocument(
       const saved = await dataLayer.forkTeam(team, forkOverlay(parent, toDefinition(model)));
       parentDefId.current = saved.def_id;
       savedKey.current = contentKey(model);
+      savedDef.current = toDefinition(model);
       // The saved graph IS the new baseline, so a subsequent save is not a
       // no-op fork of a stale parent.
       setModel((m) => (m ? { ...m, layoutDirty: false } : m));

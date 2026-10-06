@@ -1175,3 +1175,68 @@
   gap: 4px;
   margin-top: 4px;
 }
+
+/* ---- the JSON view (RFC DX): Canvas | JSON | Split ---- */
+.loomboard-workflow .lb-wf-views {
+  display: inline-flex;
+}
+.loomboard-workflow .lb-wf-views .lb-wf-btn {
+  border-radius: 0;
+}
+.loomboard-workflow .lb-wf-views .lb-wf-btn:first-child {
+  border-radius: 5px 0 0 5px;
+}
+.loomboard-workflow .lb-wf-views .lb-wf-btn:last-child {
+  border-radius: 0 5px 5px 0;
+}
+.loomboard-workflow .lb-wf-views .lb-wf-btn[aria-pressed="true"] {
+  background: var(--lb-wf-accent);
+  border-color: var(--lb-wf-accent);
+  color: #fff;
+}
+.loomboard-workflow .lb-wf-json {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--lb-wf-border);
+}
+.loomboard-workflow .lb-wf-body--json .lb-wf-json {
+  border-left: none;
+}
+.loomboard-workflow .lb-wf-json__editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+.loomboard-workflow .lb-wf-json__editor > .cm-editor {
+  flex: 1;
+  min-width: 0;
+}
+.loomboard-workflow .lb-wf-json__plain {
+  flex: 1;
+  margin: 0;
+  padding: 8px;
+  border: none;
+  resize: none;
+  background: var(--lb-wf-bg);
+  color: var(--lb-wf-fg);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.loomboard-workflow .lb-wf-json-banner {
+  padding: 6px 10px;
+  background: var(--lb-wf-error-bg);
+  color: var(--lb-wf-pushback);
+  border-bottom: 1px solid var(--lb-wf-border);
+}
+/* A finding opens where it is: on the canvas, or at its line in the JSON. */
+.loomboard-workflow .lb-wf-finding__go {
+  all: unset;
+  cursor: pointer;
+}
+.loomboard-workflow .lb-wf-finding__go:hover,
+.loomboard-workflow .lb-wf-finding__go:focus-visible {
+  text-decoration: underline;
+}

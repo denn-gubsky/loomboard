@@ -17,6 +17,8 @@ import { InputDialog } from "./InputDialog";
 import { walkProgress, type WalkProgress } from "./lib/progress";
 import { useRunLines } from "./useRunLines";
 import { useTeamDocument } from "./useTeamDocument";
+import { useJsonDraft } from "./useJsonDraft";
+import { TeamJsonView, type TeamJsonViewHandle } from "./TeamJsonView";
 import { LOCAL_KINDS, localKind, localNames, teamOwnEntries, teamVars, type LocalKind } from "./lib/teamLocal";
 import { addLocal, localNameError, removeLocal, renameLocal, setLocal } from "./lib/localEdit";
 import { RunChatColumn } from "./RunChatColumn";
@@ -72,7 +74,7 @@ import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
 import { applyWire, connectionKind, placeChannel, planWire, removeChannel, transitionSource } from "./lib/channelWiring";
 import { ChannelNode } from "./nodes/ChannelNode";
 import { patchHandler, teamChannels, walkHooks, type Json, type JsonObject, type TeamChannels } from "./lib/model";
-import { canSave, isInputStarter } from "./lib/validate";
+import { canSave, isInputStarter, type Finding } from "./lib/validate";
 import {
   INITIAL as SESSION_INITIAL,
   abortAvailability,
@@ -170,7 +172,15 @@ function WorkflowCanvasInner({
       cancelled = true;
     };
   }, [dataLayer, walkDone]);
-  const editable = !readonly && canEditGraph(session);
+  // Canvas | JSON | Split (RFC DX): two views of the one team in `doc`.
+  const [view, setView] = useState<"canvas" | "json" | "split">("canvas");
+  const jsonDraft = useJsonDraft(model, setModel, findings, view !== "canvas");
+  const jsonHandle = useRef<TeamJsonViewHandle>(null);
+  // The session and the host decide whether the team may be edited at all;
+  // while the JSON does not parse, only the JSON may be (decision 4): the
+  // canvas is frozen on the last valid draft.
+  const teamEditable = !readonly && canEditGraph(session);
+  const editable = teamEditable && !jsonDraft.error;
 
   // ---- load ----
   useEffect(() => {
@@ -793,7 +803,15 @@ function WorkflowCanvasInner({
   }, [dataLayer, session]);
 
   const errorCount = findings.filter((f) => f.level === "error").length;
-  const saveable = !!model && canSave(findings) && !busy;
+  // Not while the JSON has an error, or an edit to it has not reached the
+  // team yet: Save would send something other than what is on screen.
+  const saveable = !!model && canSave(findings) && !busy && !jsonDraft.error && !jsonDraft.pending;
+  // A finding opens where it is: its node on the canvas, its line in the JSON.
+  const showFinding = (f: Finding) => {
+    if (f.nodeId !== undefined && view !== "json") setSelectedId(f.nodeId);
+    const at = view !== "canvas" ? jsonDraft.offsetOf(f) : undefined;
+    if (at !== undefined) jsonHandle.current?.goto(at);
+  };
 
   return (
     <div
@@ -802,9 +820,11 @@ function WorkflowCanvasInner({
     >
       <div className="lb-wf-toolbar">
         <strong className="lb-wf-toolbar__name">{doc.name ?? "—"}</strong>
-        {!readonly && editable && (
+        {/* Shown while the JSON has an error too, disabled: "Save is off" is
+            information the operator needs (decision 4). */}
+        {!readonly && teamEditable && (
           <>
-            <button className="lb-wf-btn" onClick={relayout} disabled={!model}>
+            <button className="lb-wf-btn" onClick={relayout} disabled={!model || !editable}>
               Auto-layout
             </button>
             <button className="lb-wf-btn lb-wf-btn--primary" onClick={save} disabled={!saveable}>
@@ -872,6 +892,14 @@ function WorkflowCanvasInner({
           Transitions
         </label>
 
+        <div className="lb-wf-views" role="group" aria-label="View">
+          {(["canvas", "json", "split"] as const).map((v) => (
+            <button key={v} type="button" className="lb-wf-btn" aria-pressed={view === v} onClick={() => setView(v)}>
+              {v === "canvas" ? "Canvas" : v === "json" ? "JSON" : "Split"}
+            </button>
+          ))}
+        </div>
+
         <span className="lb-wf-toolbar__spacer" />
         <span className={`lb-wf-phase lb-wf-phase--${session.phase}`}>{statusLabel(session)}</span>
         {/* The walk's id follows the session, not a one-shot notice: a notice
@@ -924,8 +952,15 @@ function WorkflowCanvasInner({
         />
       )}
 
-      <div className="lb-wf-body">
-        {editable && (
+      {jsonDraft.error && (
+        <div className="lb-wf-json-banner" role="alert">
+          The JSON has an error at line {jsonDraft.error.position.line}, column {jsonDraft.error.position.column}:{" "}
+          {jsonDraft.error.message}. The canvas shows the last valid version, and Save is off until the JSON is fixed.
+        </div>
+      )}
+
+      <div className={`lb-wf-body lb-wf-body--${view}`}>
+        {view !== "json" && editable && (
           <Palette
             onPlace={placeNode}
             disabled={!model || busy}
@@ -935,6 +970,7 @@ function WorkflowCanvasInner({
           />
         )}
 
+        {view !== "json" && (
         <div className={`lb-wf-graph${editable ? "" : " is-locked"}`}>
           <ReactFlow
             nodes={flowNodes}
@@ -979,8 +1015,20 @@ function WorkflowCanvasInner({
             />
           </ReactFlow>
         </div>
+        )}
 
-        {!readonly && renderRunChat && walk && selected && sideTab === "chat" && rowsForState(walk, selected.id).length > 0 ? (
+        {view !== "canvas" && (
+          <TeamJsonView
+            text={jsonDraft.text}
+            onChange={jsonDraft.onTextChange}
+            readOnly={!teamEditable}
+            diagnostics={jsonDraft.diagnostics}
+            foldAt={jsonDraft.layoutOffset}
+            handle={jsonHandle}
+          />
+        )}
+
+        {view === "json" ? null : !readonly && renderRunChat && walk && selected && sideTab === "chat" && rowsForState(walk, selected.id).length > 0 ? (
           <RunChatColumn
             key={selected.id}
             state={selected.id}
@@ -1053,7 +1101,9 @@ function WorkflowCanvasInner({
         <ul className="lb-wf-findings">
           {findings.map((f, i) => (
             <li key={i} className={`lb-wf-finding lb-wf-finding--${f.level}`}>
-              {f.message}
+              <button type="button" className="lb-wf-finding__go" title="Show where this is" onClick={() => showFinding(f)}>
+                {f.message}
+              </button>
             </li>
           ))}
         </ul>
