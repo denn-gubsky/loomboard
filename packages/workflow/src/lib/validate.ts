@@ -18,6 +18,7 @@
 // package, which is why validate.test.ts drives BOTH from one fixture set.
 
 import type { CanvasModel, CanvasNode, JsonObject } from "./model";
+import type { JsonPath } from "./teamJson";
 import { handlerOf } from "./model";
 import { parseJsonPath } from "./jsonpath";
 import { validateStateHooks, validateWalkHooks } from "./hooks";
@@ -41,6 +42,22 @@ export interface Finding {
   nodeId?: string;
   /** The transition index this finding attaches to. */
   edgeIndex?: number;
+  /** Where in the definition it is (RFC DX), when neither a state nor a
+   *  transition says so — a top-level key, a variable, a team's own entry.
+   *  `findingPath` derives one for every finding. */
+  path?: JsonPath;
+}
+
+/** Where a finding is in the definition: its own path, else its state
+ *  (`states[i]`, the index the state is saved at), else its transition. */
+export function findingPath(model: CanvasModel, f: Finding): JsonPath {
+  if (f.path) return f.path;
+  if (f.nodeId !== undefined) {
+    const i = model.nodes.findIndex((n) => n.id === f.nodeId);
+    if (i >= 0) return ["states", i];
+  }
+  if (f.edgeIndex !== undefined) return ["transitions", f.edgeIndex];
+  return [];
 }
 
 function str(v: unknown): string {
@@ -583,7 +600,7 @@ export function validateModel(model: CanvasModel): Finding[] {
     findings.push({ level: "error", message, ...extra });
 
   // ---- entry + states ----
-  if (!model.entry.trim()) err("`entry` is required");
+  if (!model.entry.trim()) err("`entry` is required", { path: ["entry"] });
   if (!model.nodes.length) err("at least one state is required");
 
   const byId = new Map<string, CanvasNode>();
@@ -615,7 +632,7 @@ export function validateModel(model: CanvasModel): Finding[] {
   }
 
   if (model.entry.trim() && !byId.has(model.entry)) {
-    err(`entry ${JSON.stringify(model.entry)} does not resolve to a state`);
+    err(`entry ${JSON.stringify(model.entry)} does not resolve to a state`, { path: ["entry"] });
   }
   // Mirrors validateInputSourcePlacement: the walk's input is read once, at
   // the start, so a Starter reading it must BE the start — and cannot be
@@ -649,13 +666,17 @@ export function validateModel(model: CanvasModel): Finding[] {
   if (model.varsPatch) team.vars = model.varsPatch;
   if (model.localPatch) team.local = effectiveLocal(model) ?? {};
   if (model.channelsPatch) team.channels = model.channelsPatch as unknown as JsonObject;
-  for (const m of validateTeamLocal(team, agentRefs(model), channelRefs(model))) err(m);
+  for (const m of validateTeamLocal(team, agentRefs(model), channelRefs(model))) {
+    // A finding about a state's reference points at that state.
+    const i = m.state === undefined ? -1 : model.nodes.findIndex((n) => n.id === m.state);
+    err(m.message, i >= 0 ? { nodeId: m.state, path: ["states", i, "handler", ...m.field!.split(".")] } : { path: m.path });
+  }
 
   const maxIter = model.source.max_iterations;
   if (typeof maxIter === "number") {
-    if (maxIter < 0) err("max_iterations must be >= 0 (0 = default)");
+    if (maxIter < 0) err("max_iterations must be >= 0 (0 = default)", { path: ["max_iterations"] });
     else if (maxIter > MAX_ALLOWED_ITERATIONS) {
-      err(`max_iterations ${maxIter} exceeds the maximum ${MAX_ALLOWED_ITERATIONS}`);
+      err(`max_iterations ${maxIter} exceeds the maximum ${MAX_ALLOWED_ITERATIONS}`, { path: ["max_iterations"] });
     }
   }
 
@@ -667,7 +688,7 @@ export function validateModel(model: CanvasModel): Finding[] {
   const walkErr = validateWalkHooks(
     model.walkHooksPatch ? model.walkHooksPatch.hooks : model.source.hooks,
   );
-  if (walkErr) err(walkErr);
+  if (walkErr) err(walkErr, { path: ["hooks"] });
 
   // ---- transitions ----
   const outbound = new Map<string, Set<string>>();

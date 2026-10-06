@@ -109,30 +109,40 @@ export function varValueError(value: string): string | undefined {
   return undefined;
 }
 
+/** One refusal of the vars / local rules, with where it is: `path` in the
+ *  definition, or, for a state's reference, the state and its field. */
+export interface TeamLocalIssue {
+  message: string;
+  path: (string | number)[];
+  state?: string;
+  field?: string;
+}
+
 /** Mirrors validateVars + validateLocal (+ CheckLocalRefs), in that order.
  *  Messages are phrased as teamgraph's, minus its "team definition:" prefix. */
 export function validateTeamLocal(
   source: JsonObject,
   agentRefs: readonly { state: string; field: string; agent: string }[],
   channelRefs: readonly { state: string; field: string; channel: string }[],
-): string[] {
-  const out: string[] = [];
+): TeamLocalIssue[] {
+  const out: TeamLocalIssue[] = [];
+  const at = (path: (string | number)[]) => (message: string) => out.push({ message, path });
 
   // ---- vars ----
   const rawVars = source.vars;
   if (rawVars !== undefined && rawVars !== null) {
     const vars = obj(rawVars);
-    if (!vars) out.push("vars must be an object of name → default text");
+    if (!vars) at(["vars"])("vars must be an object of name → default text");
     else {
       const names = Object.keys(vars).sort();
-      if (names.length > MAX_VARS) out.push(`vars declares ${names.length} variables, more than the maximum ${MAX_VARS}`);
+      if (names.length > MAX_VARS) at(["vars"])(`vars declares ${names.length} variables, more than the maximum ${MAX_VARS}`);
       for (const name of names) {
-        if (!NAME_RE.test(name)) out.push(`vars key ${JSON.stringify(name)} must match [a-zA-Z0-9_-]{1,64}`);
+        if (!NAME_RE.test(name)) at(["vars", name])(`vars key ${JSON.stringify(name)} must match [a-zA-Z0-9_-]{1,64}`);
         const v = vars[name];
-        if (typeof v !== "string") out.push(`vars ${JSON.stringify(name)}: the default must be text`);
+        if (typeof v !== "string") at(["vars", name])(`vars ${JSON.stringify(name)}: the default must be text`);
         else {
           const why = varValueError(v);
-          if (why) out.push(`vars ${JSON.stringify(name)}: ${why}`);
+          if (why) at(["vars", name])(`vars ${JSON.stringify(name)}: ${why}`);
         }
       }
     }
@@ -143,13 +153,13 @@ export function validateTeamLocal(
   if (local === undefined || local === null) {
     // No local block: any "./" reference names nothing.
   } else if (!obj(local)) {
-    out.push('local: must be an object of kinds, e.g. {"agents": {...}}');
+    at(["local"])('local: must be an object of kinds, e.g. {"agents": {...}}');
     return out;
   }
   const block = obj(local) ?? {};
   for (const kind of Object.keys(block).sort()) {
     if (!(LOCAL_KINDS as readonly string[]).includes(kind)) {
-      out.push(
+      at(["local", kind])(
         `local: unknown kind ${JSON.stringify(kind)} — a team may declare only local "agents", "skills", "channels", "schedules" and "webhooks"`,
       );
     }
@@ -158,11 +168,11 @@ export function validateTeamLocal(
   for (const kind of LOCAL_KINDS) {
     const names = declared(kind);
     if (names.length > LIMITS[kind]) {
-      out.push(`local.${kind} declares ${names.length} ${kind}, more than the maximum ${LIMITS[kind]}`);
+      at(["local", kind])(`local.${kind} declares ${names.length} ${kind}, more than the maximum ${LIMITS[kind]}`);
     }
     for (const name of names) {
       if (!NAME_RE.test(name)) {
-        out.push(
+        at(["local", kind, name])(
           `local.${kind}: local ${KIND_WORD[kind]} name ${JSON.stringify(name)} must be one segment of A-Z a-z 0-9 _ -, at most 64 characters`,
         );
       }
@@ -180,7 +190,7 @@ export function validateTeamLocal(
     const list = Array.isArray(acl?.[side]) ? (acl![side] as unknown[]) : [];
     for (const entry of list) {
       if (typeof entry === "string" && entry.trim().startsWith(LOCAL_REF_PREFIX)) {
-        out.push(
+        at(["channels", side])(
           `channels.${side}: ${JSON.stringify(entry)} names one of the team's own channels, which the team may always ` +
             "publish to and read — remove it from the ACL",
         );
@@ -191,17 +201,23 @@ export function validateTeamLocal(
   for (const r of agentRefs) {
     const name = localRef(r.agent);
     if (name !== undefined && !has("agents", name)) {
-      out.push(
-        `state ${JSON.stringify(r.state)} ${r.field}: ${JSON.stringify(r.agent)} names a local agent the team does not declare under local.agents (${listed("agents")})`,
-      );
+      out.push({
+        state: r.state,
+        field: r.field,
+        path: [],
+        message: `state ${JSON.stringify(r.state)} ${r.field}: ${JSON.stringify(r.agent)} names a local agent the team does not declare under local.agents (${listed("agents")})`,
+      });
     }
   }
   for (const r of channelRefs) {
     const name = localRef(r.channel);
     if (name !== undefined && !has("channels", name)) {
-      out.push(
-        `state ${JSON.stringify(r.state)} ${r.field}: ${JSON.stringify(r.channel)} names a channel the team does not declare under local.channels (${listed("channels")})`,
-      );
+      out.push({
+        state: r.state,
+        field: r.field === "channel" ? "channel" : `${r.field}.channel`,
+        path: [],
+        message: `state ${JSON.stringify(r.state)} ${r.field}: ${JSON.stringify(r.channel)} names a channel the team does not declare under local.channels (${listed("channels")})`,
+      });
     }
   }
   // A team's own schedule or webhook publishes only into the team.
@@ -212,11 +228,11 @@ export function validateTeamLocal(
       const target = localRef(channel);
       const where = `local.${kind}[${JSON.stringify(name)}]`;
       if (target === undefined) {
-        out.push(
+        at(["local", kind, name, "channel"])(
           `${where}: channel ${JSON.stringify(channel)} must name one of the team's own channels as "./<name>" — a team's own ${KIND_WORD[kind]} publishes only into the team`,
         );
       } else if (!has("channels", target)) {
-        out.push(`${where}: channel ${JSON.stringify(channel)} names a channel the team does not declare under local.channels (${listed("channels")})`);
+        at(["local", kind, name, "channel"])(`${where}: channel ${JSON.stringify(channel)} names a channel the team does not declare under local.channels (${listed("channels")})`);
       }
     }
   }
