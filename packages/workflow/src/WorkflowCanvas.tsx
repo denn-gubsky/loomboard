@@ -12,17 +12,17 @@ import { Inspector } from "./inspector/Inspector";
 import { PublishComposer } from "./PublishComposer";
 import { Palette } from "./Palette";
 import { newStateRaw, type PaletteEntry } from "./lib/palette";
-import { fieldsPatch, inputFields, placeInput, startFindings, startPlan, type FormResult } from "./lib/inputForm";
+import { fieldsPatch, inputFields, placeInput, startPlan, type FormResult } from "./lib/inputForm";
 import { InputDialog } from "./InputDialog";
 import { walkProgress, type WalkProgress } from "./lib/progress";
 import { useRunLines } from "./useRunLines";
-import { forkOverlay } from "./lib/fork";
+import { useTeamDocument } from "./useTeamDocument";
 import { LOCAL_KINDS, localKind, localNames, teamOwnEntries, teamVars, type LocalKind } from "./lib/teamLocal";
-import { addLocal, localBodyFindings, localNameError, removeLocal, renameLocal, setLocal } from "./lib/localEdit";
+import { addLocal, localNameError, removeLocal, renameLocal, setLocal } from "./lib/localEdit";
 import { RunChatColumn } from "./RunChatColumn";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
 import { ResultPanel } from "./inspector/ResultPanel";
-import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
+import { autoLayout, withLayout } from "./lib/layout";
 import {
   edgeId,
   mergeMeasured,
@@ -38,7 +38,7 @@ import {
   toFlowNodes,
   visibleEdges,
 } from "./lib/flow";
-import { bindingFindings, bindingNodeId, bindingNodes } from "./lib/bindings";
+import { bindingNodeId, bindingNodes } from "./lib/bindings";
 import {
   emptyWalk,
   liveRunByState,
@@ -62,7 +62,6 @@ import {
   nextVariableName,
   setVariableDefault,
   undeclareVariable,
-  variableFindings,
   variableNodeId,
   variableNodes,
 } from "./lib/variables";
@@ -72,20 +71,8 @@ import { AgentNode } from "./nodes/AgentNode";
 import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
 import { applyWire, connectionKind, placeChannel, planWire, removeChannel, transitionSource } from "./lib/channelWiring";
 import { ChannelNode } from "./nodes/ChannelNode";
-import {
-  contentKey,
-  fromDefinition,
-  patchHandler,
-  teamChannels,
-  toDefinition,
-  walkHooks,
-  type CanvasModel,
-  type Json,
-  type JsonObject,
-  type TeamChannels,
-} from "./lib/model";
-import { canSave, isInputStarter, validateModel } from "./lib/validate";
-import { aclFindings } from "./lib/channels";
+import { patchHandler, teamChannels, walkHooks, type Json, type JsonObject, type TeamChannels } from "./lib/model";
+import { canSave, isInputStarter } from "./lib/validate";
 import {
   INITIAL as SESSION_INITIAL,
   abortAvailability,
@@ -98,7 +85,7 @@ import {
 } from "./lib/session";
 import { StateNode } from "./nodes/StateNode";
 import { handlerChannels } from "./lib/model";
-import type { ChannelInfo, SavedTeam, WorkflowCanvasProps } from "./types";
+import type { ChannelInfo, WorkflowCanvasProps } from "./types";
 
 const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode, agent: AgentNode, variable: VariableNode };
 
@@ -115,21 +102,15 @@ function WorkflowCanvasInner({
   renderRunChat,
   onOpenDocument,
 }: WorkflowCanvasProps) {
-  const [model, setModel] = useState<CanvasModel | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The team being edited: loaded, checked and saved by useTeamDocument. The
+  // canvas is a view over it (RFC DX).
+  const doc = useTeamDocument(dataLayer, { teamName, defId }, () => setSelectedId(null));
+  const { model, setModel, findings } = doc;
   const [agentNames, setAgentNames] = useState<string[]>();
   const [error, setError] = useState<string>();
   const [status, setStatus] = useState<string>();
   const [busy, setBusy] = useState(false);
-
-  /** The def_id this graph was loaded from. RFC CZ decision 6: a save whose
-   *  parent is no longer the active pointer is REFUSED rather than silently
-   *  overwriting whoever moved it. */
-  const parentDefId = useRef<string | null>(null);
-  // The CONTENT last loaded or saved (lib/model contentKey). Run starts that
-  // saved version, so any difference means Start would not run what is shown.
-  const savedKey = useRef<string>("");
-  const loadedName = useRef<string | null>(null);
 
   const readonly = mode === "readonly";
 
@@ -194,45 +175,6 @@ function WorkflowCanvasInner({
   // ---- load ----
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      setError(undefined);
-      setStatus(undefined);
-      try {
-        const detail = defId
-          ? await dataLayer.getTeamDef(defId)
-          : teamName
-            ? await dataLayer.getActiveTeamDef(teamName)
-            : null;
-        if (cancelled || !detail) return;
-        let next = fromDefinition(detail.definition);
-        // Auto-layout on open, but do NOT mark the model dirty: merely opening
-        // a team that has no stored layout must never fork it.
-        if (needsAutoLayout(next)) next = withLayout(next, autoLayout(next), false);
-        parentDefId.current = detail.def_id;
-        loadedName.current = detail.name;
-        // The promoted pointer, for C7's "a publish runs the PROMOTED version"
-        // warning. Best-effort: a host without listTeams simply loses the
-        // warning rather than the composer.
-        dataLayer
-          .listTeams()
-          .then((list) => {
-            if (!cancelled) setActiveDefId(list.find((t) => t.name === detail.name)?.active_def_id);
-          })
-          .catch(() => undefined);
-        savedKey.current = contentKey(next);
-        setModel(next);
-        setSelectedId(null);
-      } catch (e) {
-        if (!cancelled) setError(`Failed to load: ${msg(e)}`);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dataLayer, teamName, defId]);
-
-  useEffect(() => {
-    let cancelled = false;
     dataLayer
       .listAgents?.()
       .then((names) => !cancelled && setAgentNames(names))
@@ -245,7 +187,6 @@ function WorkflowCanvasInner({
   }, [dataLayer]);
 
   const [channels, setChannels] = useState<ChannelInfo[]>();
-  const [activeDefId, setActiveDefId] = useState<string>();
   const [composing, setComposing] = useState(false);
   // The Input node's Start dialog (RFC CZ "The Input node").
   const [startOpen, setStartOpen] = useState(false);
@@ -285,24 +226,6 @@ function WorkflowCanvasInner({
     };
   }, [dataLayer, entryChannel, namesChannels]);
 
-  // The graph's own rules PLUS the team ACL. They come from different places
-  // on the runtime — validateModel mirrors teamgraph.Validate, while the ACL
-  // check lives in the TeamDef tool's create/fork preflight — but both refuse a
-  // save, so the operator sees one list.
-  const findings = useMemo(
-    () =>
-      model
-        ? [
-            ...validateModel(model),
-            ...aclFindings(model),
-            ...bindingFindings(model),
-            ...startFindings(model),
-            ...variableFindings(variableNodes(model)),
-            ...localBodyFindings(model),
-          ]
-        : [],
-    [model],
-  );
   // The channels the graph names, as nodes its data edges route through.
   const channelViews = useMemo(() => (model ? channelNodes(model, channels) : []), [model, channels]);
   // The Documents and Memory the prompts pull in, as nodes feeding them (P3).
@@ -368,10 +291,10 @@ function WorkflowCanvasInner({
     [model, ownFocus],
   );
   const teamOwn = useMemo(
-    () => (model ? teamOwnEntries(model, loadedName.current ?? teamName ?? "", agentNames) : []),
+    () => (model ? teamOwnEntries(model, doc.name ?? teamName ?? "", agentNames) : []),
     [model, agentNames, teamName],
   );
-  const unsaved = useMemo(() => !!model && contentKey(model) !== savedKey.current, [model]);
+  const unsaved = doc.unsaved;
   const canRun = !readonly && !!dataLayer.runTeamDetached && canStart(session);
   // The End node the result belongs on: the one the runtime says the walk
   // reached (G14), so two endings of one team stay apart.
@@ -779,49 +702,26 @@ function WorkflowCanvasInner({
   // ---- save ----
   const save = useCallback(async () => {
     if (!model || !editable) return;
-    const name = loadedName.current;
-    if (!name) {
-      setError("No team loaded.");
-      return;
-    }
     setBusy(true);
     setError(undefined);
     setStatus(undefined);
     try {
-      // Stale-parent check. Two operators editing one team both fork from the
-      // same parent, and without this the second silently wins.
-      const current = await dataLayer.getActiveTeamDef(name);
-      if (parentDefId.current && current.def_id !== parentDefId.current) {
-        setError(
-          `This team moved on while you were editing (active version is now ${current.def_id}). ` +
-            `Reload to pick up the change — saving would discard it.`,
-        );
+      const r = await doc.save();
+      if (!r.ok) {
+        setError(r.error);
         return;
       }
-      // The fork merges over the ACTIVE version, so that is what a dropped
-      // section is cleared against — not what was loaded, which after one
-      // save in this session is no longer the parent (lib/fork.ts).
-      const d = current.definition;
-      const parent = typeof d === "object" && d !== null && !Array.isArray(d) ? (d as JsonObject) : {};
-      const saved: SavedTeam = await dataLayer.forkTeam(name, forkOverlay(parent, toDefinition(model)));
-      parentDefId.current = saved.def_id;
-      savedKey.current = contentKey(model);
-      setStatus(`Saved version ${saved.version}.`);
-      // The saved graph IS the new baseline, so a subsequent save is not a
-      // no-op fork of a stale parent.
-      setModel((m) => (m ? { ...m, layoutDirty: false } : m));
-      onSaved?.(saved);
-    } catch (e) {
-      setError(`Save failed: ${msg(e)}`);
+      setStatus(`Saved version ${r.saved.version}.`);
+      onSaved?.(r.saved);
     } finally {
       setBusy(false);
     }
-  }, [dataLayer, model, onSaved, editable]);
+  }, [doc, model, onSaved, editable]);
 
   // ---- running ----
   const startRun = useCallback(async (form?: FormResult, vars?: Record<string, string>) => {
     if (!model || !dataLayer.runTeamDetached || !canStart(session)) return;
-    const name = loadedName.current;
+    const name = doc.name;
     if (!name) {
       setError("No team loaded.");
       return;
@@ -833,7 +733,7 @@ function WorkflowCanvasInner({
       // By def_id, never by name: Save-then-Run would otherwise execute the
       // PREVIOUS version, and the difference is invisible on screen.
       const started = await dataLayer.runTeamDetached({
-        defId: parentDefId.current ?? undefined,
+        defId: doc.parentDefId ?? undefined,
         ...(form ? { input: form.input } : {}),
         ...(vars ? { vars } : {}),
       });
@@ -855,7 +755,7 @@ function WorkflowCanvasInner({
     } finally {
       setBusy(false);
     }
-  }, [dataLayer, model, session]);
+  }, [dataLayer, model, session, doc.name, doc.parentDefId]);
 
   const backToEdit = useCallback(() => {
     // Explicit, and it DISCARDS the trace — never automatic on finish, because
@@ -901,7 +801,7 @@ function WorkflowCanvasInner({
       data-theme={theme}
     >
       <div className="lb-wf-toolbar">
-        <strong className="lb-wf-toolbar__name">{loadedName.current ?? "—"}</strong>
+        <strong className="lb-wf-toolbar__name">{doc.name ?? "—"}</strong>
         {!readonly && editable && (
           <>
             <button className="lb-wf-btn" onClick={relayout} disabled={!model}>
@@ -989,7 +889,7 @@ function WorkflowCanvasInner({
         {status && <span className="lb-wf-badge lb-wf-badge--ok">{status}</span>}
       </div>
 
-      {error && <div className="lb-wf-error">{error}</div>}
+      {(error ?? doc.loadError) && <div className="lb-wf-error">{error ?? doc.loadError}</div>}
 
       {startOpen && (plan || declaresVars) && model && (
         <InputDialog
@@ -1016,8 +916,8 @@ function WorkflowCanvasInner({
           channel={entryChannel}
           info={channels?.find((c) => c.name === entryChannel)}
           channelsLoaded={channels !== undefined}
-          loadedDefId={parentDefId.current ?? undefined}
-          activeDefId={activeDefId}
+          loadedDefId={doc.parentDefId ?? undefined}
+          activeDefId={doc.activeDefId}
           disabled={busy}
           onPublish={(payload, scope) => dataLayer.publishChannel!(entryChannel, payload, { scope })}
           onClose={() => setComposing(false)}
