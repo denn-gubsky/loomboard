@@ -69,6 +69,11 @@ export type { Finding, FindingLevel } from "./lib/validate";
 
 export { autoLayout, needsAutoLayout, COLUMN_WIDTH, ROW_HEIGHT } from "./lib/layout";
 
+// Building a team by hand (RFC DX phase 4): what a host's "New team" offers,
+// and the name rule it can apply before the canvas does.
+export { TEAM_TEMPLATES, teamNameError } from "./lib/newTeam";
+export type { TeamTemplate } from "./lib/newTeam";
+
 // The session machine (RFC CZ C5). Exported because the rules — when the graph
 // is editable, when abort is possible — are the same questions a host's own
 // chrome has to answer, and two implementations of them would disagree.
