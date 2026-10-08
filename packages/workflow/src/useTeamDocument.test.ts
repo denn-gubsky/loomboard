@@ -119,4 +119,49 @@ describe("useTeamDocument", () => {
     expect(createTeam).not.toHaveBeenCalled();
     expect(result.current.name).toBe("blog");
   });
+
+  it("checks the draft with the runtime, sending what a save would send and saving nothing", async () => {
+    const verifyTeam = vi.fn(async () => ({ valid: true, runnable: true, issues: [] }));
+    const { l, forkTeam } = layer({ verifyTeam });
+    const { result } = renderHook(() => useTeamDocument(l, { teamName: "blog" }));
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    // Drop the variables: a save clears them with `vars: {}`, and so must the check.
+    act(() => result.current.setModel((m) => (m ? { ...m, varsPatch: {} } : m)));
+    const r = await result.current.check();
+    expect(r).toEqual({ ok: true, check: { valid: true, runnable: true, issues: [] } });
+    const [name, draft] = verifyTeam.mock.calls[0] as unknown as [string, { overlay: Record<string, unknown>; as: string; parentDefId: string }];
+    expect(name).toBe("blog");
+    expect(draft).toMatchObject({ as: "fork", parentDefId: "d1" });
+    expect(draft.overlay.vars).toEqual({});
+    expect(forkTeam).not.toHaveBeenCalled();
+    // The same overlay a save sends.
+    await act(async () => void (await result.current.save()));
+    expect(forkTeam.mock.calls[0][1]).toEqual(draft.overlay);
+  });
+
+  it("checks a team that is not stored yet as the create its first save will be", async () => {
+    const verifyTeam = vi.fn(async () => ({ valid: true }));
+    const { l } = layer({ verifyTeam });
+    const { result } = renderHook(() => useTeamDocument(l, { template: def }));
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    await result.current.check();
+    const [, draft] = verifyTeam.mock.calls[0] as unknown as [string, { overlay: Record<string, unknown>; as: string }];
+    expect(draft.as).toBe("create");
+    expect(draft.overlay).toMatchObject({ entry: "w" });
+  });
+
+  it("does not check over a version someone else promoted, or on a host that cannot check", async () => {
+    const verifyTeam = vi.fn(async () => ({ valid: true }));
+    const { l, move } = layer({ verifyTeam });
+    const { result } = renderHook(() => useTeamDocument(l, { teamName: "blog" }));
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    move();
+    expect(await result.current.check()).toMatchObject({ ok: false, error: expect.stringMatching(/moved on/) });
+    expect(verifyTeam).not.toHaveBeenCalled();
+
+    const plain = layer();
+    const { result: r2 } = renderHook(() => useTeamDocument(plain.l, { teamName: "blog" }));
+    await waitFor(() => expect(r2.current.model).not.toBeNull());
+    expect(await r2.current.check()).toMatchObject({ ok: false, error: expect.stringMatching(/cannot check/) });
+  });
 });
