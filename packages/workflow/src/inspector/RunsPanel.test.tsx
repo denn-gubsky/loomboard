@@ -34,6 +34,21 @@ describe("RunsPanel", () => {
     expect(screen.getByText(/held for review by cite-sources · rejected if unruled by 2026-10-02/)).toBeTruthy();
   });
 
+  it("says what a waiting run is waiting on — its background sub-agents, by run id", () => {
+    render(
+      <RunsPanel
+        rows={[
+          row({ runId: "r1", awaited: "children", awaitedOn: "r_child1,r_child2" }),
+          row({ runId: "r2" }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("waiting")).toBeTruthy();
+    expect(screen.getByText("waiting for 2 background sub-agents to finish: r_child1, r_child2")).toBeTruthy();
+    // A run that is simply running has no such note.
+    expect(screen.getAllByText(/waiting for/)).toHaveLength(1);
+  });
+
   it("labels a revisit by the STATE's own count, and a single visit not at all", () => {
     const { rerender } = render(<RunsPanel rows={[row({ runId: "e", stateVisit: 2 })]} />);
     expect(screen.queryByText(/visit/)).toBeNull();

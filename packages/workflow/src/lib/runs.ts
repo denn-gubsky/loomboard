@@ -145,6 +145,33 @@ export function rowPhase(r: WalkRunRow): RowPhase {
   return "running";
 }
 
+/** What a waiting run is waiting on, in words — undefined when the row is not
+ *  waiting, or says nothing about why. `awaitedOn` is the runtime's own text
+ *  for it: a channel name, an interruption kind, or the child run ids,
+ *  comma-separated (loomcycle 1.105, a run that ended its turn with
+ *  background sub-agents still running). */
+export function waitingNote(r: WalkRunRow): string | undefined {
+  if (rowPhase(r) !== "waiting") return undefined;
+  const on = (r.awaitedOn ?? "").trim();
+  switch (r.awaited) {
+    case "children": {
+      const ids = on.split(",").map((id) => id.trim()).filter(Boolean);
+      if (!ids.length) return "waiting for its background sub-agents to finish";
+      const shown = ids.slice(0, 3).join(", ");
+      const more = ids.length > 3 ? `, and ${ids.length - 3} more` : "";
+      return `waiting for ${ids.length} background ${ids.length === 1 ? "sub-agent" : "sub-agents"} to finish: ${shown}${more}`;
+    }
+    case "channel":
+      return on ? `waiting for a message on channel ${on}` : "waiting for a channel message";
+    case "interrupted":
+      return on ? `waiting for an answer to its question (${on})` : "waiting for an answer to its question";
+    case "input":
+      return "waiting for the operator's next message";
+    default:
+      return undefined;
+  }
+}
+
 export interface StatePulse {
   total: number;
   running: number;

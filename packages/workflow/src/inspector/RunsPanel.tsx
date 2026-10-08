@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { rowPhase, visitNumbers, type WalkRunRow } from "../lib/runs";
+import { rowPhase, visitNumbers, waitingNote, type WalkRunRow } from "../lib/runs";
 import type { RunDetail, RunPrompt } from "../types";
 
 // The runs a selected state started in this walk (RFC CZ M3b, C13).
@@ -60,6 +60,7 @@ export function RunsPanel({ rows, readRun, readRunPrompt }: RunsPanelProps) {
                   {r.holdExpiresAt ? ` · rejected if unruled by ${r.holdExpiresAt}` : ""}
                 </div>
               )}
+              {waitingNote(r) && <div className="lb-wf-runs__note">{waitingNote(r)}</div>}
               {open === r.runId && <RunDetailView runId={r.runId} readRun={readRun} readRunPrompt={readRunPrompt} />}
             </li>
           );

@@ -160,6 +160,7 @@ export {
   isTerminal,
   pulseLabel,
   rowPhase,
+  waitingNote,
   rowsForState,
   statePulses,
   walkSignal,
