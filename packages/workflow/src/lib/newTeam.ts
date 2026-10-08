@@ -69,11 +69,13 @@ export function importDefinition(text: string): ImportResult {
   return { ok: true, def };
 }
 
-// How the RUNTIME reads a key. loomcycle parses a definition with Go's
-// encoding/json, which matches an object key to a field by Unicode simple
-// case folding: "Hooks", "HOOKS" and "hookſ" are all `hooks` to it. The
-// summary below must read keys the same way, or a definition could carry a
-// section past it under another spelling.
+// How a runtime BEFORE loomcycle 1.107 reads a key. It parses a definition
+// with Go's encoding/json, which matches an object key to a field by Unicode
+// simple case folding: "Hooks", "HOOKS" and "hookſ" are all `hooks` to it,
+// and of two spellings the last wins. The summary below reads keys the same
+// way, or a definition could carry a section past it under another spelling.
+// From 1.107 (gap G21) the runtime refuses such a key, and any key it does
+// not know, on save — so there the notes are a preview of that refusal.
 const fold = (k: string) => k.toUpperCase().toLowerCase();
 
 /** Every value of `o` whose key the runtime reads as `name`. */
@@ -109,7 +111,7 @@ function sameKeyTwice(x: unknown, path: string, out: string[]) {
       if (first !== undefined) {
         out.push(
           `${JSON.stringify(show(first))} and ${JSON.stringify(show(k))} ${path ? `in ${show(path)} ` : ""}` +
-            "may be one key to loomcycle: what it runs may not be what the canvas shows",
+            "are one key to loomcycle if they name a field: 1.107 refuses that on save, and an older runtime runs the last one",
         );
       } else seen.set(f, k);
       sameKeyTwice(x[k], path ? `${path}.${k}` : k, out);
@@ -187,8 +189,10 @@ export function importNotes(def: JsonObject): string[] {
   const unknown: string[] = [];
   for (const k of Object.keys(def)) {
     const f = fold(k);
-    if (!DRAWN.has(f) && !LISTED.has(f)) unknown.push(`A key the canvas does not know: ${show(k)}`);
-    else if (k !== f) spelling.push(`${JSON.stringify(show(k))} is read by loomcycle as ${f}`);
+    if (!DRAWN.has(f) && !LISTED.has(f)) unknown.push(`A key the canvas does not know: ${show(k)} (loomcycle 1.107 refuses an unknown key on save; an older runtime drops it)`);
+    else if (k !== f) spelling.push(
+        `${JSON.stringify(show(k))} is another spelling of ${f}: loomcycle 1.107 refuses it on save, and an older runtime reads it as ${f}`,
+      );
   }
 
   const twice: string[] = [];
