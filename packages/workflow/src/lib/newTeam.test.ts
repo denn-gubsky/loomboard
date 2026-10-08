@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fromDefinition } from "./model";
-import { TEAM_TEMPLATES, exportFileName, importDefinition, teamNameError } from "./newTeam";
+import { TEAM_TEMPLATES, exportFileName, importDefinition, importNotes, teamNameError } from "./newTeam";
 import { canSave, validateModel } from "./validate";
 
 describe("TEAM_TEMPLATES", () => {
@@ -62,6 +62,55 @@ describe("importDefinition", () => {
     expect(importDefinition("  \n")).toEqual({ ok: false, message: "nothing to import" });
     expect(importDefinition('{"hello": 1}')).toMatchObject({ ok: false, message: expect.stringMatching(/not a team definition/) });
     expect(importDefinition('{"definition": {"x": 1}}')).toMatchObject({ ok: false });
+  });
+});
+
+describe("importNotes — what an import carries that the graph does not draw", () => {
+  const graph = { entry: "s", states: [{ state: "s", handler: { kind: "agent", agent: "a" } }], transitions: [] };
+
+  it("has nothing to say about a plain graph, its variables and its layout", () => {
+    expect(importNotes({ ...graph, vars: { tone: "plain" }, layout: { nodes: {} }, colors: {} })).toEqual([]);
+  });
+
+  it("lists walk hooks and state hooks by count, flagging the ones that call a URL, without the URL", () => {
+    const notes = importNotes({
+      ...graph,
+      hooks: { run_end: ["audit", { name: "x", url: "https://evil.example/?token=SECRET" }] },
+      states: [
+        { state: "s", handler: { kind: "agent", agent: "a", hooks: { agent_stop: ["gate"] }, tool_hooks: { pre: [{ name: "y", url: "https://h.example" }] } } },
+        { state: "t", handler: { kind: "terminal" } },
+      ],
+    });
+    expect(notes).toEqual([
+      "Walk hooks: 2 hooks, 1 calling a URL written in the definition",
+      "Hooks on state s: 2, 1 calling a URL written in the definition",
+    ]);
+    expect(notes.join(" ")).not.toMatch(/evil|SECRET|h\.example/);
+  });
+
+  it("lists the team's own definitions by name, and a webhook that takes unauthenticated calls", () => {
+    expect(
+      importNotes({
+        ...graph,
+        local: {
+          agents: { reviewer: { tools: ["Bash"] } },
+          channels: {},
+          webhooks: { inbound: { auth: { kind: "none" }, channel: "./c" }, signed: { auth: { kind: "hmac" }, channel: "./c" } },
+          schedules: { nightly: { schedule: "@hourly", channel: "./c" } },
+        },
+      }),
+    ).toEqual([
+      "The team's own agents: reviewer",
+      "The team's own schedules: nightly",
+      "The team's own webhooks: inbound, signed (no authentication: inbound)",
+    ]);
+  });
+
+  it("lists the channels the team is granted", () => {
+    expect(importNotes({ ...graph, channels: { publish: ["alerts"], subscribe: ["inbox", "ops"] } })).toEqual([
+      "Channels it may publish to: alerts",
+      "Channels it may read: inbox, ops",
+    ]);
   });
 });
 

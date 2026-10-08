@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { importDefinition, teamNameError } from "./lib/newTeam";
+import { importDefinition, importNotes, teamNameError } from "./lib/newTeam";
 import type { JsonObject } from "./lib/model";
 
 // The two dialogs of building a team by hand (RFC DX phase 4): naming a new
@@ -73,20 +73,33 @@ export interface ImportDialogProps {
 export function ImportDialog({ onImport, onClose }: ImportDialogProps) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string>();
+  // An import is someone else's text, and a save stores all of it under the
+  // operator's authority — including what the graph does not draw. Such a
+  // definition is listed first and replaces the draft on a second press.
+  const [review, setReview] = useState<{ def: JsonObject; notes: string[] }>();
+
+  const edit = (t: string) => {
+    setText(t);
+    setError(undefined);
+    setReview(undefined);
+  };
 
   const submit = () => {
+    if (review) return onImport(review.def);
     const r = importDefinition(text);
-    if (r.ok) return onImport(r.def);
-    setError(r.position ? `Line ${r.position.line}, column ${r.position.column}: ${r.message}` : r.message);
+    if (!r.ok) {
+      setError(r.position ? `Line ${r.position.line}, column ${r.position.column}: ${r.message}` : r.message);
+      return;
+    }
+    const notes = importNotes(r.def);
+    if (notes.length) setReview({ def: r.def, notes });
+    else onImport(r.def);
   };
 
   const readFile = (file: File | undefined) => {
     if (!file) return;
     file.text().then(
-      (t) => {
-        setText(t);
-        setError(undefined);
-      },
+      edit,
       (e) => setError(`Could not read ${file.name}: ${e instanceof Error ? e.message : String(e)}`),
     );
   };
@@ -117,16 +130,24 @@ export function ImportDialog({ onImport, onClose }: ImportDialogProps) {
           rows={8}
           spellCheck={false}
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setError(undefined);
-          }}
+          onChange={(e) => edit(e.target.value)}
         />
       </div>
       {error && <div className="lb-wf-finding lb-wf-finding--error">{error}</div>}
+      {review && (
+        <div className="lb-wf-finding lb-wf-finding--info" role="alert">
+          This definition carries more than the graph shows. Saving it stores all of this as yours — read it in the
+          JSON view before you save:
+          <ul>
+            {review.notes.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div>
         <button type="button" className="lb-wf-btn lb-wf-btn--primary" onClick={submit} disabled={!text.trim()}>
-          Replace the draft
+          {review ? "Replace the draft anyway" : "Replace the draft"}
         </button>
       </div>
     </section>
