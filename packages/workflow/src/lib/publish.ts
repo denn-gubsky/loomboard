@@ -7,6 +7,10 @@
 //
 // The failure shapes, in the order they bite:
 //
+//   the team's own    `./name` (RFC DV) can be written only from inside the
+//                     team: by a walk, its own agents, schedules and webhooks.
+//                     A publish from here is refused, and it is in no channel
+//                     listing — so "not declared" would be the wrong thing to say.
 //   not declared      the runtime refuses a channel with no declaration, so the
 //                     publish itself errors — better to say so first.
 //   scope=agent       a walk resolves a channel at the CHANNEL's declared
@@ -29,6 +33,7 @@
 // Pure: no React, no network.
 
 import type { ChannelInfo, PublishOutcome } from "../types";
+import { localRef } from "./teamLocal";
 
 export type IssueLevel = "block" | "warn";
 
@@ -70,6 +75,15 @@ export function publishPreflight(input: PreflightInput): Preflight {
 
   if (!input.channel.trim()) {
     block("This workflow's entry state reads no channel, so there is nothing to publish to.");
+    return { issues, canPublish: false };
+  }
+
+  if (localRef(input.channel) !== undefined) {
+    block(
+      `"${input.channel}" is one of the team's own channels. Only the team can write to it — a walk, its own ` +
+        "agents, schedules and webhooks — so a publish from here would be refused. To start the team from " +
+        "outside, have its entry read a channel declared on the runtime, or give it an Input form.",
+    );
     return { issues, canPublish: false };
   }
 

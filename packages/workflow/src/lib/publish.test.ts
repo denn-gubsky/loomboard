@@ -46,6 +46,14 @@ describe("publishPreflight — things that would silently not start a run", () =
     expect(messages({ info: undefined })).toMatch(/not declared/);
   });
 
+  it("blocks one of the team's own channels with the real reason, not \"not declared\"", () => {
+    const r = of({ channel: "./intake", info: undefined });
+    expect(r.canPublish).toBe(false);
+    expect(blocks({ channel: "./intake", info: undefined })).toHaveLength(1);
+    expect(r.issues[0].message).toMatch(/one of the team's own channels\. Only the team can write to it/);
+    expect(r.issues[0].message).not.toMatch(/not declared|operator yaml/);
+  });
+
   it("does NOT claim undeclared before the channel list has loaded", () => {
     // Absence of info means "not declared" only when we actually looked.
     // Otherwise a slow list would block every publish on startup.
