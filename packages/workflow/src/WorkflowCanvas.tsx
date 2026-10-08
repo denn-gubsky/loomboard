@@ -200,6 +200,31 @@ function WorkflowCanvasInner({
   const marked = useMemo(() => (runtimeFindings.length ? [...findings, ...runtimeFindings] : findings), [findings, runtimeFindings]);
   const jsonDraft = useJsonDraft(model, setModel, marked, view !== "canvas");
   const jsonHandle = useRef<TeamJsonViewHandle>(null);
+  // Selection sync (RFC DX phase 6), in Split: a state selected on the canvas
+  // is brought into view in the JSON, and the cursor's state is selected on
+  // the canvas. States only — the other nodes are not one place in the text.
+  //
+  // Not when the cursor is already inside that state: a selection the cursor
+  // itself caused would otherwise drag the cursor back to the state's first
+  // line, away from where the operator put it.
+  const { stateAt, offsetOfState } = jsonDraft;
+  useEffect(() => {
+    if (view !== "split" || !selectedId) return;
+    const at = offsetOfState(selectedId);
+    const cursor = jsonHandle.current?.cursor();
+    if (at === undefined || (cursor !== undefined && stateAt(cursor) === selectedId)) return;
+    jsonHandle.current?.reveal(at);
+    // On a change of SELECTION or view only: the text changing under the same
+    // selection must not move the cursor.
+  }, [selectedId, view]);
+  const onJsonCursor = useCallback(
+    (offset: number) => {
+      if (view !== "split") return;
+      const id = stateAt(offset);
+      if (id !== undefined) setSelectedId(id);
+    },
+    [view, stateAt],
+  );
   // The session and the host decide whether the team may be edited at all;
   // while the JSON does not parse, only the JSON may be (decision 4): the
   // canvas is frozen on the last valid draft.
@@ -1200,6 +1225,7 @@ function WorkflowCanvasInner({
             readOnly={!teamEditable}
             diagnostics={jsonDraft.diagnostics}
             foldAt={jsonDraft.layoutOffset}
+            onCursor={onJsonCursor}
             handle={jsonHandle}
           />
         )}
