@@ -25,7 +25,11 @@ import { addLocal, localNameError, removeLocal, renameLocal, setLocal } from "./
 import { RunChatColumn } from "./RunChatColumn";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
 import { ResultPanel } from "./inspector/ResultPanel";
-import { autoLayout, withLayout } from "./lib/layout";
+import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
+import { viewDefinition } from "./lib/jsonDraft";
+import { exportFileName } from "./lib/newTeam";
+import { formatDefinition } from "./lib/teamJson";
+import { ImportDialog, SaveAsDialog } from "./TeamFileDialogs";
 import {
   edgeId,
   mergeMeasured,
@@ -74,7 +78,7 @@ import { AgentNode } from "./nodes/AgentNode";
 import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
 import { applyWire, connectionKind, placeChannel, planWire, removeChannel, transitionSource } from "./lib/channelWiring";
 import { ChannelNode } from "./nodes/ChannelNode";
-import { patchHandler, teamChannels, walkHooks, type Json, type JsonObject, type TeamChannels } from "./lib/model";
+import { fromDefinition, patchHandler, teamChannels, walkHooks, type Json, type JsonObject, type TeamChannels } from "./lib/model";
 import { canSave, isInputStarter, type Finding } from "./lib/validate";
 import {
   INITIAL as SESSION_INITIAL,
@@ -98,6 +102,7 @@ function WorkflowCanvasInner({
   dataLayer,
   teamName,
   defId,
+  template,
   mode = "edit",
   onSaved,
   theme,
@@ -108,7 +113,7 @@ function WorkflowCanvasInner({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // The team being edited: loaded, checked and saved by useTeamDocument. The
   // canvas is a view over it (RFC DX).
-  const doc = useTeamDocument(dataLayer, { teamName, defId }, () => setSelectedId(null));
+  const doc = useTeamDocument(dataLayer, { teamName, defId, template }, () => setSelectedId(null));
   const { model, setModel, findings } = doc;
   const [agentNames, setAgentNames] = useState<string[]>();
   const [error, setError] = useState<string>();
@@ -737,6 +742,77 @@ function WorkflowCanvasInner({
     }
   }, [doc, model, onSaved, editable]);
 
+  // ---- building a team by hand (RFC DX phase 4) ----
+  const [dialog, setDialog] = useState<"saveAs" | "import" | null>(null);
+  const [saveAsError, setSaveAsError] = useState<string>();
+  const fileMenu = useRef<HTMLDetailsElement>(null);
+  const openDialog = (d: "saveAs" | "import") => {
+    if (fileMenu.current) fileMenu.current.open = false;
+    setSaveAsError(undefined);
+    setDialog(d);
+  };
+
+  const saveAs = useCallback(
+    async (name: string) => {
+      setBusy(true);
+      setSaveAsError(undefined);
+      try {
+        const r = await doc.saveAs(name);
+        if (!r.ok) {
+          setSaveAsError(r.error);
+          return;
+        }
+        setDialog(null);
+        setError(undefined);
+        setStatus(`Created team ${r.saved.name}.`);
+        onSaved?.(r.saved);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [doc, onSaved],
+  );
+
+  const importDef = useCallback(
+    (def: JsonObject) => {
+      let next = fromDefinition(def);
+      // A definition written by hand has no positions; one exported from a
+      // canvas keeps its own.
+      if (needsAutoLayout(next)) next = withLayout(next, autoLayout(next), true);
+      setModel(next);
+      setSelectedId(null);
+      setDialog(null);
+      setError(undefined);
+      setStatus("Imported. Nothing is saved yet.");
+    },
+    [setModel],
+  );
+
+  // What Copy and Download give: the text as the operator typed it while the
+  // JSON view is open, otherwise the draft as a save would write it.
+  const exportText = () =>
+    view !== "canvas" && !jsonDraft.error ? jsonDraft.text : model ? formatDefinition(viewDefinition(model)) : "";
+
+  const copyJson = async () => {
+    if (fileMenu.current) fileMenu.current.open = false;
+    try {
+      await navigator.clipboard.writeText(exportText());
+      setStatus("Copied the definition.");
+    } catch (e) {
+      setError(`Could not copy: ${msg(e)}`);
+    }
+  };
+
+  const downloadJson = () => {
+    if (fileMenu.current) fileMenu.current.open = false;
+    const url = URL.createObjectURL(new Blob([exportText()], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = exportFileName(doc.name);
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // ---- running ----
   const startRun = useCallback(async (form?: FormResult, vars?: Record<string, string>) => {
     if (!model || !dataLayer.runTeamDetached || !canStart(session)) return;
@@ -828,7 +904,7 @@ function WorkflowCanvasInner({
       data-theme={theme}
     >
       <div className="lb-wf-toolbar">
-        <strong className="lb-wf-toolbar__name">{doc.name ?? "—"}</strong>
+        <strong className="lb-wf-toolbar__name">{doc.name ?? (template !== undefined && model ? "New team" : "—")}</strong>
         {/* Shown while the JSON has an error too, disabled: "Save is off" is
             information the operator needs (decision 4). */}
         {!readonly && teamEditable && (
@@ -836,10 +912,41 @@ function WorkflowCanvasInner({
             <button className="lb-wf-btn" onClick={relayout} disabled={!model || !editable}>
               Auto-layout
             </button>
-            <button className="lb-wf-btn lb-wf-btn--primary" onClick={save} disabled={!saveable}>
-              {busy ? "Saving…" : "Save new version"}
-            </button>
+            {doc.name ? (
+              <button className="lb-wf-btn lb-wf-btn--primary" onClick={save} disabled={!saveable}>
+                {busy ? "Saving…" : "Save new version"}
+              </button>
+            ) : (
+              // A team that is not stored yet has no version to add to.
+              <button className="lb-wf-btn lb-wf-btn--primary" onClick={() => openDialog("saveAs")} disabled={!saveable}>
+                Create team…
+              </button>
+            )}
           </>
+        )}
+
+        {model && (
+          <details className="lb-wf-menu" ref={fileMenu}>
+            <summary className="lb-wf-btn">Team file</summary>
+            <div className="lb-wf-menu__items">
+              {!readonly && doc.name && (
+                <button type="button" className="lb-wf-btn" onClick={() => openDialog("saveAs")} disabled={!saveable}>
+                  Save as new team…
+                </button>
+              )}
+              {!readonly && (
+                <button type="button" className="lb-wf-btn" onClick={() => openDialog("import")} disabled={!editable}>
+                  Import…
+                </button>
+              )}
+              <button type="button" className="lb-wf-btn" onClick={() => void copyJson()} disabled={!!jsonDraft.error}>
+                Copy JSON
+              </button>
+              <button type="button" className="lb-wf-btn" onClick={downloadJson} disabled={!!jsonDraft.error}>
+                Download .json
+              </button>
+            </div>
+          </details>
         )}
 
         {!readonly && dataLayer.runTeamDetached && canStart(session) && (
@@ -847,11 +954,13 @@ function WorkflowCanvasInner({
             className="lb-wf-btn"
             // A team with an Input node starts from its form.
             onClick={() => (plan || declaresVars ? openStart() : void startRun())}
-            disabled={!model || busy || errorCount > 0}
+            disabled={!model || busy || errorCount > 0 || !doc.name}
             title={
-              errorCount > 0
-                ? "Fix the validation problems first — the runtime would refuse this definition."
-                : "Start this version, detached"
+              !doc.name
+                ? "Create the team first — a walk runs a saved version."
+                : errorCount > 0
+                  ? "Fix the validation problems first — the runtime would refuse this definition."
+                  : "Start this version, detached"
             }
           >
             Run
@@ -927,6 +1036,17 @@ function WorkflowCanvasInner({
       </div>
 
       {(error ?? doc.loadError) && <div className="lb-wf-error">{error ?? doc.loadError}</div>}
+
+      {dialog === "saveAs" && (
+        <SaveAsDialog
+          from={doc.name}
+          busy={busy}
+          error={saveAsError}
+          onSave={(name) => void saveAs(name)}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === "import" && editable && <ImportDialog onImport={importDef} onClose={() => setDialog(null)} />}
 
       {startOpen && (plan || declaresVars) && model && (
         <InputDialog

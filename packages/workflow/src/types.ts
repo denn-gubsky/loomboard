@@ -271,8 +271,13 @@ export interface WorkflowCanvasProps {
    *  the active pointer. */
   teamName?: string;
   defId?: string;
+  /** With neither `teamName` nor `defId`: the definition a NEW team starts
+   *  from (see TEAM_TEMPLATES). It is created, under a name the operator
+   *  gives, on its first save. Must be a stable reference. */
+  template?: unknown;
   mode?: CanvasMode;
-  /** Fired after a successful save, with the new version's identifiers. */
+  /** Fired after a successful save, with the new version's identifiers. A
+   *  save under a new name reports that name: the host opens it. */
   onSaved?: (saved: SavedTeam) => void;
   /** Palette default and light/dark. Defaults to the ancestor's data-theme. */
   theme?: "dark" | "light";
