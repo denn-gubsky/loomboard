@@ -3,9 +3,11 @@ import { aclFindings } from "./lib/channels";
 import { bindingFindings } from "./lib/bindings";
 import { forkOverlay } from "./lib/fork";
 import { startFindings } from "./lib/inputForm";
+import { viewDefinition } from "./lib/jsonDraft";
 import { autoLayout, needsAutoLayout, withLayout } from "./lib/layout";
 import { localBodyFindings } from "./lib/localEdit";
 import { contentKey, fromDefinition, toDefinition, type CanvasModel, type JsonObject } from "./lib/model";
+import { teamNameError } from "./lib/newTeam";
 import { validateModel, type Finding } from "./lib/validate";
 import { variableFindings, variableNodes } from "./lib/variables";
 import type { SavedTeam, WorkflowDataLayer } from "./types";
@@ -23,6 +25,9 @@ import type { SavedTeam, WorkflowDataLayer } from "./types";
 //     overwriting whoever moved it;
 //   - forkOverlay (lib/fork.ts): a section the draft dropped is cleared
 //     against that active version — the one the fork merges over.
+//
+// A document can also start from a TEMPLATE instead of a stored team (RFC DX
+// phase 4). It has no name and no parent until `saveAs` creates it.
 
 export type SaveResult = { ok: true; saved: SavedTeam } | { ok: false; error: string };
 
@@ -30,7 +35,7 @@ export interface TeamDocument {
   /** The draft as the canvas holds it; null until loaded. */
   model: CanvasModel | null;
   setModel: Dispatch<SetStateAction<CanvasModel | null>>;
-  /** The loaded team's name, once loaded. */
+  /** The team's name: once loaded, or once a new team is first saved. */
   name: string | null;
   /** The version the draft forks from: the one loaded, then each one saved. */
   parentDefId: string | null;
@@ -43,13 +48,17 @@ export interface TeamDocument {
   /** The draft differs from the version last loaded or saved. */
   unsaved: boolean;
   save(): Promise<SaveResult>;
+  /** Create a NEW team from the draft. The document is then that team. */
+  saveAs(name: string): Promise<SaveResult>;
 }
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function useTeamDocument(
   dataLayer: WorkflowDataLayer,
-  target: { teamName?: string; defId?: string },
+  /** A stored team, or — with neither name nor id — the definition a new
+   *  team starts from. `template` must be a stable reference. */
+  target: { teamName?: string; defId?: string; template?: unknown },
   /** Called after each load, e.g. to clear a selection that no longer applies. */
   onLoaded?: () => void,
 ): TeamDocument {
@@ -66,12 +75,24 @@ export function useTeamDocument(
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
 
-  const { teamName, defId } = target;
+  const { teamName, defId, template } = target;
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoadError(undefined);
       try {
+        if (!defId && !teamName && template !== undefined) {
+          let next = fromDefinition(template);
+          if (needsAutoLayout(next)) next = withLayout(next, autoLayout(next), false);
+          parentDefId.current = null;
+          name.current = null;
+          // Nothing is saved yet, so every draft of it is unsaved.
+          savedKey.current = "";
+          setActiveDefId(undefined);
+          setModel(next);
+          onLoadedRef.current?.();
+          return;
+        }
         const detail = defId
           ? await dataLayer.getTeamDef(defId)
           : teamName
@@ -103,7 +124,7 @@ export function useTeamDocument(
     return () => {
       cancelled = true;
     };
-  }, [dataLayer, teamName, defId]);
+  }, [dataLayer, teamName, defId, template]);
 
   // The graph's own rules PLUS the team ACL and the authoring rules. They come
   // from different places on the runtime — validateModel mirrors
@@ -159,6 +180,33 @@ export function useTeamDocument(
     }
   }, [dataLayer, model]);
 
+  const saveAs = useCallback(
+    async (newName: string): Promise<SaveResult> => {
+      if (!model) return { ok: false, error: "No team loaded." };
+      try {
+        // The runtime does not refuse a create under a name it has: it mints
+        // that team's next version and promotes it. So the name is checked
+        // here, against the teams as they are now.
+        const taken = (await dataLayer.listTeams()).map((t) => t.name);
+        const why = teamNameError(newName, taken);
+        if (why) return { ok: false, error: `Cannot save as ${JSON.stringify(newName)}: ${why}.` };
+        // The layout always goes with a new team: there is no parent to keep
+        // one from.
+        const saved = await dataLayer.createTeam(newName, viewDefinition(model));
+        parentDefId.current = saved.def_id;
+        name.current = saved.name;
+        savedKey.current = contentKey(model);
+        // A create promotes what it makes.
+        setActiveDefId(saved.def_id);
+        setModel((m) => (m ? { ...m, layoutDirty: false } : m));
+        return { ok: true, saved };
+      } catch (e) {
+        return { ok: false, error: `Save failed: ${msg(e)}` };
+      }
+    },
+    [dataLayer, model],
+  );
+
   return {
     model,
     setModel,
@@ -169,5 +217,6 @@ export function useTeamDocument(
     findings,
     unsaved,
     save,
+    saveAs,
   };
 }
