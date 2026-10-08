@@ -106,7 +106,9 @@ describe("WorkflowCanvas — the JSON view (RFC DX)", () => {
     expect(screen.getByRole("button", { name: "Agent" })).toBeTruthy();
   });
 
-  it("an unknown kind and an unknown key typed in JSON survive a canvas edit, and are saved", async () => {
+  // The canvas does not judge them: from loomcycle 1.107 (G21) the runtime
+  // refuses a key it does not know, and Check shows it at its line.
+  it("an unknown kind and an unknown key typed in JSON survive a canvas edit, and are sent with the save", async () => {
     const { v, forkTeam } = await open();
     const t = json(v);
     t.x_custom = { owner: "ops" };
