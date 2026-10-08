@@ -53,8 +53,10 @@ describe("latestMessages", () => {
 });
 
 describe("walkResult", () => {
-  it("lifts each agent run's answer out of a Starter's envelope, without the sub-agent marker", () => {
-    // The pcparts walk's real final text (TrueNAS, 2026-10-01).
+  it("lifts each agent run's answer out of a Starter's envelope", () => {
+    // The shape of the pcparts walk's final text. The member's answer comes as it
+    // wrote it: the runtime keeps the Agent tool's "[sub-agent …]" line out of a
+    // walk's result (loomcycle G11, fixed 2026-10-02).
     const finalText = JSON.stringify({
       results: [
         {
@@ -62,7 +64,7 @@ describe("walkResult", () => {
           agent: "marketing/article-editor",
           run_id: "r_cd39",
           ok: true,
-          output: "[sub-agent agent_id=a_42844ce23e069d9b]\n4089972de02c194228a14218c28610c2",
+          output: "4089972de02c194228a14218c28610c2",
         },
       ],
     });
@@ -75,13 +77,6 @@ describe("walkResult", () => {
     expect(walkResult(JSON.stringify({ results: [{ agent: "a", ok: false, error: "timed out" }] }))[0]).toMatchObject({ ok: false, text: "timed out" });
     expect(walkResult("the agent state's plain answer")).toEqual([{ text: "the agent state's plain answer" }]);
     expect(walkResult("")).toEqual([]);
-  });
-
-  it("drops the marker from an agent state's plain answer too — a team that ends in an agent", () => {
-    // The pcparts v2 walk's real final text: its last state is an agent.
-    expect(walkResult("[sub-agent agent_id=a_9471f3fa8a7c4655]\nd56c87cbbd50a67dc8a1e61e74a52720")).toEqual([
-      { text: "d56c87cbbd50a67dc8a1e61e74a52720" },
-    ]);
   });
 
   it("keeps markup as text — it is model output", () => {

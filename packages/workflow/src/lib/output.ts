@@ -69,11 +69,6 @@ export interface ResultItem {
   text: string;
 }
 
-// The runtime prefixes a member's final text with the parent-transcript
-// marker `[sub-agent agent_id=…]` (loomcycle gap G11). On an End node the
-// answer is what matters, so that one leading line is dropped for display.
-const SUB_AGENT_HEADER = /^\[sub-agent agent_id=[^\]\n]*\]\n/;
-
 /** What a finished walk produced. A walk's final text is the output of the
  *  last state it ran (RFC DI: the run holds the output) — for a Starter, the
  *  `{results:[…]}` envelope with one entry per agent run; for any other
@@ -95,12 +90,12 @@ export function walkResult(finalText?: string): ResultItem[] {
           agent: typeof o.agent === "string" ? o.agent : undefined,
           runId: typeof o.run_id === "string" ? o.run_id : undefined,
           ok: typeof o.ok === "boolean" ? o.ok : undefined,
-          text: text.replace(SUB_AGENT_HEADER, ""),
+          text,
         };
       });
     }
   } catch {
-    // Not JSON: an agent state's plain answer — which carries the same marker.
+    // Not JSON: an agent state's plain answer.
   }
-  return [{ text: raw.replace(SUB_AGENT_HEADER, "") }];
+  return [{ text: raw }];
 }

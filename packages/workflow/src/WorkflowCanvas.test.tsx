@@ -705,7 +705,7 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     });
     const runTeamDetached = vi.fn(async () => ({ run_id: "r_walk", status: "running" }));
     const finalText = JSON.stringify({
-      results: [{ index: 0, agent: "e", run_id: "m2", ok: true, output: "[sub-agent agent_id=a_1]\narticle_chunk_42" }],
+      results: [{ index: 0, agent: "e", run_id: "m2", ok: true, output: "article_chunk_42" }],
     });
     const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText, terminal: "done" }));
     render(<WorkflowCanvas dataLayer={base({ watchWalk, runTeamDetached, readRun })} teamName="sdlc" />);
@@ -725,7 +725,6 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
     const result = await screen.findByTestId("result-done");
     expect(readRun).toHaveBeenCalledWith("r_walk");
     expect(result.textContent).toContain("article_chunk_42");
-    expect(result.textContent).not.toContain("[sub-agent");
   });
 
   it("colours where a running walk is — active, passed, and a marker on the current state — and resets when it ends", async () => {
@@ -829,7 +828,7 @@ describe("WorkflowCanvas — runs and output (RFC CZ M3b)", () => {
       return () => undefined;
     });
     const ID = "b5b0ab5251a91c49cf2e6411acf2050a";
-    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText: `[sub-agent agent_id=a_1]\n${ID}`, terminal: "done" }));
+    const readRun = vi.fn(async (runId: string) => ({ runId, status: "completed", finalText: ID, terminal: "done" }));
     const readChunk = vi.fn(async (id: string) => ({ id, title: "Article: RTX 4070 Super", body: "# 1440p Power\n<b>not markup</b>", documentId: "doc-parts", scope: "user" }));
     const onOpenDocument = vi.fn();
     const { container } = render(
