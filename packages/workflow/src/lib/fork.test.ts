@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forkOverlay, forkWarnings } from "./fork";
+import { forkOverlay } from "./fork";
 import type { JsonObject } from "./model";
 
 const graph = { entry: "s", states: [{ state: "s", handler: { kind: "agent", agent: "a" } }], transitions: [] };
@@ -36,6 +36,14 @@ describe("forkOverlay — what a save sends, so a dropped section is cleared, no
     expect(forkOverlay(parent, { ...graph, vars: null }).vars).toEqual({});
   });
 
+  it("sends max_iterations 0 when the parent has a cap and the draft dropped it, so the save removes the cap", () => {
+    expect(forkOverlay({ ...graph, max_iterations: 12 }, { ...graph }).max_iterations).toBe(0);
+    // A cap the draft states — or clears itself, with 0 or null — is sent as written.
+    expect(forkOverlay({ ...graph, max_iterations: 12 }, { ...graph, max_iterations: 5 }).max_iterations).toBe(5);
+    expect(forkOverlay({ ...graph, max_iterations: 12 }, { ...graph, max_iterations: null }).max_iterations).toBeNull();
+    expect("max_iterations" in forkOverlay({ ...graph }, { ...graph })).toBe(false);
+  });
+
   it("adds nothing the parent never had, sends what the draft has as it is, and leaves the draft alone", () => {
     const draft = { ...graph, vars: { tone: "warm" } };
     const out = forkOverlay({ ...graph }, draft);
@@ -43,15 +51,5 @@ describe("forkOverlay — what a save sends, so a dropped section is cleared, no
     const kept = forkOverlay(parent, draft);
     expect(kept.vars).toEqual({ tone: "warm" });
     expect(draft).toEqual({ ...graph, vars: { tone: "warm" } });
-  });
-});
-
-describe("forkWarnings", () => {
-  it("says a save cannot remove max_iterations, only change it (loomcycle G20b)", () => {
-    const [w] = forkWarnings({ ...graph, max_iterations: 12 }, { ...graph });
-    expect(w).toMatchObject({ level: "info", path: ["max_iterations"] });
-    expect(w.message).toMatch(/cannot remove a cap/);
-    expect(forkWarnings({ ...graph, max_iterations: 12 }, { ...graph, max_iterations: 5 })).toEqual([]);
-    expect(forkWarnings({ ...graph }, { ...graph })).toEqual([]);
   });
 });
