@@ -32,9 +32,11 @@ export interface WalkRunRow {
   /** Starter members only. */
   waveId?: string;
   waveIndex?: number;
-  /** What a running run is blocked on (loomcycle 1.101, gap G1). */
-  awaited?: "channel" | "interrupted" | "review" | "input";
-  /** The channel, interruption kind, or the agent_stop hook holding a review. */
+  /** What a running run is blocked on (loomcycle 1.101, gap G1). `children`:
+   *  it ended its turn and waits for its background sub-agents (1.105). */
+  awaited?: "channel" | "interrupted" | "review" | "input" | "children";
+  /** The channel, interruption kind, the agent_stop hook holding a review, or
+   *  the child run ids, comma-separated. */
   awaitedOn?: string;
   /** When an unruled review hold ends as rejected. */
   holdExpiresAt?: string;

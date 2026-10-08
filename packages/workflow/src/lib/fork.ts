@@ -14,13 +14,12 @@
 // at save time — not against what was loaded: after one save in a session,
 // the loaded definition is no longer the parent.
 //
-// `max_iterations` cannot be cleared this way: the runtime reads 0 as "not
-// set" (loomcycle G20b). `forkWarnings` says so instead of letting it pass.
+// `max_iterations` is a scalar, cleared by a SENT 0 (loomcycle ≥ 1.105.0;
+// an older runtime ignores the 0 and keeps the parent's cap).
 //
 // Pure: no React, no network.
 
 import type { Json, JsonObject } from "./model";
-import type { Finding } from "./validate";
 
 /** Top-level sections a fork replaces wholesale, cleared by `{}`. */
 const WHOLESALE = ["colors", "layout", "channels", "hooks", "vars"] as const;
@@ -35,13 +34,15 @@ function present(v: Json | undefined): boolean {
   return v !== undefined && v !== null;
 }
 
-/** The draft with an explicit clear for every section `parent` has and the
- *  draft dropped. The draft itself is not modified. */
+/** The draft with an explicit clear for every section — and the iteration
+ *  cap — `parent` has and the draft dropped. The draft itself is not modified. */
 export function forkOverlay(parent: JsonObject, draft: JsonObject): JsonObject {
   const out: JsonObject = { ...draft };
   for (const key of WHOLESALE) {
     if (present(parent[key]) && !present(draft[key])) out[key] = {};
   }
+  const cap = parent.max_iterations;
+  if (typeof cap === "number" && cap !== 0 && draft.max_iterations === undefined) out.max_iterations = 0;
   const had = obj(parent.local);
   if (had) {
     const kinds = LOCAL_KINDS.filter((k) => present(had[k]));
@@ -51,22 +52,6 @@ export function forkOverlay(parent: JsonObject, draft: JsonObject): JsonObject {
       out.local = { ...(local ?? {}) };
       for (const k of missing) (out.local as JsonObject)[k] = {};
     }
-  }
-  return out;
-}
-
-/** What a save cannot do that the draft asks for. */
-export function forkWarnings(parent: JsonObject, draft: JsonObject): Finding[] {
-  const out: Finding[] = [];
-  const cap = parent.max_iterations;
-  if (typeof cap === "number" && cap !== 0 && !(typeof draft.max_iterations === "number" && draft.max_iterations !== 0)) {
-    out.push({
-      level: "info",
-      path: ["max_iterations"],
-      message:
-        `the saved version caps each state at max_iterations ${cap}, and a save cannot remove a cap ` +
-        "(loomcycle reads 0 as unset) — set max_iterations to the cap you want instead",
-    });
   }
   return out;
 }
