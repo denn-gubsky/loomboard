@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChannelNodeView } from "./lib/channelNodes";
 import { latestMessages, messageText, type ChannelMessage } from "./lib/output";
+import { localRef } from "./lib/teamLocal";
 
 // The team's OUTPUT (RFC CZ M3b): the latest messages on each channel the team
 // publishes to and does not itself read (lib/output.ts outputChannels).
@@ -9,6 +10,11 @@ import { latestMessages, messageText, type ChannelMessage } from "./lib/output";
 // someone else. Refreshed when `refreshKey` changes — the canvas bumps it when
 // a run in the walk settles, which is when new output can appear — and on
 // demand. Message content is agent output: rendered as plain text.
+//
+// One of the team's OWN channels (`./name`, RFC DV) is listed and never
+// peeked: the runtime lets only the team's walks and its own agents read it —
+// it is in no channel listing and a peek from outside is refused — so there
+// is nothing this panel can fetch, and it says that instead of an error.
 
 export interface OutputPanelProps {
   channels: ChannelNodeView[];
@@ -30,6 +36,7 @@ export function OutputPanel({ channels, peekChannel, refreshKey, max = 5 }: Outp
     const nextErr: Record<string, string> = {};
     await Promise.all(
       channels.map(async (c) => {
+        if (localRef(c.channel) !== undefined) return;
         // Peeking needs the channel's declared scope; one the runtime has not
         // listed cannot be addressed, and saying so beats guessing a scope.
         const scope = c.info?.scope;
@@ -74,7 +81,12 @@ export function OutputPanel({ channels, peekChannel, refreshKey, max = 5 }: Outp
               <code>{c.channel}</code>
               {c.info?.scope ? <span className="lb-wf-team__hint"> · {c.info.scope}</span> : null}
             </div>
-            {errors[c.channel] ? (
+            {localRef(c.channel) !== undefined ? (
+              <p className="lb-wf-team__hint">
+                The team's own channel. Only this team's walks and its own agents can read it, so its messages cannot be
+                shown here — and no state of the team reads it.
+              </p>
+            ) : errors[c.channel] ? (
               <div className="lb-wf-finding lb-wf-finding--error">{errors[c.channel]}</div>
             ) : msgs.length === 0 ? (
               <p className="lb-wf-team__hint">No messages yet.</p>

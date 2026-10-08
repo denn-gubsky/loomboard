@@ -38,6 +38,24 @@ describe("OutputPanel", () => {
     expect(peek).not.toHaveBeenCalled();
   });
 
+  it("lists one of the team's own channels without peeking it, and says why it cannot be read here", async () => {
+    // Regression: it was reported as "scope unknown — channel list not loaded", an
+    // error about a listing the runtime never puts a team's own channel in.
+    const peek = vi.fn(async (): Promise<ChannelMessage[]> => [{ id: "m1", publishedAt: "2026-10-08T10:00:00Z", value: "hi" }]);
+    render(
+      <OutputPanel
+        channels={[view({ id: "channel:./journal", channel: "./journal", declared: true }), view({ info: { name: "out", scope: "tenant" } })]}
+        peekChannel={peek}
+      />,
+    );
+    await waitFor(() => expect(peek).toHaveBeenCalledTimes(1));
+    expect(peek).toHaveBeenCalledWith("out", { scope: "tenant", max: 50 });
+    const own = screen.getByTestId("output-./journal");
+    expect(own.textContent).toMatch(/The team's own channel\. Only this team's walks and its own agents can read it/);
+    expect(own.textContent).not.toMatch(/scope unknown|not declared/);
+    expect(own.querySelector(".lb-wf-finding--error")).toBeNull();
+  });
+
   it("re-peeks when the refresh key changes — a run settled", async () => {
     const peek = vi.fn(async (): Promise<ChannelMessage[]> => []);
     const channels = [view({ info: { name: "out", scope: "tenant" }, declared: true })];
