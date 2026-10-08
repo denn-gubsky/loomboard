@@ -71,6 +71,14 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
     forkTeam: (name, definition) =>
       client.forkTeam(name, definition as Record<string, unknown>) as Promise<SavedTeam>,
 
+    // The pre-save check (loomcycle 1.105): the overlay is what the save sends.
+    verifyTeam: (name, draft) =>
+      client.verifyTeam(name, {
+        overlay: draft.overlay as Record<string, unknown>,
+        ...(draft.as ? { as: draft.as } : {}),
+        ...(draft.parentDefId ? { parentDefId: draft.parentDefId } : {}),
+      }),
+
     async listAgents(): Promise<string[]> {
       const { entries } = await client.listLibraryAgents();
       return (entries ?? [])
