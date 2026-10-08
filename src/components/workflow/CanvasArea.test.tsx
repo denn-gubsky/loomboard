@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 // Renders the Canvas surface through the APP's module resolution.
@@ -73,5 +73,16 @@ describe("CanvasArea", () => {
     render(<CanvasArea />);
     expect(await screen.findByTestId("node-start")).toBeTruthy();
     expect(await screen.findByTestId("node-done")).toBeTruthy();
+  });
+
+  it("opens a new team from a template in place of the selected one, without creating it", async () => {
+    const { default: CanvasArea } = await import("./CanvasArea");
+    render(<CanvasArea />);
+    await screen.findByTestId("node-start");
+    fireEvent.change(screen.getByLabelText("New team"), { target: { value: "one-agent" } });
+    expect(await screen.findByTestId("node-work")).toBeTruthy();
+    expect(screen.queryByTestId("node-start")).toBeNull();
+    expect(screen.getByRole("button", { name: "Create team…" })).toBeTruthy();
+    expect(screen.getByText("(new team, not saved)")).toBeTruthy();
   });
 });
