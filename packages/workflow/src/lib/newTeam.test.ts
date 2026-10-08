@@ -118,12 +118,12 @@ describe("importNotes — what an import carries that the graph does not draw", 
       "hook\u017f": { run_end: [{ name: "z", url: "https://k.example" }] },
     });
     expect(notes).toEqual([
-      '"States" is read by loomcycle as states',
-      '"Hooks" is read by loomcycle as hooks',
-      '"LOCAL" is read by loomcycle as local',
-      '"Channels" is read by loomcycle as channels',
-      '"hook\u017f" is read by loomcycle as hooks',
-      '"Hooks" and "hook\u017f" may be one key to loomcycle: what it runs may not be what the canvas shows',
+      '"States" is another spelling of states: loomcycle 1.107 refuses it on save, and an older runtime reads it as states',
+      '"Hooks" is another spelling of hooks: loomcycle 1.107 refuses it on save, and an older runtime reads it as hooks',
+      '"LOCAL" is another spelling of local: loomcycle 1.107 refuses it on save, and an older runtime reads it as local',
+      '"Channels" is another spelling of channels: loomcycle 1.107 refuses it on save, and an older runtime reads it as channels',
+      '"hook\u017f" is another spelling of hooks: loomcycle 1.107 refuses it on save, and an older runtime reads it as hooks',
+      '"Hooks" and "hook\u017f" are one key to loomcycle if they name a field: 1.107 refuses that on save, and an older runtime runs the last one',
       "Walk hooks: 2 hooks, 1 calling a URL written in the definition",
       "Hooks on state s: 1 hook, 1 calling a URL written in the definition",
       "The team's own webhooks: inbound (no authentication: inbound)",
@@ -137,7 +137,7 @@ describe("importNotes — what an import carries that the graph does not draw", 
       "The team's own agents: present, in a form this summary cannot read",
       "The team's own plugins: p",
       "Channel grants (admin): *",
-      "A key the canvas does not know: extras",
+      "A key the canvas does not know: extras (loomcycle 1.107 refuses an unknown key on save; an older runtime drops it)",
     ]);
   });
 
@@ -148,7 +148,7 @@ describe("importNotes — what an import carries that the graph does not draw", 
       transitions: [],
     });
     expect(notes).toEqual([
-      '"agent" and "Agent" in states[0].handler may be one key to loomcycle: what it runs may not be what the canvas shows',
+      '"agent" and "Agent" in states[0].handler are one key to loomcycle if they name a field: 1.107 refuses that on save, and an older runtime runs the last one',
     ]);
   });
 
