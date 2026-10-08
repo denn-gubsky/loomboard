@@ -21,8 +21,13 @@ export interface JsonDiagnostic {
 }
 
 export interface TeamJsonViewHandle {
-  /** Put the cursor at `offset` and scroll it into view. */
+  /** Put the cursor at `offset`, scroll it into view and focus the editor. */
   goto(offset: number): void;
+  /** Put the cursor at `offset` and scroll it into view, WITHOUT taking the
+   *  focus: the canvas selected something, and its keys must stay its own. */
+  reveal(offset: number): void;
+  /** Where the cursor is, once the editor has loaded. */
+  cursor(): number | undefined;
 }
 
 export interface TeamJsonViewProps {
@@ -32,6 +37,9 @@ export interface TeamJsonViewProps {
   diagnostics?: readonly JsonDiagnostic[];
   /** Offset of the `layout` key, folded when the editor opens (decision 3). */
   foldAt?: number;
+  /** The operator moved the cursor (a click, an arrow key) — not a cursor
+   *  this component's own `goto` / `reveal` placed, and not typing. */
+  onCursor?: (offset: number) => void;
   handle?: Ref<TeamJsonViewHandle>;
 }
 
@@ -42,13 +50,15 @@ type CM = {
   language: typeof import("@codemirror/language");
 };
 
-export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, handle }: TeamJsonViewProps) {
+export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, onCursor, handle }: TeamJsonViewProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const cm = useRef<CM | null>(null);
   const external = useRef(false);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onCursorRef = useRef(onCursor);
+  onCursorRef.current = onCursor;
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const readOnlyCompartment = useRef<import("@codemirror/state").Compartment | null>(null);
@@ -86,6 +96,9 @@ export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, ha
               ro.of(readOnlyExtensions(state, viewMod, !!r)),
               viewMod.EditorView.updateListener.of((u) => {
                 if (u.docChanged && !external.current) onChangeRef.current(u.state.doc.toString());
+                // `external` also covers goto / reveal: only the operator's own
+                // cursor moves are reported.
+                else if (u.selectionSet && !u.docChanged && !external.current) onCursorRef.current?.(u.state.selection.main.head);
               }),
               viewMod.EditorView.theme({
                 "&": { height: "100%", backgroundColor: "var(--lb-wf-bg)", color: "var(--lb-wf-fg)" },
@@ -153,8 +166,7 @@ export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, ha
       goto(offset: number) {
         const v = view.current;
         if (v) {
-          const at = Math.min(offset, v.state.doc.length);
-          v.dispatch({ selection: { anchor: at }, scrollIntoView: true });
+          place(v, offset);
           v.focus();
           return;
         }
@@ -164,9 +176,25 @@ export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, ha
           ta.setSelectionRange(offset, offset);
         }
       },
+      reveal(offset: number) {
+        if (view.current) place(view.current, offset);
+      },
+      cursor() {
+        return view.current?.state.selection.main.head;
+      },
     }),
     [],
   );
+
+  // A cursor this component places, kept apart from one the operator moves.
+  function place(v: EditorView, offset: number) {
+    external.current = true;
+    try {
+      v.dispatch({ selection: { anchor: Math.min(offset, v.state.doc.length) }, scrollIntoView: true });
+    } finally {
+      external.current = false;
+    }
+  }
 
   return (
     <div className="lb-wf-json" data-testid="json-view">
