@@ -38,6 +38,32 @@ export interface TeamDefDetail {
   definition: unknown;
 }
 
+/** One problem the runtime found in an unsaved team — TeamDef op=verify with
+ *  an overlay (loomcycle 1.105). Mirrors the SDK's TeamIssue. */
+export interface TeamCheckIssue {
+  /** A wire enum that only grows; never switched on exhaustively. */
+  kind: string;
+  /** `refused`: a save would be refused, and `detail` is that refusal.
+   *  `unrunnable`: it would be stored, but a walk could not run it.
+   *  `advisory`: stops nothing. */
+  severity: "refused" | "unrunnable" | "advisory" | (string & {});
+  detail: string;
+  /** JSON path of the value at fault, e.g. `states[2].handler.sink.channel`. */
+  path?: string;
+  /** The state the problem is in. */
+  state?: string;
+}
+
+/** The runtime's answer about an unsaved team. Nothing was written. */
+export interface TeamCheck {
+  /** A create or fork with this overlay would be accepted. */
+  valid: boolean;
+  /** Valid, and a walk could run it. */
+  runnable?: boolean;
+  checked_as?: string;
+  issues?: TeamCheckIssue[];
+}
+
 /** The identifiers a create/fork returns. */
 export interface SavedTeam {
   def_id: string;
@@ -181,6 +207,13 @@ export interface WorkflowDataLayer {
    *  than mutating in place — a definition other runs may be using is not
    *  ours to overwrite. */
   forkTeam(name: string, definition: unknown): Promise<SavedTeam>;
+  /** Check an unsaved team with the runtime, writing nothing: `overlay` is
+   *  exactly what createTeam / forkTeam would be sent. Optional — without it
+   *  the canvas offers no Check, only its own findings. */
+  verifyTeam?(
+    name: string,
+    draft: { overlay: unknown; as?: "create" | "fork"; parentDefId?: string },
+  ): Promise<TeamCheck>;
   /** Agent names for the inspector's picker. */
   listAgents?(): Promise<string[]>;
   /** Start a walk DETACHED and return its handle at once (decision C8).

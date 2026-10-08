@@ -210,6 +210,8 @@ export type {
   RunLine,
   RunPrompt,
   SavedTeam,
+  TeamCheck,
+  TeamCheckIssue,
   TeamDefDetail,
   TeamRunResult,
   TeamRunStep,
