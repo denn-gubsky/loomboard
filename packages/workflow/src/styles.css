@@ -1268,3 +1268,21 @@
 .loomboard-workflow .lb-wf-menu__items .lb-wf-btn {
   text-align: left;
 }
+
+/* The runtime's check of the draft: its verdict, then its issues. */
+.loomboard-workflow .lb-wf-check {
+  padding: 6px 10px;
+  border-top: 1px solid var(--lb-wf-border);
+  font-size: 12px;
+}
+.loomboard-workflow .lb-wf-check--ok {
+  color: var(--lb-wf-success);
+}
+.loomboard-workflow .lb-wf-check--warn,
+.loomboard-workflow .lb-wf-check--error {
+  color: var(--lb-wf-pushback);
+}
+.loomboard-workflow .lb-wf-check .lb-wf-findings {
+  margin-top: 4px;
+}
+

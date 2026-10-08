@@ -91,8 +91,9 @@ import {
   statusLabel,
 } from "./lib/session";
 import { StateNode } from "./nodes/StateNode";
-import { handlerChannels } from "./lib/model";
-import type { ChannelInfo, WorkflowCanvasProps } from "./types";
+import { contentKey, handlerChannels } from "./lib/model";
+import { checkFindings, checkSummary } from "./lib/check";
+import type { ChannelInfo, TeamCheck, WorkflowCanvasProps } from "./types";
 
 const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode, agent: AgentNode, variable: VariableNode };
 
@@ -188,7 +189,16 @@ function WorkflowCanvasInner({
     const id = requestAnimationFrame(() => void fitView());
     return () => cancelAnimationFrame(id);
   }, [view, fitView]);
-  const jsonDraft = useJsonDraft(model, setModel, findings, view !== "canvas");
+  // The runtime's check of the draft (RFC DX phase 5). It is about one
+  // draft: `key` is that draft's content, and an edit makes the answer stale,
+  // so it is no longer shown.
+  const [checked, setChecked] = useState<{ key: string; check: TeamCheck }>();
+  const check = checked && model && checked.key === contentKey(model) ? checked.check : undefined;
+  const runtimeFindings = useMemo(() => (check ? checkFindings(check) : []), [check]);
+  // Both lists are marked in the JSON view; only the canvas's own gate Save
+  // (the runtime's would be about a draft that may since have changed).
+  const marked = useMemo(() => (runtimeFindings.length ? [...findings, ...runtimeFindings] : findings), [findings, runtimeFindings]);
+  const jsonDraft = useJsonDraft(model, setModel, marked, view !== "canvas");
   const jsonHandle = useRef<TeamJsonViewHandle>(null);
   // The session and the host decide whether the team may be edited at all;
   // while the JSON does not parse, only the JSON may be (decision 4): the
@@ -737,10 +747,34 @@ function WorkflowCanvasInner({
       }
       setStatus(`Saved version ${r.saved.version}.`);
       onSaved?.(r.saved);
+      // A save the runtime accepted can still be a team no walk can run (an
+      // agent that does not resolve, say). Asked once, right after the save.
+      if (dataLayer.verifyTeam) {
+        const c = await doc.check();
+        if (c.ok) setChecked({ key: contentKey(model), check: c.check });
+      }
     } finally {
       setBusy(false);
     }
-  }, [doc, model, onSaved, editable]);
+  }, [doc, model, onSaved, editable, dataLayer]);
+
+  const runCheck = useCallback(async () => {
+    if (!model) return;
+    const key = contentKey(model);
+    setBusy(true);
+    setError(undefined);
+    setStatus(undefined);
+    try {
+      const r = await doc.check();
+      if (r.ok) setChecked({ key, check: r.check });
+      else {
+        setChecked(undefined);
+        setError(r.error);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [doc, model]);
 
   // ---- building a team by hand (RFC DX phase 4) ----
   const [dialog, setDialog] = useState<"saveAs" | "import" | null>(null);
@@ -923,6 +957,19 @@ function WorkflowCanvasInner({
               </button>
             )}
           </>
+        )}
+
+        {!readonly && teamEditable && dataLayer.verifyTeam && (
+          <button
+            className="lb-wf-btn"
+            onClick={() => void runCheck()}
+            // Not while the JSON has an error or an unapplied edit: the check
+            // would be about something other than what is on screen.
+            disabled={!model || busy || !!jsonDraft.error || jsonDraft.pending}
+            title="Ask the runtime what a save of this team would meet. Nothing is saved."
+          >
+            Check
+          </button>
         )}
 
         {model && (
@@ -1224,6 +1271,23 @@ function WorkflowCanvasInner({
 
       {dataLayer.peekChannel && outputs.length > 0 && (
         <OutputPanel channels={outputs} peekChannel={dataLayer.peekChannel} refreshKey={outputRefresh} />
+      )}
+
+      {check && (
+        <div className={`lb-wf-check lb-wf-check--${checkSummary(check).tone}`} role="status" data-testid="runtime-check">
+          <strong>Runtime check.</strong> {checkSummary(check).text}
+          {runtimeFindings.length > 0 && (
+            <ul className="lb-wf-findings">
+              {runtimeFindings.map((f, i) => (
+                <li key={i} className={`lb-wf-finding lb-wf-finding--${f.level}`}>
+                  <button type="button" className="lb-wf-finding__go" title="Show where this is" onClick={() => showFinding(f)}>
+                    {f.message}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {findings.length > 0 && (

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { aclFindings } from "./lib/channels";
+import { UNNAMED_TEAM } from "./lib/check";
 import { bindingFindings } from "./lib/bindings";
 import { forkOverlay } from "./lib/fork";
 import { startFindings } from "./lib/inputForm";
@@ -10,7 +11,7 @@ import { contentKey, fromDefinition, toDefinition, type CanvasModel, type JsonOb
 import { teamNameError } from "./lib/newTeam";
 import { validateModel, type Finding } from "./lib/validate";
 import { variableFindings, variableNodes } from "./lib/variables";
-import type { SavedTeam, WorkflowDataLayer } from "./types";
+import type { SavedTeam, TeamCheck, WorkflowDataLayer } from "./types";
 
 // The team being edited, as one document (RFC DX): what was loaded, what the
 // operator has changed, what is wrong with it, and saving it.
@@ -30,6 +31,7 @@ import type { SavedTeam, WorkflowDataLayer } from "./types";
 // phase 4). It has no name and no parent until `saveAs` creates it.
 
 export type SaveResult = { ok: true; saved: SavedTeam } | { ok: false; error: string };
+export type CheckResult = { ok: true; check: TeamCheck } | { ok: false; error: string };
 
 export interface TeamDocument {
   /** The draft as the canvas holds it; null until loaded. */
@@ -50,6 +52,9 @@ export interface TeamDocument {
   save(): Promise<SaveResult>;
   /** Create a NEW team from the draft. The document is then that team. */
   saveAs(name: string): Promise<SaveResult>;
+  /** Ask the runtime what a save of the draft would meet, saving nothing.
+   *  It is sent exactly what `save` would send. */
+  check(): Promise<CheckResult>;
 }
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -147,17 +152,15 @@ export function useTeamDocument(
 
   const unsaved = useMemo(() => !!model && contentKey(model) !== savedKey.current, [model]);
 
-  const save = useCallback(async (): Promise<SaveResult> => {
-    if (!model) return { ok: false, error: "No team loaded." };
-    const team = name.current;
-    if (!team) return { ok: false, error: "No team loaded." };
-    try {
+  // What a save of the draft sends, and the version it forks. One place, so
+  // `check` asks the runtime about exactly what `save` would send.
+  const forkPlan = useCallback(
+    async (team: string, draft: CanvasModel): Promise<{ overlay: JsonObject; parentDefId: string } | { error: string }> => {
       // Stale-parent check. Two operators editing one team both fork from the
       // same parent, and without this the second silently wins.
       const current = await dataLayer.getActiveTeamDef(team);
       if (parentDefId.current && current.def_id !== parentDefId.current) {
         return {
-          ok: false,
           error:
             `This team moved on while you were editing (active version is now ${current.def_id}). ` +
             `Reload to pick up the change — saving would discard it.`,
@@ -168,7 +171,19 @@ export function useTeamDocument(
       // save in this session is no longer the parent (lib/fork.ts).
       const d = current.definition;
       const parent = typeof d === "object" && d !== null && !Array.isArray(d) ? (d as JsonObject) : {};
-      const saved = await dataLayer.forkTeam(team, forkOverlay(parent, toDefinition(model)));
+      return { overlay: forkOverlay(parent, toDefinition(draft)), parentDefId: current.def_id };
+    },
+    [dataLayer],
+  );
+
+  const save = useCallback(async (): Promise<SaveResult> => {
+    if (!model) return { ok: false, error: "No team loaded." };
+    const team = name.current;
+    if (!team) return { ok: false, error: "No team loaded." };
+    try {
+      const plan = await forkPlan(team, model);
+      if ("error" in plan) return { ok: false, error: plan.error };
+      const saved = await dataLayer.forkTeam(team, plan.overlay);
       parentDefId.current = saved.def_id;
       savedKey.current = contentKey(model);
       // The saved graph IS the new baseline, so a subsequent save is not a
@@ -178,7 +193,7 @@ export function useTeamDocument(
     } catch (e) {
       return { ok: false, error: `Save failed: ${msg(e)}` };
     }
-  }, [dataLayer, model]);
+  }, [dataLayer, model, forkPlan]);
 
   const saveAs = useCallback(
     async (newName: string): Promise<SaveResult> => {
@@ -207,6 +222,26 @@ export function useTeamDocument(
     [dataLayer, model],
   );
 
+  const check = useCallback(async (): Promise<CheckResult> => {
+    if (!model) return { ok: false, error: "No team loaded." };
+    if (!dataLayer.verifyTeam) return { ok: false, error: "This host cannot check a team with the runtime." };
+    try {
+      const team = name.current;
+      if (!team) {
+        // Not stored yet: checked as the create its first save will be.
+        return { ok: true, check: await dataLayer.verifyTeam(UNNAMED_TEAM, { overlay: viewDefinition(model), as: "create" }) };
+      }
+      const plan = await forkPlan(team, model);
+      if ("error" in plan) return { ok: false, error: plan.error };
+      return {
+        ok: true,
+        check: await dataLayer.verifyTeam(team, { overlay: plan.overlay, as: "fork", parentDefId: plan.parentDefId }),
+      };
+    } catch (e) {
+      return { ok: false, error: `Check failed: ${msg(e)}` };
+    }
+  }, [dataLayer, model, forkPlan]);
+
   return {
     model,
     setModel,
@@ -218,5 +253,6 @@ export function useTeamDocument(
     unsaved,
     save,
     saveAs,
+    check,
   };
 }
