@@ -92,7 +92,7 @@ import {
 } from "./lib/session";
 import { StateNode } from "./nodes/StateNode";
 import { contentKey, handlerChannels } from "./lib/model";
-import { checkFindings, checkSummary } from "./lib/check";
+import { checkSummary, unlistedIssues } from "./lib/check";
 import type { ChannelInfo, TeamCheck, WorkflowCanvasProps } from "./types";
 
 const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode, agent: AgentNode, variable: VariableNode };
@@ -194,7 +194,10 @@ function WorkflowCanvasInner({
   // so it is no longer shown.
   const [checked, setChecked] = useState<{ key: string; check: TeamCheck }>();
   const check = checked && model && checked.key === contentKey(model) ? checked.check : undefined;
-  const runtimeFindings = useMemo(() => (check ? checkFindings(check) : []), [check]);
+  // What the runtime found that the canvas's own list does not already say:
+  // a broken graph is reported by both, and is shown once.
+  const runtime = useMemo(() => (check ? unlistedIssues(check, findings) : { findings: [], alsoListed: 0 }), [check, findings]);
+  const runtimeFindings = runtime.findings;
   // Both lists are marked in the JSON view; only the canvas's own gate Save
   // (the runtime's would be about a draft that may since have changed).
   const marked = useMemo(() => (runtimeFindings.length ? [...findings, ...runtimeFindings] : findings), [findings, runtimeFindings]);
@@ -1269,38 +1272,49 @@ function WorkflowCanvasInner({
         )}
       </div>
 
-      {dataLayer.peekChannel && outputs.length > 0 && (
-        <OutputPanel channels={outputs} peekChannel={dataLayer.peekChannel} refreshKey={outputRefresh} />
-      )}
+      {/* One bounded, scrolling area for everything under the graph: each
+          panel is useful, and together they must not squeeze the graph out. */}
+      <div className="lb-wf-below">
+        {dataLayer.peekChannel && outputs.length > 0 && (
+          <OutputPanel channels={outputs} peekChannel={dataLayer.peekChannel} refreshKey={outputRefresh} />
+        )}
 
-      {check && (
-        <div className={`lb-wf-check lb-wf-check--${checkSummary(check).tone}`} role="status" data-testid="runtime-check">
-          <strong>Runtime check.</strong> {checkSummary(check).text}
-          {runtimeFindings.length > 0 && (
-            <ul className="lb-wf-findings">
-              {runtimeFindings.map((f, i) => (
-                <li key={i} className={`lb-wf-finding lb-wf-finding--${f.level}`}>
-                  <button type="button" className="lb-wf-finding__go" title="Show where this is" onClick={() => showFinding(f)}>
-                    {f.message}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+        {check && (
+          <div className={`lb-wf-check lb-wf-check--${checkSummary(check).tone}`} role="status" data-testid="runtime-check">
+            <strong>Runtime check.</strong> {checkSummary(check).text}
+            {runtime.alsoListed > 0 && (
+              <span className="lb-wf-team__hint">
+                {" "}
+                {runtime.alsoListed === (check.issues ?? []).length ? "All" : runtime.alsoListed} of them{" "}
+                {runtime.alsoListed === 1 ? "is" : "are"} in the canvas's own list below.
+              </span>
+            )}
+            {runtimeFindings.length > 0 && (
+              <ul className="lb-wf-findings">
+                {runtimeFindings.map((f, i) => (
+                  <li key={i} className={`lb-wf-finding lb-wf-finding--${f.level}`}>
+                    <button type="button" className="lb-wf-finding__go" title="Show where this is" onClick={() => showFinding(f)}>
+                      {f.message}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
-      {findings.length > 0 && (
-        <ul className="lb-wf-findings">
-          {findings.map((f, i) => (
-            <li key={i} className={`lb-wf-finding lb-wf-finding--${f.level}`}>
-              <button type="button" className="lb-wf-finding__go" title="Show where this is" onClick={() => showFinding(f)}>
-                {f.message}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+        {findings.length > 0 && (
+          <ul className="lb-wf-findings">
+            {findings.map((f, i) => (
+              <li key={i} className={`lb-wf-finding lb-wf-finding--${f.level}`}>
+                <button type="button" className="lb-wf-finding__go" title="Show where this is" onClick={() => showFinding(f)}>
+                  {f.message}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

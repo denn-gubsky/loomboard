@@ -1286,3 +1286,18 @@
   margin-top: 4px;
 }
 
+/* Everything under the graph — the output, the runtime check, the findings —
+   shares one scrolling area of at most 40% of the canvas, so the graph keeps
+   the rest. Inside it the panels are not capped or scrolled one by one. */
+.loomboard-workflow .lb-wf-below {
+  flex: 0 1 auto;
+  max-height: 40%;
+  min-height: 0;
+  overflow-y: auto;
+}
+.loomboard-workflow .lb-wf-below .lb-wf-output,
+.loomboard-workflow .lb-wf-below .lb-wf-findings {
+  max-height: none;
+  overflow: visible;
+}
+

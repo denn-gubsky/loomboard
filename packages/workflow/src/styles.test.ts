@@ -34,3 +34,24 @@ describe("Run mode's active node", () => {
     }
   });
 });
+
+/** The declarations of the rule whose selector is exactly `selector`. */
+function rule(selector: string): string {
+  const m = css.match(new RegExp(`(?:^|})\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*{([^}]*)}`));
+  return m ? m[1] : "";
+}
+
+describe("The panels under the graph", () => {
+  it("share one bounded, scrolling area, so together they cannot squeeze the graph out", () => {
+    // Regression: the output (280px), the runtime check and the findings
+    // (120px) each had their own cap and stacked, leaving a laptop-height
+    // canvas a strip of graph.
+    const below = rule(".loomboard-workflow .lb-wf-below");
+    expect(below).toMatch(/max-height:\s*40%/);
+    expect(below).toMatch(/overflow-y:\s*auto/);
+    expect(below).toMatch(/min-height:\s*0/);
+    const inner = rule(".loomboard-workflow .lb-wf-below .lb-wf-output,\n.loomboard-workflow .lb-wf-below .lb-wf-findings");
+    expect(inner).toMatch(/max-height:\s*none/);
+  });
+});
+

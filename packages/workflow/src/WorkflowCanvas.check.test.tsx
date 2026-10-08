@@ -112,6 +112,30 @@ describe("WorkflowCanvas — Check with the runtime (RFC DX)", () => {
     expect(v.state.doc.lineAt(v.state.selection.main.head).text.trim()).toBe('"agent": "ghost"');
   });
 
+  it("lists a problem the canvas already shows once, and says the runtime found it too", async () => {
+    const both: TeamCheck = {
+      valid: false,
+      runnable: false,
+      issues: [
+        { kind: "graph_invalid", severity: "refused", detail: 'team definition: transition[0] has invalid `on` "failure" (want success | pushback:<reason> | conditional:<expr>)', path: "transitions[0].on" },
+        unrunnable.issues![0],
+      ],
+    };
+    const broken = { ...definition, transitions: [{ from: "write", to: "done", on: "failure" }] };
+    const { l } = layer(both, { getActiveTeamDef: async () => ({ def_id: "d1", name: "blog", version: 1, definition: broken }) });
+    render(<WorkflowCanvas dataLayer={l} teamName="blog" />);
+    await screen.findByTestId("node-write");
+    fireEvent.click(screen.getByRole("button", { name: "Check" }));
+    const panel = await screen.findByTestId("runtime-check");
+    expect(panel.textContent).toMatch(/The runtime would refuse this save: 1 problem\./);
+    expect(panel.textContent).toMatch(/1 of them is in the canvas's own list below\./);
+    // Only what the canvas could not know is listed under the verdict.
+    expect([...panel.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+      'agent "ghost" does not resolve in this tenant (it would be saved, but could not run)',
+    ]);
+    expect(screen.getAllByText(/transition\[0\] (has )?invalid `on` "failure"/)).toHaveLength(1);
+  });
+
   it("drops the answer when the team changes — it was about another draft", async () => {
     const { l } = layer(unrunnable);
     render(<WorkflowCanvas dataLayer={l} teamName="blog" />);
