@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { checkFindings, checkSummary, issueFinding, parseIssuePath } from "./check";
+import { checkFindings, checkSummary, issueFinding, parseIssuePath, unlistedIssues } from "./check";
+import type { Finding } from "./validate";
 import type { TeamCheck } from "../types";
 
 describe("parseIssuePath", () => {
@@ -71,3 +72,58 @@ describe("checkSummary", () => {
     expect(checkFindings({ valid: true })).toEqual([]);
   });
 });
+
+describe("unlistedIssues — what the runtime found that the canvas has not already listed", () => {
+  // The answer TrueNAS gave for a draft with a missing own channel, a bad
+  // transition label and an agent that does not exist (2026-10-08).
+  const check: TeamCheck = {
+    valid: false,
+    runnable: false,
+    issues: [
+      {
+        kind: "local_channel_missing",
+        severity: "refused",
+        detail: 'team definition: state "note" channel: "./missing" names a channel the team does not declare under local.channels (it declares none)',
+        path: "states[2].handler.channel",
+        state: "note",
+      },
+      { kind: "graph_invalid", severity: "refused", detail: 'team definition: transition[1] has invalid `on` "failure" (want success | pushback:<reason> | conditional:<expr>)', path: "transitions[1].on" },
+      { kind: "agent_missing", severity: "unrunnable", detail: 'agent "loomboard/no-such-agent" does not resolve in this tenant', path: "states[0].handler.agent", state: "write" },
+    ],
+  };
+  const own: Finding[] = [
+    { level: "error", nodeId: "note", message: 'state "note" channel: "./missing" names a channel the team does not declare under local.channels (it declares none)' },
+    { level: "error", edgeIndex: 1, message: 'transition[1] invalid `on` "failure" (want success | pushback:<reason> | conditional:<expr>)' },
+  ];
+
+  it("leaves only what the canvas could not know, and counts the rest", () => {
+    const r = unlistedIssues(check, own);
+    expect(r.alsoListed).toBe(2);
+    expect(r.findings.map((f) => f.message)).toEqual(['agent "loomboard/no-such-agent" does not resolve in this tenant (it would be saved, but could not run)']);
+  });
+
+  it("shows everything when the canvas has listed nothing", () => {
+    expect(unlistedIssues(check, [])).toMatchObject({ alsoListed: 0, findings: { length: 3 } });
+  });
+
+  it("still shows a second graph error on a state the canvas found only one on", () => {
+    const two: TeamCheck = {
+      valid: false,
+      issues: [
+        { kind: "graph_invalid", severity: "refused", detail: 'state "orphan" is unreachable from entry "write"', path: "states[2]", state: "orphan" },
+        { kind: "graph_invalid", severity: "refused", detail: 'non-terminal state "orphan" has no outbound transition (dead end)', path: "states[2]", state: "orphan" },
+      ],
+    };
+    const r = unlistedIssues(two, [{ level: "error", nodeId: "orphan", message: "worded differently" }]);
+    expect(r.alsoListed).toBe(1);
+    expect(r.findings).toHaveLength(1);
+  });
+
+  it("never takes a non-graph issue as listed just because the canvas has a finding on that state", () => {
+    const c: TeamCheck = { valid: true, runnable: false, issues: [{ kind: "agent_missing", severity: "unrunnable", detail: "no such agent", state: "write" }] };
+    expect(unlistedIssues(c, [{ level: "error", nodeId: "write", message: "something else is wrong here" }]).alsoListed).toBe(0);
+    const acl: TeamCheck = { valid: false, issues: [{ kind: "channel_authority", severity: "refused", detail: "you may not grant ops", state: "write" }] };
+    expect(unlistedIssues(acl, [{ level: "error", nodeId: "write", message: "something else" }]).alsoListed).toBe(0);
+  });
+});
+

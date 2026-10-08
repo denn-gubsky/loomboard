@@ -80,6 +80,48 @@ export function checkFindings(check: TeamCheck): Finding[] {
   return (check.issues ?? []).map(issueFinding);
 }
 
+/** Whether a canvas finding and a runtime one are about the same place: the
+ *  same state, the same transition, or the same top-level key. */
+function sameSpot(own: Finding, runtime: Finding): boolean {
+  if (own.nodeId !== undefined || runtime.nodeId !== undefined) return own.nodeId === runtime.nodeId;
+  const p = runtime.path ?? [];
+  if (own.edgeIndex !== undefined) return p[0] === "transitions" && p[1] === own.edgeIndex;
+  const q = own.path ?? [];
+  return p.length > 0 && q.length > 0 && p[0] === q[0] && (p[1] === q[1] || p.length === 1 || q.length === 1);
+}
+
+/** The runtime's issues the canvas has NOT already listed, and how many it
+ *  has. The canvas's findings mirror the graph rules, so a broken graph is
+ *  reported by both, in slightly different words; listing it twice makes two
+ *  problems look like four.
+ *
+ *  A runtime issue counts as already listed when a canvas finding says the
+ *  same thing word for word, or — for a graph error the save would be refused
+ *  for — sits at the same place. Each canvas finding accounts for at most one
+ *  issue, so a second problem on the same state is still shown. Anything the
+ *  mirror cannot know (an agent that does not resolve, the caller's
+ *  authority) never matches. */
+export function unlistedIssues(check: TeamCheck, own: readonly Finding[]): { findings: Finding[]; alsoListed: number } {
+  const issues = check.issues ?? [];
+  const runtime = issues.map(issueFinding);
+  const used = new Set<number>();
+  const matched = new Set<number>();
+  const take = (i: number, same: (o: Finding) => boolean) => {
+    if (matched.has(i)) return;
+    const j = own.findIndex((o, k) => !used.has(k) && same(o));
+    if (j < 0) return;
+    used.add(j);
+    matched.add(i);
+  };
+  // Exact wording first, so a place match does not use up the finding that
+  // another issue repeats word for word.
+  runtime.forEach((f, i) => take(i, (o) => o.message === f.message));
+  runtime.forEach((f, i) => {
+    if (issues[i].kind === "graph_invalid" && issues[i].severity === "refused") take(i, (o) => o.level === "error" && sameSpot(o, f));
+  });
+  return { findings: runtime.filter((_, i) => !matched.has(i)), alsoListed: matched.size };
+}
+
 export interface CheckSummary {
   tone: "ok" | "warn" | "error";
   text: string;
