@@ -1240,3 +1240,31 @@
 .loomboard-workflow .lb-wf-finding__go:focus-visible {
   text-decoration: underline;
 }
+
+/* The "Team file" menu: Save as new, Import, Copy, Download. */
+.loomboard-workflow .lb-wf-menu {
+  position: relative;
+}
+.loomboard-workflow .lb-wf-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.loomboard-workflow .lb-wf-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.loomboard-workflow .lb-wf-menu__items {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  min-width: 170px;
+  background: var(--lb-wf-surface);
+  border: 1px solid var(--lb-wf-border);
+  border-radius: 6px;
+}
+.loomboard-workflow .lb-wf-menu__items .lb-wf-btn {
+  text-align: left;
+}

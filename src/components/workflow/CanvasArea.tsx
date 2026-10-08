@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { WorkflowCanvas, type DocumentTarget, type RunChatTarget, type TeamSummary } from "@loomboard/workflow";
+import {
+  TEAM_TEMPLATES,
+  WorkflowCanvas,
+  type DocumentTarget,
+  type RunChatTarget,
+  type SavedTeam,
+  type TeamSummary,
+  type TeamTemplate,
+} from "@loomboard/workflow";
 import "@loomboard/workflow/styles.css";
 import { useConnection, useLoomcycle } from "../../state/connection";
 import { buildConnection } from "../../lib/buildConnection";
@@ -13,9 +21,10 @@ import { workflowDataLayer } from "../../lib/workflowCanvasData";
 // integrated into loomcycle's own console, so if the injected data layer is
 // awkward to bind we find out in this file rather than in the other repo.
 //
-// Deliberately thin: team selection, plus the one thing the package cannot
-// carry — a chat for a member run in Run mode. Everything about the graph —
-// editing, validation, layout, save — belongs to the package.
+// Deliberately thin: team selection (an existing team, or a new one from a
+// template), plus the one thing the package cannot carry — a chat for a member
+// run in Run mode. Everything about the graph — editing, validation, layout,
+// save — belongs to the package.
 
 export default function CanvasArea({ onOpenDocument }: { onOpenDocument?: (target: DocumentTarget) => void }) {
   const client = useLoomcycle();
@@ -35,6 +44,16 @@ export default function CanvasArea({ onOpenDocument }: { onOpenDocument?: (targe
   const [loading, setLoading] = useState(true);
   // Bumped after a save so the team list picks up the new version count.
   const [reloadKey, setReloadKey] = useState(0);
+  // A new team being built: not on the runtime until its first save. `n`
+  // makes picking the same template twice a fresh canvas.
+  const [draft, setDraft] = useState<{ template: TeamTemplate; n: number }>();
+  // A save under a new name (a new team's first, or "Save as new team") opens
+  // that team.
+  const onSaved = useCallback((saved: SavedTeam) => {
+    setDraft(undefined);
+    setSelected(saved.name);
+    setReloadKey((k) => k + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,11 +81,15 @@ export default function CanvasArea({ onOpenDocument }: { onOpenDocument?: (targe
         <label>
           Team{" "}
           <select
-            value={selected ?? ""}
-            onChange={(e) => setSelected(e.target.value || undefined)}
+            value={draft ? "" : (selected ?? "")}
+            onChange={(e) => {
+              setDraft(undefined);
+              setSelected(e.target.value || undefined);
+            }}
             disabled={loading || !teams.length}
           >
             {!teams.length && <option value="">{loading ? "loading…" : "no teams"}</option>}
+            {draft && teams.length > 0 && <option value="">(new team, not saved)</option>}
             {teams.map((t) => (
               <option key={t.name} value={t.name}>
                 {t.name}
@@ -75,10 +98,34 @@ export default function CanvasArea({ onOpenDocument }: { onOpenDocument?: (targe
             ))}
           </select>
         </label>
+        <select
+          aria-label="New team"
+          value=""
+          onChange={(e) => {
+            const template = TEAM_TEMPLATES.find((t) => t.id === e.target.value);
+            if (template) setDraft((d) => ({ template, n: (d?.n ?? 0) + 1 }));
+          }}
+        >
+          <option value="">New team…</option>
+          {TEAM_TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label} — {t.hint}
+            </option>
+          ))}
+        </select>
         {error && <span className="canvas-area__error">{error}</span>}
       </header>
 
-      {selected ? (
+      {draft ? (
+        <WorkflowCanvas
+          key={`new:${draft.template.id}:${draft.n}`}
+          dataLayer={dataLayer}
+          template={draft.template.definition}
+          onSaved={onSaved}
+          renderRunChat={connection ? renderRunChat : undefined}
+          onOpenDocument={onOpenDocument}
+        />
+      ) : selected ? (
         <WorkflowCanvas
           // Remounting on the team name is intentional: the canvas holds the
           // loaded graph and its stale-parent baseline, and switching teams
@@ -86,15 +133,14 @@ export default function CanvasArea({ onOpenDocument }: { onOpenDocument?: (targe
           key={selected}
           dataLayer={dataLayer}
           teamName={selected}
-          onSaved={() => setReloadKey((k) => k + 1)}
+          onSaved={onSaved}
           renderRunChat={connection ? renderRunChat : undefined}
           onOpenDocument={onOpenDocument}
         />
       ) : (
         !loading && (
           <p className="canvas-area__empty">
-            No teams on this runtime yet. Create one with the <code>TeamDef</code> tool, then
-            reload.
+            No teams on this runtime yet. Start one with <strong>New team…</strong> above.
           </p>
         )
       )}
