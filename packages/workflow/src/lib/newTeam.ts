@@ -69,83 +69,196 @@ export function importDefinition(text: string): ImportResult {
   return { ok: true, def };
 }
 
-const LOCAL_LABELS: readonly (readonly [string, string])[] = [
-  ["agents", "own agents"],
-  ["skills", "own skills"],
-  ["channels", "own channels"],
-  ["schedules", "own schedules"],
-  ["webhooks", "own webhooks"],
-];
+// How the RUNTIME reads a key. loomcycle parses a definition with Go's
+// encoding/json, which matches an object key to a field by Unicode simple
+// case folding: "Hooks", "HOOKS" and "hookſ" are all `hooks` to it. The
+// summary below must read keys the same way, or a definition could carry a
+// section past it under another spelling.
+const fold = (k: string) => k.toUpperCase().toLowerCase();
 
-function hookCount(v: unknown): { total: number; inline: number } {
-  let total = 0;
-  let inline = 0;
+/** Every value of `o` whose key the runtime reads as `name`. */
+function valuesOf(o: JsonObject, name: string): unknown[] {
+  return Object.keys(o)
+    .filter((k) => fold(k) === name)
+    .map((k) => o[k]);
+}
+
+/** Text from the import, shown back: bounded, so a name cannot bury the rest. */
+const show = (s: unknown) => {
+  const t = String(s);
+  return t.length > 64 ? `${t.slice(0, 64)}…` : t;
+};
+
+/** Present with content: not absent, null, `{}` or `[]`. */
+function hasContent(v: unknown): boolean {
+  if (v === undefined || v === null) return false;
+  if (Array.isArray(v)) return v.length > 0;
+  if (isObj(v)) return Object.keys(v).length > 0;
+  return true;
+}
+
+/** Objects holding two keys the runtime may read as ONE — `agent` beside
+ *  `Agent`. The canvas draws one of them; the runtime may run the other. */
+function sameKeyTwice(x: unknown, path: string, out: string[]) {
+  if (Array.isArray(x)) x.forEach((e, i) => sameKeyTwice(e, `${path}[${i}]`, out));
+  else if (isObj(x)) {
+    const seen = new Map<string, string>();
+    for (const k of Object.keys(x)) {
+      const f = fold(k);
+      const first = seen.get(f);
+      if (first !== undefined) {
+        out.push(
+          `${JSON.stringify(show(first))} and ${JSON.stringify(show(k))} ${path ? `in ${show(path)} ` : ""}` +
+            "may be one key to loomcycle: what it runs may not be what the canvas shows",
+        );
+      } else seen.set(f, k);
+      sameKeyTwice(x[k], path ? `${path}.${k}` : k, out);
+    }
+  }
+}
+
+interface HookTally {
+  /** A hooks section with content was found. */
+  present: boolean;
+  total: number;
+  inline: number;
+}
+
+/** Count a hooks value loosely — every list element at any depth — so an
+ *  unexpected shape is still counted rather than read as "no hooks". */
+function tallyHooks(v: unknown, into: HookTally) {
+  if (!hasContent(v)) return;
+  into.present = true;
   const visit = (x: unknown) => {
     if (Array.isArray(x)) {
       for (const e of x) {
-        total++;
-        if (isObj(e)) inline++;
+        if (Array.isArray(e)) visit(e);
+        else {
+          into.total++;
+          if (isObj(e)) into.inline++;
+        }
       }
     } else if (isObj(x)) for (const k of Object.keys(x)) visit(x[k]);
   };
   visit(v);
-  return { total, inline };
 }
 
-function hookNote(where: string, v: unknown): string | undefined {
-  const { total, inline } = hookCount(isObj(v) ? v : {});
-  if (!total) return undefined;
-  // Counts only: an inline webhook's URL and headers can carry a token.
-  return `${where}: ${total} ${total === 1 ? "hook" : "hooks"}` + (inline ? `, ${inline} calling a URL written in the definition` : "");
+/** Every hooks / tool_hooks section anywhere inside `x`, under any spelling. */
+function tallyHooksWithin(x: unknown, into: HookTally) {
+  if (Array.isArray(x)) for (const e of x) tallyHooksWithin(e, into);
+  else if (isObj(x)) {
+    for (const k of Object.keys(x)) {
+      const f = fold(k);
+      if (f === "hooks" || f === "tool_hooks") tallyHooks(x[k], into);
+      else tallyHooksWithin(x[k], into);
+    }
+  }
 }
+
+function hookText(t: HookTally): string {
+  // Counts only: an inline webhook's URL and headers can carry a token.
+  if (!t.total) return "present, in a form this summary cannot count";
+  return `${t.total} ${t.total === 1 ? "hook" : "hooks"}` + (t.inline ? `, ${t.inline} calling a URL written in the definition` : "");
+}
+
+const LOCAL_LABELS: Record<string, string> = {
+  agents: "own agents",
+  skills: "own skills",
+  channels: "own channels",
+  schedules: "own schedules",
+  webhooks: "own webhooks",
+};
+
+/** What the graph draws or the canvas shows as it is: nothing to list. */
+const DRAWN = new Set(["entry", "states", "transitions", "vars", "layout", "colors", "max_iterations"]);
+const LISTED = new Set(["hooks", "local", "channels"]);
 
 /** What an imported definition carries that the GRAPH does not draw, and that
  *  a save would store under the operator's own authority: hooks, the team's
  *  own definitions, channel grants. An import is someone else's text; the
  *  operator is shown this before it replaces the draft. Names and counts
- *  only — never a hook's URL or headers. */
+ *  only — never a hook's URL or headers.
+ *
+ *  It errs towards listing: keys are read as the runtime reads them (`fold`),
+ *  and a top-level key the canvas does not know is listed rather than assumed
+ *  to mean nothing. */
 export function importNotes(def: JsonObject): string[] {
-  const out: string[] = [];
-  const walk = hookNote("Walk hooks", def.hooks);
-  if (walk) out.push(walk);
+  const spelling: string[] = [];
+  const unknown: string[] = [];
+  for (const k of Object.keys(def)) {
+    const f = fold(k);
+    if (!DRAWN.has(f) && !LISTED.has(f)) unknown.push(`A key the canvas does not know: ${show(k)}`);
+    else if (k !== f) spelling.push(`${JSON.stringify(show(k))} is read by loomcycle as ${f}`);
+  }
+
+  const twice: string[] = [];
+  sameKeyTwice(def, "", twice);
+  // A few say it; a definition built to flood the list should not.
+  const out: string[] = [...spelling, ...twice.slice(0, 5)];
+
+  const walk: HookTally = { present: false, total: 0, inline: 0 };
+  for (const v of valuesOf(def, "hooks")) tallyHooks(v, walk);
+  if (walk.present) out.push(`Walk hooks: ${hookText(walk)}`);
+
   const hooked: string[] = [];
-  let stateHooks = { total: 0, inline: 0 };
-  for (const st of Array.isArray(def.states) ? def.states : []) {
-    if (!isObj(st) || !isObj(st.handler)) continue;
-    // Each is a map of event → entries.
-    const a = hookCount(isObj(st.handler.hooks) ? st.handler.hooks : {});
-    const b = hookCount(isObj(st.handler.tool_hooks) ? st.handler.tool_hooks : {});
-    if (!a.total && !b.total) continue;
-    hooked.push(String(st.state));
-    stateHooks = { total: stateHooks.total + a.total + b.total, inline: stateHooks.inline + a.inline + b.inline };
+  const inStates: HookTally = { present: false, total: 0, inline: 0 };
+  for (const states of valuesOf(def, "states")) {
+    if (!Array.isArray(states)) continue;
+    states.forEach((st, i) => {
+      const t: HookTally = { present: false, total: 0, inline: 0 };
+      tallyHooksWithin(st, t);
+      if (!t.present) return;
+      const name = isObj(st) ? valuesOf(st, "state").find((n) => typeof n === "string" && n) : undefined;
+      hooked.push(name !== undefined ? show(name) : `#${i + 1}`);
+      inStates.present = true;
+      inStates.total += t.total;
+      inStates.inline += t.inline;
+    });
   }
-  if (hooked.length) {
-    out.push(
-      `Hooks on ${hooked.length === 1 ? "state" : "states"} ${hooked.join(", ")}: ${stateHooks.total}` +
-        (stateHooks.inline ? `, ${stateHooks.inline} calling a URL written in the definition` : ""),
-    );
+  if (inStates.present) out.push(`Hooks on ${hooked.length === 1 ? "state" : "states"} ${hooked.join(", ")}: ${hookText(inStates)}`);
+
+  for (const local of valuesOf(def, "local")) {
+    if (!isObj(local)) {
+      if (hasContent(local)) out.push("The team's own definitions: present, in a form this summary cannot read");
+      continue;
+    }
+    for (const k of Object.keys(local)) {
+      const entries = local[k];
+      if (!hasContent(entries)) continue;
+      const kind = fold(k);
+      const label = LOCAL_LABELS[kind] ?? `own ${show(k)}`;
+      if (!isObj(entries)) {
+        out.push(`The team's ${label}: present, in a form this summary cannot read`);
+        continue;
+      }
+      const names = Object.keys(entries);
+      const open =
+        kind === "webhooks"
+          ? names.filter((n) => {
+              const e = entries[n];
+              if (!isObj(e)) return false;
+              return valuesOf(e, "auth").some((a) => isObj(a) && valuesOf(a, "kind").some((x) => String(x).toLowerCase() === "none"));
+            })
+          : [];
+      out.push(`The team's ${label}: ${names.map(show).join(", ")}` + (open.length ? ` (no authentication: ${open.map(show).join(", ")})` : ""));
+    }
   }
-  const local = isObj(def.local) ? def.local : {};
-  for (const [kind, label] of LOCAL_LABELS) {
-    const entries = local[kind];
-    if (!isObj(entries)) continue;
-    const names = Object.keys(entries);
-    if (!names.length) continue;
-    const open =
-      kind === "webhooks"
-        ? names.filter((n) => {
-            const e = entries[n];
-            return isObj(e) && isObj(e.auth) && e.auth.kind === "none";
-          })
-        : [];
-    out.push(`The team's ${label}: ${names.join(", ")}` + (open.length ? ` (no authentication: ${open.join(", ")})` : ""));
+
+  for (const acl of valuesOf(def, "channels")) {
+    if (!isObj(acl)) {
+      if (hasContent(acl)) out.push("Channel grants: present, in a form this summary cannot read");
+      continue;
+    }
+    for (const k of Object.keys(acl)) {
+      const list = acl[k];
+      if (!hasContent(list)) continue;
+      const side = fold(k);
+      const what = side === "publish" ? "Channels it may publish to" : side === "subscribe" ? "Channels it may read" : `Channel grants (${show(k)})`;
+      out.push(`${what}: ${Array.isArray(list) ? list.map(show).join(", ") : "present, in a form this summary cannot read"}`);
+    }
   }
-  const acl = isObj(def.channels) ? def.channels : {};
-  for (const side of ["publish", "subscribe"] as const) {
-    const list = acl[side];
-    if (Array.isArray(list) && list.length) out.push(`Channels it may ${side === "publish" ? "publish to" : "read"}: ${list.map(String).join(", ")}`);
-  }
-  return out;
+
+  return [...out, ...unknown];
 }
 
 /** The file a team downloads as. */

@@ -83,7 +83,7 @@ describe("importNotes — what an import carries that the graph does not draw", 
     });
     expect(notes).toEqual([
       "Walk hooks: 2 hooks, 1 calling a URL written in the definition",
-      "Hooks on state s: 2, 1 calling a URL written in the definition",
+      "Hooks on state s: 2 hooks, 1 calling a URL written in the definition",
     ]);
     expect(notes.join(" ")).not.toMatch(/evil|SECRET|h\.example/);
   });
@@ -101,9 +101,59 @@ describe("importNotes — what an import carries that the graph does not draw", 
       }),
     ).toEqual([
       "The team's own agents: reviewer",
-      "The team's own schedules: nightly",
       "The team's own webhooks: inbound, signed (no authentication: inbound)",
+      "The team's own schedules: nightly",
     ]);
+  });
+
+  it("reads keys as the runtime does — Go matches them case-insensitively — so another spelling hides nothing", () => {
+    // Regression: `"Hooks"` and `"LOCAL"` were read as nothing, and the import went through unreviewed.
+    const notes = importNotes({
+      entry: "s",
+      States: [{ State: "s", Handler: { kind: "agent", agent: "a", Tool_Hooks: { pre: [{ name: "y", url: "https://h.example" }] } } }],
+      transitions: [],
+      Hooks: { run_end: ["audit"] },
+      LOCAL: { Webhooks: { inbound: { Auth: { Kind: "none" }, channel: "./c" } } },
+      Channels: { Publish: ["alerts"] },
+      "hook\u017f": { run_end: [{ name: "z", url: "https://k.example" }] },
+    });
+    expect(notes).toEqual([
+      '"States" is read by loomcycle as states',
+      '"Hooks" is read by loomcycle as hooks',
+      '"LOCAL" is read by loomcycle as local',
+      '"Channels" is read by loomcycle as channels',
+      '"hook\u017f" is read by loomcycle as hooks',
+      '"Hooks" and "hook\u017f" may be one key to loomcycle: what it runs may not be what the canvas shows',
+      "Walk hooks: 2 hooks, 1 calling a URL written in the definition",
+      "Hooks on state s: 1 hook, 1 calling a URL written in the definition",
+      "The team's own webhooks: inbound (no authentication: inbound)",
+      "Channels it may publish to: alerts",
+    ]);
+  });
+
+  it("lists a section it cannot read, and a top-level key the canvas does not know, rather than passing them", () => {
+    expect(importNotes({ ...graph, hooks: "audit", local: { agents: ["x"], plugins: { p: {} } }, channels: { admin: ["*"] }, extras: 1 })).toEqual([
+      "Walk hooks: present, in a form this summary cannot count",
+      "The team's own agents: present, in a form this summary cannot read",
+      "The team's own plugins: p",
+      "Channel grants (admin): *",
+      "A key the canvas does not know: extras",
+    ]);
+  });
+
+  it("lists two spellings of one key — the canvas draws one, the runtime may run the other", () => {
+    const notes = importNotes({
+      entry: "s",
+      states: [{ state: "s", handler: { kind: "agent", agent: "harmless", Agent: "privileged" } }],
+      transitions: [],
+    });
+    expect(notes).toEqual([
+      '"agent" and "Agent" in states[0].handler may be one key to loomcycle: what it runs may not be what the canvas shows',
+    ]);
+  });
+
+  it("has nothing to say about sections that are present and empty", () => {
+    expect(importNotes({ ...graph, hooks: {}, local: { agents: {} }, channels: { publish: [] } })).toEqual([]);
   });
 
   it("lists the channels the team is granted", () => {
