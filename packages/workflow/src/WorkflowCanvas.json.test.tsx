@@ -149,4 +149,55 @@ describe("WorkflowCanvas — the JSON view (RFC DX)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     await waitFor(() => expect(v.state.readOnly).toBe(true));
   });
+
+  // ---- selection sync (RFC DX phase 6) ----
+
+  /** The state the Inspector is showing, or undefined when nothing is selected. */
+  const inspected = () => (screen.queryByText("Node id")?.parentElement?.querySelector("input") as HTMLInputElement | null)?.value;
+  /** Move the cursor as an operator would: a selection the editor did not place itself. */
+  const cursorTo = (v: EditorView, needle: string) => {
+    const at = v.state.doc.toString().indexOf(needle);
+    act(() => v.dispatch({ selection: { anchor: at }, userEvent: "select.pointer" }));
+    return at;
+  };
+
+  it("brings a state selected on the canvas into view in the JSON, without taking the focus", async () => {
+    const { v } = await open();
+    fireEvent.click(screen.getByTestId("node-done"));
+    await waitFor(() => expect(inspected()).toBe("done"));
+    const text = v.state.doc.toString();
+    await waitFor(() => expect(v.state.selection.main.head).toBe(locate(text, ["states", 1])!.offset));
+    expect(v.hasFocus).toBe(false);
+    fireEvent.click(screen.getByTestId("node-write"));
+    await waitFor(() => expect(v.state.selection.main.head).toBe(locate(text, ["states", 0])!.offset));
+  });
+
+  it("selects on the canvas the state the JSON cursor is in, and leaves the cursor where it was put", async () => {
+    const { v } = await open();
+    const at = cursorTo(v, '"kind": "terminal"');
+    await waitFor(() => expect(inspected()).toBe("done"));
+    // Regression guard: the selection the cursor caused must not drag the
+    // cursor back to the state's first line.
+    expect(v.state.selection.main.head).toBe(at);
+    const at2 = cursorTo(v, '"agent": "writer"');
+    await waitFor(() => expect(inspected()).toBe("write"));
+    expect(v.state.selection.main.head).toBe(at2);
+  });
+
+  it("keeps the selection when the cursor is outside every state", async () => {
+    const { v } = await open();
+    cursorTo(v, '"agent": "writer"');
+    await waitFor(() => expect(inspected()).toBe("write"));
+    cursorTo(v, '"transitions"');
+    cursorTo(v, '"entry"');
+    expect(inspected()).toBe("write");
+  });
+
+  it("does not follow the cursor in the JSON-only view, where there is no canvas to select on", async () => {
+    const { v } = await open({}, "JSON");
+    cursorTo(v, '"kind": "terminal"');
+    fireEvent.click(screen.getByRole("button", { name: "Split" }));
+    await screen.findByTestId("node-write");
+    expect(inspected()).toBeUndefined();
+  });
 });

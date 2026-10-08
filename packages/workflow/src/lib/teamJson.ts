@@ -216,3 +216,28 @@ export function locateIn(positions: ReadonlyMap<string, TextPosition>, path: Jso
   }
   return undefined;
 }
+
+/** The index of the `states` entry the text offset is in, or undefined when
+ *  it is outside every state (RFC DX phase 6: the cursor's state).
+ *
+ *  `positions` holds where each value STARTS, not where it ends, so a state
+ *  runs to the start of the next one, and the last to the next top-level key
+ *  after `states` — the few characters between its closing brace and the
+ *  list's `]` count as the last state's. */
+export function stateIndexAt(positions: ReadonlyMap<string, TextPosition>, offset: number): number | undefined {
+  const list = positions.get("states")?.offset;
+  if (list === undefined) return undefined;
+  let end = Infinity;
+  for (const [path, at] of positions) {
+    // A top-level member: its path is one key, plain or quoted (pathToString).
+    if (/^(?:[A-Za-z_$][A-Za-z0-9_$]*|\["(?:[^"\\]|\\.)*"\])$/.test(path) && at.offset > list && at.offset < end) end = at.offset;
+  }
+  if (offset >= end) return undefined;
+  let found: number | undefined;
+  for (let i = 0; ; i++) {
+    const at = positions.get(pathToString(["states", i]));
+    if (!at || at.offset > offset) break;
+    found = i;
+  }
+  return found;
+}

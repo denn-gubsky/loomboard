@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { fromJsonDraft, viewDefinition } from "./lib/jsonDraft";
 import type { CanvasModel } from "./lib/model";
-import { formatDefinition, locateIn, parseDefinition, type ParseResult } from "./lib/teamJson";
+import { formatDefinition, locateIn, parseDefinition, stateIndexAt, type ParseResult } from "./lib/teamJson";
 import { findingPath, type Finding } from "./lib/validate";
 import type { JsonDiagnostic } from "./TeamJsonView";
 
@@ -34,6 +34,10 @@ export interface JsonDraft {
   offsetOf: (f: Finding) => number | undefined;
   /** Offset of the `layout` key, to fold it. */
   layoutOffset?: number;
+  /** The id of the state the text offset is in (RFC DX phase 6). */
+  stateAt: (offset: number) => string | undefined;
+  /** Where a state starts in the text. */
+  offsetOfState: (id: string) => number | undefined;
 }
 
 export function useJsonDraft(
@@ -112,5 +116,31 @@ export function useJsonDraft(
 
   const layoutOffset = parsed?.ok ? parsed.positions.get("layout")?.offset : undefined;
 
-  return { text, onTextChange, error, pending, diagnostics, offsetOf, layoutOffset };
+  // Both read the TEXT's own states, not the model's: while an edit is still
+  // settling, the text is ahead of the canvas.
+  const textStates = useMemo(() => {
+    const states = parsed?.ok ? parsed.def.states : undefined;
+    return Array.isArray(states)
+      ? states.map((st) => (typeof st === "object" && st !== null && !Array.isArray(st) && typeof st.state === "string" ? st.state : undefined))
+      : [];
+  }, [parsed]);
+
+  const stateAt = useCallback(
+    (offset: number) => {
+      if (!parsed?.ok) return undefined;
+      const i = stateIndexAt(parsed.positions, offset);
+      return i === undefined ? undefined : textStates[i];
+    },
+    [parsed, textStates],
+  );
+
+  const offsetOfState = useCallback(
+    (id: string) => {
+      const i = textStates.indexOf(id);
+      return i < 0 || !parsed?.ok ? undefined : parsed.positions.get(`states[${i}]`)?.offset;
+    },
+    [parsed, textStates],
+  );
+
+  return { text, onTextChange, error, pending, diagnostics, offsetOf, layoutOffset, stateAt, offsetOfState };
 }

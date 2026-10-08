@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { fromDefinition, toDefinition, type JsonObject } from "./model";
-import { formatDefinition, locate, parseDefinition, pathToString } from "./teamJson";
+import { formatDefinition, locate, parseDefinition, pathToString, stateIndexAt } from "./teamJson";
 import { findingPath, validateModel } from "./validate";
 
 const cases: { name: string; definition: JsonObject }[] = JSON.parse(
@@ -104,3 +104,49 @@ describe("pathToString / locate", () => {
     expect(locate(text, findingPath(model, f))?.line).toBe(lineOf('"agent": "./writer"'));
   });
 });
+
+describe("stateIndexAt — which state the cursor is in", () => {
+  const text = [
+    "{",
+    '  "entry": "a",',
+    '  "states": [',
+    "    {",
+    '      "state": "a",',
+    '      "handler": { "kind": "agent", "agent": "x" }',
+    "    },",
+    "    {",
+    '      "state": "b",',
+    '      "handler": { "kind": "terminal" }',
+    "    }",
+    "  ],",
+    '  "transitions": [{ "from": "a", "to": "b", "on": "success" }]',
+    "}",
+  ].join("\n");
+  const parsed = parseDefinition(text);
+  if (!parsed.ok) throw new Error("fixture does not parse");
+  const at = (needle: string) => stateIndexAt(parsed.positions, text.indexOf(needle));
+
+  it("finds the state a position inside it belongs to", () => {
+    expect(at('"state": "a"')).toBe(0);
+    expect(at('"agent": "x"')).toBe(0);
+    expect(at('"state": "b"')).toBe(1);
+    expect(at('"kind": "terminal"')).toBe(1);
+  });
+
+  it("is in no state before the list, or after it", () => {
+    expect(at('"entry"')).toBeUndefined();
+    expect(at('"states"')).toBeUndefined();
+    expect(at('"transitions"')).toBeUndefined();
+    expect(at('"from": "a"')).toBeUndefined();
+    expect(stateIndexAt(parsed.positions, text.length)).toBeUndefined();
+  });
+
+  it("is in no state when the definition has none, or states is the last key", () => {
+    const none = parseDefinition('{ "entry": "a", "transitions": [] }');
+    expect(none.ok && stateIndexAt(none.positions, 5)).toBeUndefined();
+    const last = '{ "entry": "a", "states": [ { "state": "a" } ] }';
+    const p = parseDefinition(last);
+    expect(p.ok && stateIndexAt(p.positions, last.indexOf('"state": "a"'))).toBe(0);
+  });
+});
+
