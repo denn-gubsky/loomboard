@@ -11,19 +11,39 @@ import { localRef } from "./lib/teamLocal";
 // a run in the walk settles, which is when new output can appear — and on
 // demand. Message content is agent output: rendered as plain text.
 //
-// One of the team's OWN channels (`./name`, RFC DV) is listed and never
-// peeked: the runtime lets only the team's walks and its own agents read it —
-// it is in no channel listing and a peek from outside is refused — so there
-// is nothing this panel can fetch, and it says that instead of an error.
+// One of the team's OWN channels (`./name`, RFC DV) cannot be peeked like
+// the others: the runtime keeps it out of the channel listing and refuses a
+// peek by its name. It is read through the team instead (`peekTeamChannel`,
+// loomcycle 1.108), once the SAVED team declares it. Without that — an older
+// host, a team not saved yet, a channel only the draft has — the row says why
+// there is nothing to show, as a note rather than an error.
 
 export interface OutputPanelProps {
   channels: ChannelNodeView[];
   peekChannel: (channel: string, opts: { scope: string; max?: number }) => Promise<ChannelMessage[]>;
+  /** Reads one of the team's own channels by its local name. Absent when the
+   *  host cannot, or the team is not stored yet. */
+  peekTeamChannel?: (name: string, opts: { max?: number }) => Promise<ChannelMessage[]>;
+  /** True once the saved team's own channels were listed: only then does a
+   *  channel's absence from the listing mean the saved team lacks it. */
+  teamChannelsListed?: boolean;
   refreshKey?: string;
   max?: number;
 }
 
-export function OutputPanel({ channels, peekChannel, refreshKey, max = 5 }: OutputPanelProps) {
+/** Why one of the team's own channels has nothing to show, or undefined when
+ *  it can be read. */
+function ownChannelNote(c: ChannelNodeView, canPeek: boolean, listed: boolean): string | undefined {
+  if (localRef(c.channel) === undefined) return undefined;
+  if (!canPeek) return "The team's own channel. Only this team's walks and its own agents can read it, so its messages cannot be shown here.";
+  // The runtime lists what the SAVED team declares; a channel only the draft
+  // has is not there yet. When the listing itself is missing, nothing is
+  // known about that, and the peek's own answer is shown instead.
+  if (listed && !c.info) return "The team's own channel. The saved team does not declare it yet: save the team, and what it publishes here will show.";
+  return undefined;
+}
+
+export function OutputPanel({ channels, peekChannel, peekTeamChannel, teamChannelsListed, refreshKey, max = 5 }: OutputPanelProps) {
   const [byChannel, setByChannel] = useState<Record<string, ChannelMessage[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -36,7 +56,16 @@ export function OutputPanel({ channels, peekChannel, refreshKey, max = 5 }: Outp
     const nextErr: Record<string, string> = {};
     await Promise.all(
       channels.map(async (c) => {
-        if (localRef(c.channel) !== undefined) return;
+        const local = localRef(c.channel);
+        if (local !== undefined) {
+          if (!peekTeamChannel || ownChannelNote(c, true, !!teamChannelsListed)) return;
+          try {
+            nextMsgs[c.channel] = latestMessages(await peekTeamChannel(local, { max: 50 }), max);
+          } catch (e) {
+            nextErr[c.channel] = e instanceof Error ? e.message : String(e);
+          }
+          return;
+        }
         // Peeking needs the channel's declared scope; one the runtime has not
         // listed cannot be addressed, and saying so beats guessing a scope.
         const scope = c.info?.scope;
@@ -54,7 +83,7 @@ export function OutputPanel({ channels, peekChannel, refreshKey, max = 5 }: Outp
     setByChannel(nextMsgs);
     setErrors(nextErr);
     setBusy(false);
-  }, [channels, peekChannel, max]);
+  }, [channels, peekChannel, peekTeamChannel, teamChannelsListed, max]);
 
   useEffect(() => {
     void refresh();
@@ -80,12 +109,10 @@ export function OutputPanel({ channels, peekChannel, refreshKey, max = 5 }: Outp
             <div className="lb-wf-output__name">
               <code>{c.channel}</code>
               {c.info?.scope ? <span className="lb-wf-team__hint"> · {c.info.scope}</span> : null}
+              {localRef(c.channel) !== undefined && peekTeamChannel ? <span className="lb-wf-team__hint"> · the team's own</span> : null}
             </div>
-            {localRef(c.channel) !== undefined ? (
-              <p className="lb-wf-team__hint">
-                The team's own channel. Only this team's walks and its own agents can read it, so its messages cannot be
-                shown here — and no state of the team reads it.
-              </p>
+            {ownChannelNote(c, !!peekTeamChannel, !!teamChannelsListed) ? (
+              <p className="lb-wf-team__hint">{ownChannelNote(c, !!peekTeamChannel, !!teamChannelsListed)}</p>
             ) : errors[c.channel] ? (
               <div className="lb-wf-finding lb-wf-finding--error">{errors[c.channel]}</div>
             ) : msgs.length === 0 ? (
