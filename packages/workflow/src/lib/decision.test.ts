@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ANY_MODEL, choiceOptions, nextDecisionEdge, questionFaults, routeAnswers, routeEdge } from "./decision";
+import {
+  ANY_MODEL,
+  choiceOptions,
+  decisionTaken,
+  nextDecisionEdge,
+  questionFaults,
+  routeAnswers,
+  routeEdge,
+} from "./decision";
 
 const choice = { type: "choice", instructions: "Which team?", criteria: { billing: "invoices", support: null } };
 const noul = { type: "noul", instructions: "Is it urgent?" };
@@ -84,6 +92,28 @@ describe("nextDecisionEdge — the label a new transition out of a decision take
   it("is success, once, for a decision that routes on nothing", () => {
     expect(nextDecisionEdge({ questions: { u: noul } }, new Set())).toBe("success");
     expect(nextDecisionEdge({ questions: { u: noul } }, new Set(["success"]))).toBeUndefined();
+  });
+});
+
+describe("decisionTaken — which way a walk went from a decision, told from where it has been", () => {
+  const edges = [
+    { on: "conditional:billing", to: "billing-desk" },
+    { on: "conditional:support", to: "support-desk" },
+    { on: "success", to: "catch-all" },
+  ];
+
+  it("names the answer when exactly one of its transitions leads somewhere the walk reached", () => {
+    expect(decisionTaken(edges, new Set(["billing-desk"]))).toEqual({ on: "conditional:billing", to: "billing-desk", answer: "billing" });
+  });
+
+  it("names no answer for the success fallback: it took whichever answers have no edge of their own", () => {
+    expect(decisionTaken(edges, new Set(["catch-all"]))).toEqual({ on: "success", to: "catch-all" });
+  });
+
+  it("says nothing when the walk reached none of them, or more than one", () => {
+    expect(decisionTaken(edges, new Set(["elsewhere"]))).toBeUndefined();
+    expect(decisionTaken(edges, new Set(["billing-desk", "support-desk"]))).toBeUndefined();
+    expect(decisionTaken([], new Set(["x"]))).toBeUndefined();
   });
 });
 

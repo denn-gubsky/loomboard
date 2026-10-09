@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { rowPhase, visitNumbers, waitingNote, type WalkRunRow } from "../lib/runs";
 import type { RunDetail, RunPrompt } from "../types";
 
@@ -16,9 +16,12 @@ export interface RunsPanelProps {
   rows: WalkRunRow[];
   readRun?: (runId: string) => Promise<RunDetail>;
   readRunPrompt?: (runId: string) => Promise<RunPrompt>;
+  /** In place of the runs, for a node that starts none by design (a decision
+   *  state): what can be said about it in this walk. */
+  noRuns?: ReactNode;
 }
 
-export function RunsPanel({ rows, readRun, readRunPrompt }: RunsPanelProps) {
+export function RunsPanel({ rows, readRun, readRunPrompt, noRuns }: RunsPanelProps) {
   const [open, setOpen] = useState<string | null>(null);
   const visits = visitNumbers(rows);
   const revisited = new Set(visits.values()).size > 1;
@@ -26,7 +29,7 @@ export function RunsPanel({ rows, readRun, readRunPrompt }: RunsPanelProps) {
     return (
       <section className="lb-wf-runs">
         <h3 className="lb-wf-team__title">Runs</h3>
-        <p className="lb-wf-team__hint">This node has started no run in this walk yet.</p>
+        {noRuns ?? <p className="lb-wf-team__hint">This node has started no run in this walk yet.</p>}
       </section>
     );
   }
