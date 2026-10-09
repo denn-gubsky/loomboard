@@ -17,7 +17,8 @@
 // Drift between this file and validate.go is the likeliest silent bug in the
 // package, which is why validate.test.ts drives BOTH from one fixture set.
 
-import type { CanvasModel, CanvasNode, JsonObject } from "./model";
+import type { CanvasModel, CanvasNode, Json, JsonObject } from "./model";
+import { questionFaults, routeAnswers, routeEdge } from "./decision";
 import type { JsonPath } from "./teamJson";
 import { handlerOf } from "./model";
 import { parseJsonPath } from "./jsonpath";
@@ -58,6 +59,103 @@ export function findingPath(model: CanvasModel, f: Finding): JsonPath {
   }
   if (f.edgeIndex !== undefined) return ["transitions", f.edgeIndex];
   return [];
+}
+
+/** A JSON path segment as teamgraph.PathKey writes it: `.name` for a plain
+ *  key, `["has space"]` for any other. */
+function pathKey(path: string, key: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`;
+}
+
+/** Every string value under `v`, in key order, with its path. Mirrors
+ *  teamgraph.walkStrings. */
+function walkStrings(v: Json | undefined, path: string, fn: (path: string, s: string) => void): void {
+  if (typeof v === "string") fn(path, v);
+  else if (Array.isArray(v)) v.forEach((e, i) => walkStrings(e, `${path}[${i}]`, fn));
+  else if (typeof v === "object" && v !== null) {
+    for (const k of Object.keys(v).sort()) walkStrings(v[k], pathKey(path, k), fn);
+  }
+}
+
+/** Mirrors validateDecision (loomcycle 1.109, RFC ED): a state that asks a
+ *  decision model. What is checked needs no model — the questions' shape,
+ *  which question routes, and what `about` may contain. Whether its answers
+ *  have somewhere to go is a graph rule, in validateModel. */
+function validateDecision(n: CanvasNode, h: JsonObject, setsAgents: boolean): string[] {
+  const out: string[] = [];
+  if (setsAgents) {
+    out.push("decision handler must not set agent/agents/consolidator — it asks a decision model, it runs no agent");
+  }
+  const stray = ["system_prompt", "input_template", "wait"].find((k) => str(h[k]) !== "");
+  if (stray) {
+    out.push(`sets \`${stray}\` but is kind ${JSON.stringify(n.kind)} — a decision model reads \`about\` and \`questions\`, and nothing else`);
+  }
+
+  // ---- about ----
+  const about = h.about;
+  if (about === undefined) {
+    out.push("decision handler requires `about`: the JSON object its questions are about");
+  } else if (!obj(about)) {
+    out.push("`about` must be a JSON object");
+  } else {
+    walkStrings(about, "about", (path, s) => {
+      if (SECRET_NAMESPACES.some((ns) => s.includes(ns))) {
+        out.push(
+          `\`${path}\` reads the credentials namespace — what a decision model is asked about is recorded on the walk, ` +
+            "so a secret must not be put there",
+        );
+      }
+      const rest = s.split(THREAD_OUTPUT_SLOT).join("");
+      if (rest.includes("{{") || rest.includes("}}")) {
+        out.push(
+          `\`${path}\` contains a {{…}} placeholder other than ${THREAD_OUTPUT_SLOT} — a decision state resolves ` +
+            `\${var.*}, \${now.*}, \${team.*} and ${THREAD_OUTPUT_SLOT} only`,
+        );
+      }
+    });
+  }
+
+  // ---- questions ----
+  for (const f of questionFaults(h.questions)) {
+    out.push(f.question !== undefined ? `question ${JSON.stringify(f.question)}: ${f.message}` : f.message);
+  }
+
+  // ---- route + threshold ----
+  const questions = obj(h.questions) ?? {};
+  const route = str(h.route);
+  const routed = route in questions ? obj(questions[route]) : undefined;
+  if (h.route !== undefined && h.route !== null && typeof h.route !== "string") out.push("`route` must be a question's name");
+  if (route) {
+    if (!(route in questions)) {
+      out.push(`\`route\` names ${JSON.stringify(route)}, which is not one of its questions (${Object.keys(questions).sort().join(", ")})`);
+    } else if (routed?.type === "score") {
+      out.push(
+        `\`route\` names ${JSON.stringify(route)}, a score — a score is a number, not a choice of transition; ` +
+          "route on a choice or a yes/no question, and capture the score into a variable",
+      );
+    }
+  }
+  const threshold = h.threshold;
+  if (threshold !== undefined && threshold !== null) {
+    if (typeof threshold !== "number") out.push("`threshold` must be a number");
+    else if (routed?.type !== "noul") {
+      out.push("sets `threshold`, which says where yes begins for a routed yes/no question — this state routes on none");
+    } else if (threshold <= 0 || threshold >= 1) {
+      out.push(`\`threshold\` must be above 0 and below 1 (got ${threshold})`);
+    }
+  }
+  return out;
+}
+
+/** The first decision-only field a handler sets, or "". Mirrors
+ *  decisionFieldSet. */
+function decisionFieldSet(h: JsonObject): string {
+  if (h.about !== undefined) return "about";
+  if (Object.keys(obj(h.questions) ?? {}).length) return "questions";
+  if (str(h.route)) return "route";
+  if (h.threshold !== undefined && h.threshold !== null) return "threshold";
+  if (str(h.model)) return "model";
+  return "";
 }
 
 function str(v: unknown): string {
@@ -462,6 +560,9 @@ function validateHandler(n: CanvasNode): string[] {
         out.push("input handler must not set agent/agents/consolidator");
       }
       break;
+    case "decision":
+      out.push(...validateDecision(n, h, !!(agent || agents.length || consolidator)));
+      break;
     case "channel":
       // Publish-only. Reading a channel is what a `starter` is for, and the
       // two were one kind before RFC CY L4 split them — so a definition written
@@ -522,6 +623,11 @@ function validateHandler(n: CanvasNode): string[] {
     );
   }
 
+  if (n.kind !== "decision") {
+    const f = decisionFieldSet(h);
+    if (f) out.push(`sets \`${f}\` but is kind ${JSON.stringify(n.kind)} (decision only)`);
+  }
+
   // Mirrors validatePublishing (loomcycle #1577): `publish` puts the walk's
   // input on a channel and `payload` picks a channel state's message shape.
   // Each belongs to one kind; elsewhere it would read as configured and do
@@ -543,6 +649,11 @@ function validateHandler(n: CanvasNode): string[] {
   } else if (payload && payload !== "envelope" && payload !== "raw") {
     out.push(`channel handler has invalid payload ${JSON.stringify(payload)} (want envelope|raw)`);
   }
+
+  // Mirrors captureIssues: `capture` is checked on every kind, in the words
+  // a Starter's `binds` are (they share the name → JSONPath shape).
+  const capture = obj(h.capture);
+  if (capture) out.push(...validateCaptureMap(capture));
 
   const timeout = h.timeout_ms;
   if (typeof timeout === "number" && timeout < 0) out.push("handler timeout_ms must be >= 0");
@@ -727,6 +838,55 @@ export function validateModel(model: CanvasModel): Finding[] {
     }
     labels.add(e.on);
     adj.set(e.from, [...(adj.get(e.from) ?? []), e.to]);
+  });
+
+  // ---- a decision state's answers and the edges that wait for them ----
+  //
+  // Mirrors validateDecisionEdges. It is why a decision is a state kind: the
+  // questions are in the definition, so an answer with nowhere to go is
+  // refused when the team is saved, not met in the middle of a walk.
+  model.nodes.forEach((n, i) => {
+    if (n.kind !== "decision" || byId.get(n.id) !== n) return;
+    const h = handlerOf(n);
+    const route = str(h.route);
+    const answers = routeAnswers(h);
+    const labels = new Set<string>();
+    model.edges.forEach((e, j) => {
+      if (e.from !== n.id) return;
+      labels.add(e.on);
+      if (e.on.startsWith("pushback:")) {
+        err(
+          `transition[${j}] leaves decision state ${JSON.stringify(n.id)} on ${JSON.stringify(e.on)} — a decision state takes ` +
+            "`success` or `conditional:<answer>`; only a consolidator signals a pushback",
+          { edgeIndex: j },
+        );
+        return;
+      }
+      if (!e.on.startsWith("conditional:")) return;
+      const answer = e.on.slice("conditional:".length);
+      if (!route) {
+        err(
+          `transition[${j}] leaves decision state ${JSON.stringify(n.id)} on ${JSON.stringify(e.on)}, but the state names no ` +
+            "`route` question, so it always advances on `success`",
+          { edgeIndex: j },
+        );
+      } else if (answers && !answers.includes(answer)) {
+        err(
+          `transition[${j}] leaves decision state ${JSON.stringify(n.id)} on ${JSON.stringify(e.on)}, an answer its routed ` +
+            `question ${JSON.stringify(route)} cannot give (it answers: ${answers.join(", ")})`,
+          { edgeIndex: j },
+        );
+      }
+    });
+    if (!answers || labels.has("success")) return;
+    for (const a of answers) {
+      if (labels.has(routeEdge(a))) continue;
+      err(
+        `state ${JSON.stringify(n.id)} routes on question ${JSON.stringify(route)}, and its answer ${JSON.stringify(a)} has no transition — ` +
+          `add one \`on\` ${JSON.stringify(routeEdge(a))}, or a \`success\` transition to take every answer without its own`,
+        { nodeId: n.id, path: ["states", i, "handler", "route"] },
+      );
+    }
   });
 
   // ---- reachability from entry (BFS, mirroring validate.go) ----

@@ -133,6 +133,15 @@ export const PALETTE: readonly PaletteEntry[] = [
       "of every node it is wired to.",
   },
   {
+    id: "decision",
+    label: "Decision",
+    group: "Work",
+    kind: "decision",
+    hint:
+      "Asks a decision model typed questions about what the previous node handed over, and takes the " +
+      "transition its answer selects. No agent runs. Answers can be captured into variables.",
+  },
+  {
     id: "vars",
     label: "Set variables",
     group: "Data",
@@ -215,6 +224,16 @@ export function newHandler(entry: PaletteEntry): JsonObject {
       // One seeded pair: an empty `set` is refused by the runtime, and a named
       // key with an empty value is both valid and obviously a placeholder.
       return { kind: "vars", set: { value: "" } };
+    case "decision":
+      // A complete, obviously-placeholder decision: one yes/no question about
+      // the hand-off, routed. What is left for the author is the question's
+      // wording and the two edges — which the findings ask for by name.
+      return {
+        kind: "decision",
+        about: { input: "{{thread.output}}" },
+        questions: { ok: { type: "noul", instructions: "" } },
+        route: "ok",
+      };
     case "input":
       return { kind: "input" };
     case "terminal":
