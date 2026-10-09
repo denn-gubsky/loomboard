@@ -64,6 +64,37 @@ export interface TeamCheck {
   issues?: TeamCheckIssue[];
 }
 
+/** One decision model a call may name — GET /v1/_decide/models (loomcycle
+ *  1.107). `limits` are the model's own: how many questions one call takes,
+ *  and how many options a choice or levels a score. */
+export interface DecisionModelInfo {
+  name: string;
+  /** The model a call gets when it names none. */
+  default?: boolean;
+  /** What the provider serves under that name, for display. */
+  served?: string;
+  limits?: { maxQuestions?: number; minOptions: number; maxOptions?: number };
+}
+
+/** What a decision call is asked: a JSON object, and typed questions about
+ *  it. Mirrors the SDK's DecideRequest. */
+export interface DecisionCall {
+  model?: string;
+  state: Record<string, unknown>;
+  questions: Record<string, unknown>;
+}
+
+/** A decision model's answer. Mirrors the SDK's DecideResponse; each answer is
+ *  the model's own and is read defensively (lib/decisionAnswer.ts). */
+export interface DecisionCallAnswer {
+  /** The name that answered, as the deployment lists it. */
+  model?: string;
+  provider?: string;
+  served_model?: string;
+  answers: Record<string, unknown>;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}
+
 /** The identifiers a create/fork returns. */
 export interface SavedTeam {
   def_id: string;
@@ -295,6 +326,13 @@ export interface WorkflowDataLayer {
   peekChannel?(channel: string, opts: { scope: string; max?: number }): Promise<ChannelMessage[]>;
 
   /** Declared channels, for the publish composer's pre-flight (C7). */
+  /** The decision models a call may name. Optional, with `decide`: without
+   *  them the canvas offers no way to try a decision's questions. */
+  listDecisionModels?(): Promise<DecisionModelInfo[]>;
+  /** Ask a decision model typed questions about a JSON object. A real call:
+   *  it is charged to the caller and counts against its token budget. A
+   *  refusal rejects with the runtime's own text. */
+  decide?(call: DecisionCall): Promise<DecisionCallAnswer>;
   listChannels?(): Promise<ChannelInfo[]>;
   /** The SAVED team's own channels (`./name`, RFC DV), each under its local
    *  name (`journal`), with its counts (loomcycle 1.108). The runtime keeps
