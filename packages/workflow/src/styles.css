@@ -1301,3 +1301,42 @@
   overflow: visible;
 }
 
+/* A form editor lives in the 320px Inspector. A fieldset's default minimum
+   width is its content's, which let a long input push the whole editor past
+   the Inspector's edge; and its controls take the row, not their own width. */
+.loomboard-workflow .lb-wf-form-editor,
+.loomboard-workflow .lb-wf-form-editor__field {
+  min-width: 0;
+  /* One column that shrinks: an `auto` track is as wide as its widest item. */
+  grid-template-columns: minmax(0, 1fr);
+}
+.loomboard-workflow .lb-wf-form-editor__field label > input:not([type="checkbox"]):not([type="radio"]),
+.loomboard-workflow .lb-wf-form-editor__field label > select,
+.loomboard-workflow .lb-wf-form-editor__field label > textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* The decision questions editor: a question's options and levels as rows. */
+.loomboard-workflow .lb-wf-decision__list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+}
+.loomboard-workflow .lb-wf-decision__row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.loomboard-workflow .lb-wf-decision__row input {
+  flex: 1;
+  min-width: 0;
+}
+.loomboard-workflow .lb-wf-decision__answers {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+

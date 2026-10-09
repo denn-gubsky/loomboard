@@ -536,8 +536,10 @@ export function fieldsForKind(kind: string): string[] {
       return ["channel"];
     case "decision":
       // No agent, prompt or hook fields: it asks a model directly and starts
-      // no run, and the runtime refuses each of those on it.
-      return ["about", "questions", "route", "threshold", "model", "capture", "timeout_ms"];
+      // no run, and the runtime refuses each of those on it. `questions`,
+      // `route` and `threshold` are edited by the questions editor above the
+      // list (inspector/DecisionQuestionsEditor.tsx), not as raw JSON here.
+      return ["about", "model", "capture", "timeout_ms"];
     case "terminal":
       return [];
     default:

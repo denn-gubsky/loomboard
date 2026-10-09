@@ -92,7 +92,8 @@ import {
 } from "./lib/session";
 import { StateNode } from "./nodes/StateNode";
 import { contentKey, handlerChannels, handlerOf } from "./lib/model";
-import { nextDecisionEdge } from "./lib/decision";
+import { nextDecisionEdge, routeEdge } from "./lib/decision";
+import { DecisionQuestionsEditor } from "./inspector/DecisionQuestionsEditor";
 import { newStartKey, startAttempt, startPrint, type StartAttempt } from "./lib/startKey";
 import { checkSummary, unlistedIssues } from "./lib/check";
 import type { ChannelInfo, TeamCheck, WorkflowCanvasProps } from "./types";
@@ -587,6 +588,26 @@ function WorkflowCanvasInner({
       });
     },
     [editable, channels, model],
+  );
+
+  // A routed option renamed in the questions editor: the transition waiting
+  // for the old answer waits for the new one, instead of becoming an edge for
+  // an answer that cannot come beside an answer with no edge.
+  const relabelAnswer = useCallback(
+    (stateId: string, from: string, to: string) => {
+      if (!editable) return;
+      setModel((m) => {
+        if (!m) return m;
+        const was = routeEdge(from);
+        const now = routeEdge(to);
+        if (!m.edges.some((e) => e.from === stateId && e.on === was) || m.edges.some((e) => e.from === stateId && e.on === now)) return m;
+        return {
+          ...m,
+          edges: m.edges.map((e) => (e.from === stateId && e.on === was ? { ...e, on: now, raw: { ...e.raw, on: now } } : e)),
+        };
+      });
+    },
+    [editable, setModel],
   );
 
   const onEdgesDelete = useCallback(
@@ -1352,6 +1373,14 @@ function WorkflowCanvasInner({
                   disabled={busy || !editable}
                   // An emptied variable map comes back `undefined`, removing it.
                   onChange={(fs) => onPatch(fieldsPatch(selected, fs))}
+                />
+              ) : selected && selected.kind === "decision" ? (
+                <DecisionQuestionsEditor
+                  handler={handlerOf(selected)}
+                  edges={model?.edges.filter((e) => e.from === selected.id)}
+                  disabled={busy || !editable}
+                  onPatch={onPatch}
+                  onRenameAnswer={(from, to) => relabelAnswer(selected.id, from, to)}
                 />
               ) : undefined
             }
