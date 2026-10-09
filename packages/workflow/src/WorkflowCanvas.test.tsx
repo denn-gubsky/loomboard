@@ -1005,7 +1005,7 @@ describe("WorkflowCanvas — the Input node (RFC CZ)", () => {
     fireEvent.change(screen.getByLabelText(/Part/), { target: { value: "gpu" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     await waitFor(() => expect(runTeamDetached).toHaveBeenCalled());
-    expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d1", input: JSON.stringify({ document_id: "doc-parts", chunk_id: "gpu" }) });
+    expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d1", input: JSON.stringify({ document_id: "doc-parts", chunk_id: "gpu" }), idempotencyKey: expect.any(String) });
     expect(publishChannel).not.toHaveBeenCalled();
     // Drawn from the definition, and valid: nothing to fix before Start.
     expect(screen.queryByText(/\d+ problems?/)).toBeNull();
@@ -1083,7 +1083,7 @@ describe("WorkflowCanvas — a Starter reading the walk's input (loomcycle #1579
     fireEvent.change(screen.getByLabelText(/Part/), { target: { value: "ddr5" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     await waitFor(() => expect(runTeamDetached).toHaveBeenCalled());
-    expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d2", input: JSON.stringify({ document_id: "doc-parts", chunk_id: "ddr5" }) });
+    expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d2", input: JSON.stringify({ document_id: "doc-parts", chunk_id: "ddr5" }), idempotencyKey: expect.any(String) });
     expect(publishChannel).not.toHaveBeenCalled();
   });
 });
@@ -1186,7 +1186,7 @@ describe("WorkflowCanvas — starting a team with declared variables (RFC DV)", 
     fireEvent.change(tone, { target: { value: "pirate" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     await waitFor(() => expect(runTeamDetached).toHaveBeenCalled());
-    expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d9", input: "", vars: { tone: "pirate" } });
+    expect(runTeamDetached).toHaveBeenCalledWith({ defId: "d9", input: "", vars: { tone: "pirate" }, idempotencyKey: expect.any(String) });
   });
 
   it("lists the team's own definitions, and offers its own agent as ./name in the agent field", async () => {
