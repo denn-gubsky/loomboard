@@ -94,6 +94,7 @@ import { StateNode } from "./nodes/StateNode";
 import { contentKey, handlerChannels, handlerOf } from "./lib/model";
 import { decisionTaken, nextDecisionEdge, routeEdge } from "./lib/decision";
 import { DecisionQuestionsEditor } from "./inspector/DecisionQuestionsEditor";
+import { DecisionLab, type DecisionLabSeed } from "./DecisionLab";
 import { newStartKey, startAttempt, startPrint, type StartAttempt } from "./lib/startKey";
 import { checkSummary, unlistedIssues } from "./lib/check";
 import type { ChannelInfo, TeamCheck, WorkflowCanvasProps } from "./types";
@@ -704,6 +705,26 @@ function WorkflowCanvasInner({
     [selectedId],
   );
 
+  // ---- the Decision lab (RFC EE item 1) ----
+  // Opened on a Decision node it starts from that node's questions and
+  // `about`, taken once, when it opens: the lab is a scratch copy, and what it
+  // ends up with is written back only by "Use on <node>".
+  const [labOpen, setLabOpen] = useState(false);
+  const [labSeed, setLabSeed] = useState<DecisionLabSeed>({});
+  const openLab = () => {
+    const h = selected?.kind === "decision" ? handlerOf(selected) : undefined;
+    const asObj = (v: Json | undefined) => (typeof v === "object" && v !== null && !Array.isArray(v) ? v : undefined);
+    setLabSeed(h ? { nodeId: selected!.id, questions: asObj(h.questions), about: asObj(h.about) } : {});
+    setLabOpen(true);
+  };
+  const applyLabQuestions = useCallback(
+    (nodeId: string, questions: JsonObject) => {
+      setModel((m) => (m ? { ...m, nodes: m.nodes.map((n) => (n.id === nodeId && n.kind === "decision" ? patchHandler(n, { questions }) : n)) } : m));
+      setStatus(`The lab's questions were written to ${nodeId}. Nothing is saved yet.`);
+    },
+    [setModel],
+  );
+
   const onChannelsChange = useCallback((next: TeamChannels) => {
     setModel((m) => (m ? { ...m, channelsPatch: next } : m));
   }, []);
@@ -1090,6 +1111,17 @@ function WorkflowCanvasInner({
           </button>
         )}
 
+        {!readonly && dataLayer.decide && (
+          <button
+            className="lb-wf-btn"
+            aria-pressed={labOpen}
+            onClick={() => (labOpen ? setLabOpen(false) : openLab())}
+            title="Try a decision's questions against a decision model. Each Ask is a real, metered call."
+          >
+            Decision lab
+          </button>
+        )}
+
         {model && (
           <details className="lb-wf-menu" ref={fileMenu}>
             <summary className="lb-wf-btn">Team file</summary>
@@ -1323,7 +1355,18 @@ function WorkflowCanvasInner({
           />
         )}
 
-        {view === "json" ? null : !readonly && renderRunChat && walk && selected && sideTab === "chat" && rowsForState(walk, selected.id).length > 0 ? (
+        {labOpen && dataLayer.decide ? (
+          // The lab takes the right column while it is open, in every view: it
+          // works on questions, not on the graph.
+          <DecisionLab
+            key={labSeed.nodeId ?? ""}
+            decide={dataLayer.decide}
+            listDecisionModels={dataLayer.listDecisionModels}
+            seed={labSeed}
+            onApply={editable && labSeed.nodeId ? (questions) => applyLabQuestions(labSeed.nodeId!, questions) : undefined}
+            onClose={() => setLabOpen(false)}
+          />
+        ) : view === "json" ? null : !readonly && renderRunChat && walk && selected && sideTab === "chat" && rowsForState(walk, selected.id).length > 0 ? (
           <RunChatColumn
             key={selected.id}
             state={selected.id}
