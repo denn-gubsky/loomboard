@@ -1340,3 +1340,55 @@
   font-size: 12px;
 }
 
+/* The Decision lab: the right-hand column while it is open. */
+.loomboard-workflow .lb-wf-lab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-content: start;
+}
+.loomboard-workflow .lb-wf-lab__head,
+.loomboard-workflow .lb-wf-lab__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.loomboard-workflow .lb-wf-lab__state {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.loomboard-workflow .lb-wf-lab__answer[data-stale] .lb-wf-lab__row {
+  opacity: 0.55;
+}
+.loomboard-workflow .lb-wf-lab__row {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.loomboard-workflow .lb-wf-lab__row ul {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+/* A probability as a bar: a judgement, so one neutral colour, never a
+   "confident" green. */
+.loomboard-workflow .lb-wf-lab__bar {
+  display: inline-block;
+  width: 60px;
+  height: 6px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--lb-wf-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.loomboard-workflow .lb-wf-lab__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--lb-wf-accent);
+}
+

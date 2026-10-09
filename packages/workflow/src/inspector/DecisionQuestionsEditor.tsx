@@ -18,6 +18,7 @@ import {
   setRoute,
   withOptions,
   withSide,
+  type DecisionLimits,
   type HandlerPatch,
   type QuestionType,
 } from "../lib/decision";
@@ -44,6 +45,9 @@ export interface DecisionQuestionsEditorProps {
   edges?: readonly { on: string; to: string }[];
   /** False hides routing altogether: the lab asks, it does not route. */
   routing?: boolean;
+  /** One model's own limits, where the questions are about to be sent to it
+   *  (the lab). Absent: what every model asks, which is what a save checks. */
+  limits?: DecisionLimits;
   disabled?: boolean;
   onPatch: (patch: HandlerPatch) => void;
   /** An option of the ROUTED question was renamed: its transition's label
@@ -84,11 +88,11 @@ function CommitInput({
   );
 }
 
-export function DecisionQuestionsEditor({ handler, edges, routing = true, disabled, onPatch, onRenameAnswer }: DecisionQuestionsEditorProps) {
+export function DecisionQuestionsEditor({ handler, edges, routing = true, limits, disabled, onPatch, onRenameAnswer }: DecisionQuestionsEditorProps) {
   const questions = questionsOf(handler);
   const names = questions.map(([n]) => n);
   const route = typeof handler.route === "string" ? handler.route : "";
-  const faults = new Map(questionFaults(handler.questions).map((f) => [f.question ?? "", f.message]));
+  const faults = new Map(questionFaults(handler.questions, limits).map((f) => [f.question ?? "", f.message]));
   const [newType, setNewType] = useState<QuestionType>("choice");
   const answers = routing ? routeAnswers(handler) : undefined;
   const targets = new Map((edges ?? []).map((e) => [e.on, e.to]));
