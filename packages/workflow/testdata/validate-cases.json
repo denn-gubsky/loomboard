@@ -2,7 +2,7 @@
   "_comment": [
     "Shared validation fixtures for the TeamDef graph. ONE file, TWO validators.",
     "",
-    "  consumer 1: src/lib/validate.test.ts \u2014 the canvas's TypeScript mirror.",
+    "  consumer 1: src/lib/validate.test.ts — the canvas's TypeScript mirror.",
     "  consumer 2: loomcycle's internal/teamgraph shared-cases test, which reads",
     "              THIS file out of node_modules/@loomboard/workflow/testdata/",
     "              once the component is integrated there.",
@@ -15,20 +15,25 @@
     "coupling survive the repo boundary instead of becoming a copy that rots.",
     "",
     "go_valid / ts_valid are separate on purpose. They agree everywhere except",
-    "where RFC CZ decision 3 requires them not to \u2014 an unknown handler kind is an",
+    "where RFC CZ decision 3 requires them not to — an unknown handler kind is an",
     "error to the runtime and merely UNKNOWN to a canvas that may simply be older",
     "than the runtime. Any case where they differ must say why in why_divergent.",
     "",
     "VERIFIED: every go_valid below was checked by RUNNING these cases through",
-    "loomcycle's own json decoder + teamgraph.Validate at tag v1.104.0 \u2014 not by",
-    "hand, and not by reading the validator. All 175 agree; the hook cases",
-    "(RFC DK) were added and run on 2026-09-28. Decoding counts:",
-    "several hook shapes are refused while unmarshalling, before Validate runs.",
+    "loomcycle's own json decoder + teamgraph.Validate — not by hand, and not by",
+    "reading the validator. Last run at tag v1.109.0 (2026-10-09): all 242 agree,",
+    "and none of the earlier 175 changed its verdict. Decoding counts: several",
+    "hook shapes, and a decision question of the wrong JSON type, are refused",
+    "while unmarshalling, before Validate runs.",
+    "",
+    "The 67 added on 2026-10-09 are the decision state (loomcycle RFC ED: its",
+    "questions, about, route, threshold, and the edges its answers need) and",
+    "`capture`, which the runtime checks on every kind and the canvas had not.",
     "",
     "That check earned its keep immediately. The `unknown handler kind from a",
     "newer runtime` case used `starter` as its example of a kind the runtime does",
     "not implement. RFC CY L4 then implemented it, and the definition happened to",
-    "be a VALID starter \u2014 so go_valid silently became wrong, and the divergence",
+    "be a VALID starter — so go_valid silently became wrong, and the divergence",
     "the case exists to document evaporated while the case kept passing. Its kind",
     "is now fictional, which is the only form that cannot decay.",
     "",
@@ -711,7 +716,7 @@
       "name": "unknown handler kind from a newer runtime",
       "go_valid": false,
       "ts_valid": true,
-      "why_divergent": "RFC CZ decision 3. The runtime rejects a kind it does not implement, and must. The canvas must NOT: it may be an older build talking to a newer runtime, and refusing to render the kind would push the operator back to hand-editing JSON. The canvas renders it opaque, preserves it byte-for-byte, reports it at info, and lets the server be the authority. The kind here is FICTIONAL on purpose \u2014 this case previously used `starter`, which RFC CY L4 then implemented, at which point go_valid became wrong and the divergence this case exists to document silently evaporated. Caught by running the fixtures against teamgraph.Validate.",
+      "why_divergent": "RFC CZ decision 3. The runtime rejects a kind it does not implement, and must. The canvas must NOT: it may be an older build talking to a newer runtime, and refusing to render the kind would push the operator back to hand-editing JSON. The canvas renders it opaque, preserves it byte-for-byte, reports it at info, and lets the server be the authority. The kind here is FICTIONAL on purpose — this case previously used `starter`, which RFC CY L4 then implemented, at which point go_valid became wrong and the divergence this case exists to document silently evaporated. Caught by running the fixtures against teamgraph.Validate.",
       "definition": {
         "entry": "on-pr",
         "states": [
@@ -915,7 +920,7 @@
       }
     },
     {
-      "name": "starter with no sink is valid \u2014 the wave just publishes nowhere",
+      "name": "starter with no sink is valid — the wave just publishes nowhere",
       "go_valid": true,
       "ts_valid": true,
       "definition": {
@@ -1150,7 +1155,7 @@
       }
     },
     {
-      "name": "starter source wait=all is refused \u2014 it counts channels, not messages",
+      "name": "starter source wait=all is refused — it counts channels, not messages",
       "go_valid": false,
       "ts_valid": false,
       "definition": {
@@ -1677,7 +1682,7 @@
       }
     },
     {
-      "name": "starter binds with per=once \u2014 there is no ONE source message",
+      "name": "starter binds with per=once — there is no ONE source message",
       "go_valid": false,
       "ts_valid": false,
       "definition": {
@@ -2029,7 +2034,7 @@
       }
     },
     {
-      "name": "channel node that tries to read \u2014 reading is a starter",
+      "name": "channel node that tries to read — reading is a starter",
       "go_valid": false,
       "ts_valid": false,
       "definition": {
@@ -2191,7 +2196,7 @@
       }
     },
     {
-      "name": "prompt block on an agent handler \u2014 it uses system_prompt/input_template",
+      "name": "prompt block on an agent handler — it uses system_prompt/input_template",
       "go_valid": false,
       "ts_valid": false,
       "definition": {
@@ -3883,7 +3888,7 @@
       "name": "hooks on an unknown kind: the runtime refuses, the canvas defers",
       "go_valid": false,
       "ts_valid": true,
-      "why_divergent": "RFC CZ decision 3, applied to hooks. teamgraph refuses hooks on any kind that does not start runs \u2014 and it refuses an unknown kind outright. The canvas cannot know whether a kind newer than itself starts runs, so it applies no hook rule to an opaque node and lets the server decide, as it does for every other rule on that node. The kind is FICTIONAL on purpose (C10).",
+      "why_divergent": "RFC CZ decision 3, applied to hooks. teamgraph refuses hooks on any kind that does not start runs — and it refuses an unknown kind outright. The canvas cannot know whether a kind newer than itself starts runs, so it applies no hook rule to an opaque node and lets the server decide, as it does for every other rule on that node. The kind is FICTIONAL on purpose (C10).",
       "definition": {
         "entry": "s",
         "states": [
@@ -6360,6 +6365,2853 @@
             }
           }
         }
+      }
+    },
+    {
+      "name": "decision: a choice routed, an edge per option",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "route": {
+                  "type": "choice",
+                  "instructions": "Which team?",
+                  "criteria": {
+                    "billing": "invoices",
+                    "support": "bugs",
+                    "sales": null
+                  }
+                }
+              },
+              "route": "route"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "c",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:billing"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:support"
+          },
+          {
+            "from": "d",
+            "to": "c",
+            "on": "conditional:sales"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a yes/no routed with a threshold",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "route": "u",
+              "threshold": 0.7
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:true"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:false"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: no route: advances on success and binds variables",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                },
+                "s": {
+                  "type": "score",
+                  "instructions": "How complete?",
+                  "criteria": [
+                    "none",
+                    "some",
+                    "all"
+                  ]
+                }
+              },
+              "capture": {
+                "urgent": "$.answers.u.noul"
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a success edge takes the answers without their own",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "route": {
+                  "type": "choice",
+                  "instructions": "Which team?",
+                  "criteria": {
+                    "billing": "invoices",
+                    "support": "bugs",
+                    "sales": null
+                  }
+                }
+              },
+              "route": "route"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:billing"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about is required",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about must be an object, not text",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": "the ticket",
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about must be an object, not null",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": null,
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about may be an empty object",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {},
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about refuses a starter placeholder",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "t": "{{starter.message}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about takes the hand-off and variables",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "t": "{{thread.output}} then {{thread.output}}",
+                "tier": "${var.tier} at ${now.date}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about refuses another placeholder nested in a list",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "items": [
+                  {
+                    "t": "ok"
+                  },
+                  {
+                    "t": "{{memory.core}}"
+                  }
+                ]
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about refuses a stray closing brace pair",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "t": "oops }}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about must not read a credential",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "k": "${run.credentials.api}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: at least one question",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {}
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: questions are required",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a question needs instructions",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "  "
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a question type must be known",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "maybe",
+                  "instructions": "x"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a question needs a name",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a choice needs two options",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "r": {
+                  "type": "choice",
+                  "instructions": "x",
+                  "criteria": {
+                    "only": "one"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: choice criteria must be an object",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "r": {
+                  "type": "choice",
+                  "instructions": "x",
+                  "criteria": [
+                    "a",
+                    "b"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a choice description is text or null",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "r": {
+                  "type": "choice",
+                  "instructions": "x",
+                  "criteria": {
+                    "a": 1,
+                    "b": "y"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a choice option needs a name",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "r": {
+                  "type": "choice",
+                  "instructions": "x",
+                  "criteria": {
+                    "": "x",
+                    "b": "y"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: choice options may describe themselves",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "r": {
+                  "type": "choice",
+                  "instructions": "x",
+                  "criteria": {
+                    "yes": null,
+                    "no": null
+                  }
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: choice criteria are required",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "r": {
+                  "type": "choice",
+                  "instructions": "x"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a yes/no may describe one side",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "x",
+                  "criteria": {
+                    "true": "needs a reply now"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a yes/no describes only true and false",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "x",
+                  "criteria": {
+                    "maybe": "x"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a yes/no description is text",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "x",
+                  "criteria": {
+                    "true": null
+                  }
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a score needs two levels",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "s": {
+                  "type": "score",
+                  "instructions": "x",
+                  "criteria": [
+                    "only"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: score levels are text",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "s": {
+                  "type": "score",
+                  "instructions": "x",
+                  "criteria": [
+                    "a",
+                    2
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: score criteria must be a list",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "s": {
+                  "type": "score",
+                  "instructions": "x",
+                  "criteria": {
+                    "0": "a",
+                    "1": "b"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: route must name one of the questions",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "route": "other"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:true"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:false"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a score cannot route",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "s": {
+                  "type": "score",
+                  "instructions": "How complete?",
+                  "criteria": [
+                    "none",
+                    "some",
+                    "all"
+                  ]
+                }
+              },
+              "route": "s"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: threshold needs a routed yes/no, not a choice",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "route": {
+                  "type": "choice",
+                  "instructions": "Which team?",
+                  "criteria": {
+                    "billing": "invoices",
+                    "support": "bugs",
+                    "sales": null
+                  }
+                }
+              },
+              "route": "route",
+              "threshold": 0.6
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "c",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:billing"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:support"
+          },
+          {
+            "from": "d",
+            "to": "c",
+            "on": "conditional:sales"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: threshold needs a route",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "threshold": 0.6
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: threshold must be above 0",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "route": "u",
+              "threshold": 0
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:true"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:false"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: threshold must be below 1",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "route": "u",
+              "threshold": 1
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:true"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:false"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: every option needs an edge",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "route": {
+                  "type": "choice",
+                  "instructions": "Which team?",
+                  "criteria": {
+                    "billing": "invoices",
+                    "support": "bugs",
+                    "sales": null
+                  }
+                }
+              },
+              "route": "route"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:billing"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:support"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a yes/no needs both edges",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "route": "u"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:true"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: an edge for an answer that cannot come",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "route": {
+                  "type": "choice",
+                  "instructions": "Which team?",
+                  "criteria": {
+                    "billing": "invoices",
+                    "support": "bugs",
+                    "sales": null
+                  }
+                }
+              },
+              "route": "route"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "c",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:billing"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:support"
+          },
+          {
+            "from": "d",
+            "to": "c",
+            "on": "conditional:sales"
+          },
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:legal"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a yes/no answers true or false, not yes",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "route": "u"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:yes"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:false"
+          },
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:true"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a conditional edge needs a route",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:true"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: no pushback from a decision",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "pushback:redo"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a success fallback does not excuse an impossible edge",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "route": {
+                  "type": "choice",
+                  "instructions": "Which team?",
+                  "criteria": {
+                    "billing": "invoices",
+                    "support": "bugs",
+                    "sales": null
+                  }
+                }
+              },
+              "route": "route"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:nope"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: it runs no agent",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "agent": "x"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: it takes no system prompt",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "system_prompt": "x"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: it takes no input template",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "input_template": "x"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: it takes no wait",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "wait": "all"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: it carries no hooks",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "hooks": {
+                "agent_stop": [
+                  "gate"
+                ]
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a negative timeout",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "timeout_ms": -1
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a model and a timeout",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "model": "decide-deep",
+              "timeout_ms": 5000
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a capture name must be a variable name",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "capture": {
+                "not ok": "$.answers.u.noul"
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: a decision with no way out is a dead end",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          }
+        ],
+        "transitions": []
+      }
+    },
+    {
+      "name": "decision: instructions must be text",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": 7
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: route must be text",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "route": 3
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: threshold must be a number",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "route": "u",
+              "threshold": "0.5"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:true"
+          },
+          {
+            "from": "d",
+            "to": "b",
+            "on": "conditional:false"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: questions must be an object",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": [
+                {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              ]
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: route on an agent state is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "agent",
+              "agent": "x",
+              "route": "u"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: about on an agent state is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "agent",
+              "agent": "x",
+              "about": {
+                "t": "x"
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: questions on an agent state are refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "agent",
+              "agent": "x",
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: threshold on an agent state is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "agent",
+              "agent": "x",
+              "threshold": 0.5
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: model on an agent state is refused",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "agent",
+              "agent": "x",
+              "model": "decide"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: empty questions on an agent state are not a decision field",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "agent",
+              "agent": "x",
+              "questions": {}
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "decision: one decision routing into another",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "Is it urgent?"
+                }
+              },
+              "route": "u"
+            }
+          },
+          {
+            "state": "e",
+            "handler": {
+              "kind": "decision",
+              "about": {
+                "ticket": "{{thread.output}}"
+              },
+              "questions": {
+                "route": {
+                  "type": "choice",
+                  "instructions": "Which team?",
+                  "criteria": {
+                    "billing": "invoices",
+                    "support": "bugs",
+                    "sales": null
+                  }
+                }
+              },
+              "route": "route"
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "b",
+            "handler": {
+              "kind": "terminal"
+            }
+          },
+          {
+            "state": "c",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "e",
+            "on": "conditional:true"
+          },
+          {
+            "from": "d",
+            "to": "a",
+            "on": "conditional:false"
+          },
+          {
+            "from": "e",
+            "to": "a",
+            "on": "conditional:billing"
+          },
+          {
+            "from": "e",
+            "to": "b",
+            "on": "conditional:support"
+          },
+          {
+            "from": "e",
+            "to": "c",
+            "on": "conditional:sales"
+          }
+        ]
+      }
+    },
+    {
+      "name": "capture: a name on an agent state must be a variable name",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "agent",
+              "agent": "x",
+              "capture": {
+                "not ok": "$.a"
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "capture: a path on an agent state must be a JSONPath",
+      "go_valid": false,
+      "ts_valid": false,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "agent",
+              "agent": "x",
+              "capture": {
+                "v": "answers.a"
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "capture: the root path binds a text answer whole",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "agent",
+              "agent": "x",
+              "capture": {
+                "v": "$"
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "capture: a path into a decision's answer",
+      "go_valid": true,
+      "ts_valid": true,
+      "definition": {
+        "entry": "d",
+        "states": [
+          {
+            "state": "d",
+            "handler": {
+              "kind": "decision",
+              "about": {},
+              "questions": {
+                "u": {
+                  "type": "noul",
+                  "instructions": "x"
+                }
+              },
+              "capture": {
+                "u": "$.answers.u.noul",
+                "p": "$.answers.u.probabilities.yes"
+              }
+            }
+          },
+          {
+            "state": "a",
+            "handler": {
+              "kind": "terminal"
+            }
+          }
+        ],
+        "transitions": [
+          {
+            "from": "d",
+            "to": "a",
+            "on": "success"
+          }
+        ]
       }
     }
   ]

@@ -41,6 +41,7 @@ export const KNOWN_KINDS = [
   "channel",
   "vars",
   "input",
+  "decision",
 ] as const;
 export type KnownKind = (typeof KNOWN_KINDS)[number];
 
