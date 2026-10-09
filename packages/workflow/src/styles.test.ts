@@ -55,3 +55,15 @@ describe("The panels under the graph", () => {
   });
 });
 
+describe("A form editor in the Inspector", () => {
+  it("cannot be pushed wider than the Inspector by its own controls", () => {
+    // Regression: a fieldset's default min-width is its content's, so the
+    // decision questions editor ran past the Inspector's right edge and its
+    // inputs were cut off.
+    const boxes = rule(".loomboard-workflow .lb-wf-form-editor,\n.loomboard-workflow .lb-wf-form-editor__field");
+    expect(boxes).toMatch(/min-width:\s*0/);
+    expect(boxes).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/\.lb-wf-form-editor__field label > textarea \{[^}]*width:\s*100%[^}]*box-sizing:\s*border-box/);
+  });
+});
+
