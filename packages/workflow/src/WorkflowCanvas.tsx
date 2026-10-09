@@ -93,6 +93,7 @@ import {
 import { StateNode } from "./nodes/StateNode";
 import { contentKey, handlerChannels, handlerOf } from "./lib/model";
 import { nextDecisionEdge } from "./lib/decision";
+import { newStartKey, startAttempt, startPrint, type StartAttempt } from "./lib/startKey";
 import { checkSummary, unlistedIssues } from "./lib/check";
 import type { ChannelInfo, TeamCheck, WorkflowCanvasProps } from "./types";
 
@@ -919,6 +920,10 @@ function WorkflowCanvasInner({
   };
 
   // ---- running ----
+  // The last start that did not come back with a walk: retried with its own
+  // key, so the runtime answers with the walk it may already have started
+  // (lib/startKey.ts).
+  const pendingStart = useRef<StartAttempt | undefined>(undefined);
   const startRun = useCallback(async (form?: FormResult, vars?: Record<string, string>) => {
     if (!model || !dataLayer.runTeamDetached || !canStart(session)) return;
     const name = doc.name;
@@ -932,11 +937,14 @@ function WorkflowCanvasInner({
     try {
       // By def_id, never by name: Save-then-Run would otherwise execute the
       // PREVIOUS version, and the difference is invisible on screen.
-      const started = await dataLayer.runTeamDetached({
+      const target = {
         defId: doc.parentDefId ?? undefined,
         ...(form ? { input: form.input } : {}),
         ...(vars ? { vars } : {}),
-      });
+      };
+      const attempt = startAttempt(pendingStart.current, startPrint(target), newStartKey);
+      pendingStart.current = attempt;
+      const started = await dataLayer.runTeamDetached({ ...target, idempotencyKey: attempt.key });
       if (!started?.run_id) {
         // A host that quietly fell back to a blocking run returns a trace with
         // no handle. Refusing is the honest outcome: every live surface in Run
@@ -947,8 +955,13 @@ function WorkflowCanvasInner({
         );
         return;
       }
+      // It came back with a walk: the next press is a new start.
+      pendingStart.current = undefined;
       dispatchSession({ t: "start", runId: started.run_id, debug: false });
       setStartOpen(false);
+      if (started.deduplicated) {
+        setStatus("This walk had already been started by the earlier attempt; it was not started again.");
+      }
     } catch (e) {
       if (form) setStartError(`Could not start: ${msg(e)}`);
       else setError(`Could not start the run: ${msg(e)}`);
