@@ -9,6 +9,7 @@ import {
   rowsForState,
   statePulses,
   visitNumbers,
+  waitingNote,
   walkSignal,
   type WalkRunRow,
 } from "./runs";
@@ -147,6 +148,38 @@ describe("rowPhase / statePulses / pulseLabel", () => {
     expect(pulseLabel(p.get("wave"))).toBe("1/4 done · 1 held · 1 running · 1 rejected");
     expect(pulseLabel(p.get("other"))).toBe("0/1 done · 1 failed");
     expect(pulseLabel(p.get("unstarted"))).toBe("");
+  });
+});
+
+describe("waitingNote — what a waiting run is waiting on", () => {
+  it("names the background sub-agents a run waits for, by run id", () => {
+    expect(waitingNote(row({ runId: "p", awaited: "children", awaitedOn: "r_a1" }))).toBe("waiting for 1 background sub-agent to finish: r_a1");
+    expect(waitingNote(row({ runId: "p", awaited: "children", awaitedOn: "r_a1, r_b2,r_c3" }))).toBe(
+      "waiting for 3 background sub-agents to finish: r_a1, r_b2, r_c3",
+    );
+  });
+
+  it("lists the first three sub-agents and counts the rest", () => {
+    expect(waitingNote(row({ runId: "p", awaited: "children", awaitedOn: "r_1,r_2,r_3,r_4,r_5" }))).toBe(
+      "waiting for 5 background sub-agents to finish: r_1, r_2, r_3, and 2 more",
+    );
+  });
+
+  it("still says it waits on sub-agents when the runtime names none", () => {
+    expect(waitingNote(row({ runId: "p", awaited: "children" }))).toBe("waiting for its background sub-agents to finish");
+  });
+
+  it("says what else a run can wait on: a channel, an answer, the operator's next message", () => {
+    expect(waitingNote(row({ runId: "p", awaited: "channel", awaitedOn: "sdlc-intake" }))).toBe("waiting for a message on channel sdlc-intake");
+    expect(waitingNote(row({ runId: "p", awaited: "interrupted", awaitedOn: "question" }))).toBe("waiting for an answer to its question (question)");
+    expect(waitingNote(row({ runId: "p", awaited: "input" }))).toBe("waiting for the operator's next message");
+  });
+
+  it("says nothing for a run that is not waiting — running, held for review, or ended", () => {
+    expect(waitingNote(row({ runId: "p" }))).toBeUndefined();
+    expect(waitingNote(row({ runId: "p", awaited: "review", awaitedOn: "gate" }))).toBeUndefined();
+    // A stale awaited on a run that has ended must not read as waiting.
+    expect(waitingNote(row({ runId: "p", status: "completed", awaited: "children", awaitedOn: "r_a1" }))).toBeUndefined();
   });
 });
 
