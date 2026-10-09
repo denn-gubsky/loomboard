@@ -86,4 +86,42 @@ describe("WorkflowCanvas — the Decision node", () => {
     expect(editor.getByRole("list", { name: "Where each answer of route goes" }).textContent).toMatch(/option → no transition yet/);
     expect((screen.getByRole("button", { name: "Save new version" }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("offers no Decision lab on a host that cannot ask a decision model", async () => {
+    await openTriage();
+    expect(screen.queryByRole("button", { name: "Decision lab" })).toBeNull();
+  });
+});
+
+describe("WorkflowCanvas — the Decision lab", () => {
+  it("opens on the selected Decision node's questions, asks, and writes the questions back to the node", async () => {
+    const x = layer();
+    const decide = vi.fn(async () => ({ answers: { route: { type: "choice", choice: "support", probabilities: { billing: 0.2, support: 0.8 } } } }));
+    render(<WorkflowCanvas dataLayer={{ ...x.l, decide }} teamName="desk" />);
+    fireEvent.click(await screen.findByTestId("node-triage"));
+    fireEvent.click(screen.getByRole("button", { name: "Decision lab" }));
+    const lab = within(await screen.findByRole("complementary", { name: "Decision lab" }));
+    // Seeded from the node, as a scratch copy.
+    const instructions = lab.getByLabelText("Instructions for question route") as HTMLTextAreaElement;
+    expect(instructions.value).toBe("Which team?");
+
+    fireEvent.change(lab.getByLabelText("What the questions are about (JSON)"), { target: { value: '{"ticket": "The app crashes on login."}' } });
+    fireEvent.click(lab.getByRole("button", { name: "Ask" }));
+    expect((await lab.findByTestId("answer-route")).textContent).toMatch(/→ support/);
+    expect(decide).toHaveBeenCalledWith({ state: { ticket: "The app crashes on login." }, questions: definition.states[0].handler.questions });
+
+    // An edit in the lab reaches the node only through "Use on".
+    fireEvent.change(lab.getByLabelText("Instructions for question route"), { target: { value: "Who should take this ticket?" } });
+    expect(screen.queryByText(/were written to triage/)).toBeNull();
+    fireEvent.click(lab.getByRole("button", { name: "Use on triage" }));
+    expect(screen.getByText("The lab's questions were written to triage. Nothing is saved yet.")).toBeTruthy();
+    fireEvent.click(lab.getByRole("button", { name: "Close" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save new version" }));
+    await waitFor(() => expect(x.forkTeam).toHaveBeenCalled());
+    const saved = x.forkTeam.mock.calls[0][1] as typeof definition;
+    expect(saved.states[0].handler.questions?.route.instructions).toBe("Who should take this ticket?");
+    // The node's route and transitions are left as they were.
+    expect(saved.states[0].handler.route).toBe("route");
+    expect(saved.transitions.map((t) => t.on)).toEqual(["conditional:billing", "conditional:support"]);
+  });
 });
