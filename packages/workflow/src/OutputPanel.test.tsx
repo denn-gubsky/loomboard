@@ -56,6 +56,62 @@ describe("OutputPanel", () => {
     expect(own.querySelector(".lb-wf-finding--error")).toBeNull();
   });
 
+  it("reads one of the team's own channels through the team, by its local name", async () => {
+    const peek = vi.fn(async (): Promise<ChannelMessage[]> => []);
+    const peekTeam = vi.fn(async (): Promise<ChannelMessage[]> => [{ id: "m1", publishedAt: "2026-10-09T10:00:00Z", value: "noted" }]);
+    render(
+      <OutputPanel
+        channels={[view({ id: "channel:./journal", channel: "./journal", declared: true, info: { name: "journal", scope: "user", message_count: 1 } })]}
+        peekChannel={peek}
+        peekTeamChannel={peekTeam}
+      />,
+    );
+    expect(await screen.findByText("noted")).toBeTruthy();
+    expect(peekTeam).toHaveBeenCalledWith("journal", { max: 50 });
+    // Never by its name: the runtime refuses that.
+    expect(peek).not.toHaveBeenCalled();
+    expect(screen.getByTestId("output-./journal").textContent).toMatch(/user · the team's own/);
+  });
+
+  it("says a channel only the draft declares is not in the saved team yet, without asking the runtime", async () => {
+    const peekTeam = vi.fn(async (): Promise<ChannelMessage[]> => []);
+    render(
+      <OutputPanel
+        channels={[view({ id: "channel:./fresh", channel: "./fresh", declared: true })]}
+        peekChannel={vi.fn(async () => [])}
+        peekTeamChannel={peekTeam}
+        teamChannelsListed
+      />,
+    );
+    expect(await screen.findByText(/The saved team does not declare it yet: save the team/)).toBeTruthy();
+    expect(peekTeam).not.toHaveBeenCalled();
+  });
+
+  it("does not claim that when the team's channels could not be listed — it asks, and shows the answer", async () => {
+    // Regression: a failed listing left every own channel reading "not in the saved team yet".
+    const peekTeam = vi.fn(async (): Promise<ChannelMessage[]> => [{ id: "m1", publishedAt: "2026-10-09T10:00:00Z", value: "still readable" }]);
+    render(
+      <OutputPanel
+        channels={[view({ id: "channel:./journal", channel: "./journal", declared: true })]}
+        peekChannel={vi.fn(async () => [])}
+        peekTeamChannel={peekTeam}
+      />,
+    );
+    expect(await screen.findByText("still readable")).toBeTruthy();
+    expect(screen.queryByText(/does not declare it yet/)).toBeNull();
+  });
+
+  it("shows why one of the team's own channels could not be read", async () => {
+    render(
+      <OutputPanel
+        channels={[view({ id: "channel:./journal", channel: "./journal", declared: true, info: { name: "journal", scope: "user" } })]}
+        peekChannel={vi.fn(async () => [])}
+        peekTeamChannel={vi.fn(async () => Promise.reject(new Error("403 insufficient_scope")))}
+      />,
+    );
+    expect(await screen.findByText("403 insufficient_scope")).toBeTruthy();
+  });
+
   it("re-peeks when the refresh key changes — a run settled", async () => {
     const peek = vi.fn(async (): Promise<ChannelMessage[]> => []);
     const channels = [view({ info: { name: "out", scope: "tenant" }, declared: true })];

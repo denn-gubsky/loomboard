@@ -288,8 +288,28 @@ function WorkflowCanvasInner({
     };
   }, [dataLayer, entryChannel, namesChannels]);
 
+  // The team's own channels (`./name`) are listed per team, never among the
+  // others (loomcycle 1.108): their counts, for the channel nodes and the
+  // Output panel. Only the SAVED team has any.
+  const [ownChannels, setOwnChannels] = useState<ChannelInfo[]>();
+  const declaresOwnChannels = !!model && localNames(model, "channels").length > 0;
+  const teamNameNow = doc.name;
+  useEffect(() => {
+    if (!declaresOwnChannels || !teamNameNow || !dataLayer.listTeamChannels) return;
+    let cancelled = false;
+    dataLayer
+      .listTeamChannels(teamNameNow)
+      .then((list) => !cancelled && setOwnChannels(list))
+      // Counts are a nicety: without them the nodes simply show none.
+      .catch(() => !cancelled && setOwnChannels(undefined));
+    return () => {
+      cancelled = true;
+    };
+    // Again after a save: the saved team may now declare another channel.
+  }, [dataLayer, declaresOwnChannels, teamNameNow, doc.parentDefId]);
+
   // The channels the graph names, as nodes its data edges route through.
-  const channelViews = useMemo(() => (model ? channelNodes(model, channels) : []), [model, channels]);
+  const channelViews = useMemo(() => (model ? channelNodes(model, channels, ownChannels) : []), [model, channels, ownChannels]);
   // The Documents and Memory the prompts pull in, as nodes feeding them (P3).
   const bindingViews = useMemo(() => (model ? bindingNodes(model) : []), [model]);
   const variableViews = useMemo(() => (model ? variableNodes(model) : []), [model]);
@@ -369,6 +389,12 @@ function WorkflowCanvasInner({
   const outputsRef = useRef({ key: "", value: outputsAll });
   if (outputsRef.current.key !== outputsKey) outputsRef.current = { key: outputsKey, value: outputsAll };
   const outputs = outputsRef.current.value;
+  // Bound to the stored team; absent until there is one, or on a host that
+  // cannot read a team's own channel. Stable, so the panel does not re-peek.
+  const peekOwnChannel = useMemo(() => {
+    const peek = dataLayer.peekTeamChannel;
+    return teamNameNow && peek ? (name: string, opts: { max?: number }) => peek(teamNameNow, name, opts) : undefined;
+  }, [dataLayer, teamNameNow]);
   // New output can appear when a run settles, so that is when to re-peek.
   const outputRefresh = walk
     ? `${walk.walk?.status ?? ""}:${[...walk.members.values()].filter((r) => isTerminal(r.status)).length}`
@@ -1302,7 +1328,13 @@ function WorkflowCanvasInner({
           panel is useful, and together they must not squeeze the graph out. */}
       <div className="lb-wf-below">
         {dataLayer.peekChannel && outputs.length > 0 && (
-          <OutputPanel channels={outputs} peekChannel={dataLayer.peekChannel} refreshKey={outputRefresh} />
+          <OutputPanel
+          channels={outputs}
+          peekChannel={dataLayer.peekChannel}
+          peekTeamChannel={peekOwnChannel}
+          teamChannelsListed={ownChannels !== undefined}
+          refreshKey={outputRefresh}
+        />
         )}
 
         {check && (

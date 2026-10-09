@@ -101,8 +101,14 @@ export function channelNodeId(model: CanvasModel, channel: string): string {
 }
 
 /** Every channel the model names, as a node. `infos` is the host's channel
- *  list: absent means "not listed", which is different from "not declared". */
-export function channelNodes(model: CanvasModel, infos?: readonly ChannelInfo[]): ChannelNodeView[] {
+ *  list: absent means "not listed", which is different from "not declared".
+ *  `ownInfos` is the SAVED team's own channels, by their local name (`journal` for
+ *  `./journal`): the runtime lists those per team, never among the others. */
+export function channelNodes(
+  model: CanvasModel,
+  infos?: readonly ChannelInfo[],
+  ownInfos?: readonly ChannelInfo[],
+): ChannelNodeView[] {
   // An opaque node's fields mean whatever a newer runtime says they mean, so
   // its `channel` / `source` / `sink` are not drawn as wiring (decision 3).
   const opaque = new Set(model.nodes.filter((n) => n.opaque).map((n) => n.id));
@@ -152,7 +158,8 @@ export function channelNodes(model: CanvasModel, infos?: readonly ChannelInfo[])
     if (publishers.size) grants.publish = own || channelAllowed(channel, grantList(model, "publish"));
     if (readers.size) grants.subscribe = own || channelAllowed(channel, grantList(model, "subscribe"));
 
-    const info = infos?.find((c) => c.name === channel);
+    const local = localRef(channel);
+    const info = local !== undefined ? ownInfos?.find((c) => c.name === local) : infos?.find((c) => c.name === channel);
     out.push({
       id,
       channel,

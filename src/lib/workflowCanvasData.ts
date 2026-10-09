@@ -183,6 +183,26 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
       return (messages ?? []).map((m) => ({ id: m.id, publishedAt: m.published_at, value: m.value }));
     },
 
+    // A team's own channels (loomcycle 1.108): listed and read by team and
+    // local name. A user-scoped one is read at the caller's own user, which is
+    // the runtime's default.
+    async listTeamChannels(team): Promise<ChannelInfo[]> {
+      const { channels } = await client.listTeamChannels(team);
+      return (channels ?? []).map((c) => ({
+        name: c.name,
+        scope: c.scope,
+        hold: c.hold,
+        message_count: c.message_count,
+        held_count: c.held_count,
+        awaiting_hooks_count: c.awaiting_hooks_count,
+      }));
+    },
+
+    async peekTeamChannel(team, name, { max }) {
+      const { messages } = await client.peekTeamChannel(team, name, { maxMessages: max });
+      return (messages ?? []).map((m) => ({ id: m.id, publishedAt: m.published_at, value: m.value }));
+    },
+
     // A walk's run has no turns, so cancelTurn ENDS it and every run it
     // spawned (loomcycle #1341). Not caught: a 409 from an older runtime must
     // reach the canvas, which keeps the walk live and says why.
