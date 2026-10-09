@@ -8,7 +8,22 @@ This file is loaded by Claude Code on every session in this repo. Read it cold; 
 
 loomboard is a **React + Vite + TypeScript single-page app**. It is a *thin client*: it talks to a running loomcycle over its HTTP+SSE `/v1/*` wire, using the published **`@loomcycle/client`** SDK. There is **no loomboard backend** — loomcycle owns auth, persistence, and the agent loop. Conversations are loomcycle **sessions** (interactive runs); chat history is reloaded from loomcycle, not stored locally beyond a small `localStorage` index.
 
-The first surface we are building is a **rich chat interface** (Open WebUI-like) powered by loomcycle agents. The RFC lives at `../loomcycle-internal/doc-internal/rfcs/developer-workflow-board.md` (RFC AC) and is being extended to cover chat as a new operator surface. It is a subject of change.
+The surfaces built so far: a **rich chat interface** (Open WebUI-like), a **TeamDef canvas** (author, check, run and watch an agent team, as a graph or as JSON), and the app's Documents, Memory, Boards and Library views.
+
+### What is in this repo
+
+It is an npm **workspace** that holds the app and the packages published from it:
+
+| Path | What | Published as |
+|---|---|---|
+| `src/chat/` | The chat component: self-contained, no app imports | `@loomboard/chat` (the repo root's `package.json`) |
+| `src/` outside `chat/` | The app: `App.tsx`, `components/`, `hooks/`, `lib/`, `state/` | not published |
+| `packages/workflow/` | The TeamDef canvas: presentational, plus one injected `WorkflowDataLayer` | `@loomboard/workflow` |
+| `cli/` | Serves the built app | `@loomboard/app` |
+| `extension/` | The Chrome extension | released as a zip |
+| `src-tauri/` | The desktop app (Tauri v2) | released as installers |
+
+The app consumes `@loomboard/workflow` from source through a Vite alias, so a change in `packages/workflow/` shows up in `npm run dev` without a build.
 
 ## Development workflow
 
@@ -67,17 +82,32 @@ These apply to every interaction with this repo. Violations are bugs even withou
 - **TypeScript:** `strict` on. No `any` that hides a real type — prefer `unknown` + narrowing. Type from the SDK (`@loomcycle/client`) rather than re-declaring wire shapes.
 - **React:** function components + hooks. Keep side-effecting orchestration in hooks (`useChat`) and rendering logic in components; keep wire-event folding in **pure functions** (`lib/eventReducer.ts`, `lib/metrics.ts`) so it's unit-testable.
 - **State:** React context + `useReducer` + hooks. No Redux/Zustand/etc. unless a concrete need is demonstrated.
-- **Files:** components in `src/components/*.tsx` (PascalCase), hooks in `src/hooks/*.ts` (`useX`), pure libs in `src/lib/*.ts`, persisted state in `src/state/*.ts`.
+- **Files:** the same layout in each of the three source trees (`src/` for the app, `src/chat/` for the chat package, `packages/workflow/src/` for the canvas): components as `*.tsx` (PascalCase), hooks as `useX.ts`, pure libs in `lib/*.ts`. The app keeps its components in `src/components/` and its persisted state in `src/state/`. A package never imports from the app.
 - **Test naming:** `describe("eventReducer")` / `it("accumulates streamed text into one assistant message")` — the behavior describes the postcondition asserted, not the input.
 - **Formatting:** keep it consistent (2-space indent, double quotes, semicolons — match existing files). If a formatter/linter is added later, run it before commit.
 - **Comments explain WHY, not WHAT.** The constraint, the surprising-but-correct invariant, the wire quirk (e.g. "compactRun 409s mid-turn, so the button is gated on awaiting_input"). Don't narrate the next line.
 - **No dead shims.** Delete unused code; don't keep stubs or "deprecated, ignored" branches.
 
+## Releases
+
+Three npm packages are published from this repo by `.github/workflows/publish.yml`. Each is published at the version in its own `package.json`, and skipped when that version is already on npm.
+
+| Package | Version lives in | Tag that publishes it |
+|---|---|---|
+| `@loomboard/chat` | `package.json` | `v<version>` |
+| `@loomboard/app` | `cli/package.json` | `v<version>` |
+| `@loomboard/workflow` | `packages/workflow/package.json` | `workflow-v<version>` |
+
+- **A `v*` tag does more than publish:** it also runs `release.yml`, which builds the desktop installers and the extension zip and cuts a GitHub release. A `workflow-v*` tag publishes the canvas package and nothing else.
+- **To release a package:** bump its version in a PR, merge, then push the matching tag on `main`. The workflow fails if the tag does not match the package's version.
+- **Publishing cannot be taken back.** Never push a release tag or run the Publish workflow without the user asking for that release.
+
 ## Cross-repo notes
 
 - **`@loomcycle/client`** is the wire contract. It's published from the loomcycle monorepo (`../loomcycle/adapters/ts`, npm `@loomcycle/client`). Depend on a **pinned version**; bump deliberately. If a feature needs a newer client method, land/publish it in loomcycle first, then bump here.
 - **Wire changes** (new `/v1/*` shapes, new SSE event types) originate in loomcycle. loomboard consumes them; it never assumes a shape the published client doesn't expose. When unsure what an endpoint/event looks like, read `../loomcycle/adapters/ts/src/{client.ts,types.ts}` and `../loomcycle/internal/api/http/`.
-- **RFCs** live in `../loomcycle-internal/doc-internal/rfcs/`. The loomboard RFC is AC (`developer-workflow-board.md`). Keep design decisions reflected there.
+- **RFCs** live in the loomcycle **document store** (user scope), read and written with the loomcycle MCP `document` tool: RFCs under `/loomcycle/rfcs/<slug>`, loomboard plans and requests to the loomcycle team under `/loomboard/plans/<slug>`. Keep design decisions reflected there, and update an RFC to what was built. The older RFCs in `../loomcycle-internal/doc-internal/rfcs/` (RFC AC, `developer-workflow-board.md`, among them) are the earlier record.
+- **Requests to loomcycle** go in `/loomboard/plans/loomcycle-gaps-team-runs` as numbered gaps (`G<n>`), each with evidence at a release tag, what breaks, the ask and acceptance checks. Verify a fix on the deployed runtime and report back in the same document.
 
 ## When in doubt
 
