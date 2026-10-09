@@ -72,6 +72,39 @@ describe("channelNodes — the ACL and the declaration", () => {
   });
 });
 
+describe("channelNodes — a team's own channel", () => {
+  const own = fromDefinition({
+    entry: "write",
+    local: { channels: { journal: { scope: "user" } } },
+    states: [
+      { state: "write", handler: { kind: "agent", agent: "a" } },
+      { state: "note", handler: { kind: "channel", channel: "./journal" } },
+      { state: "tell", handler: { kind: "channel", channel: "journal" } },
+      { state: "done", handler: { kind: "terminal" } },
+    ],
+    transitions: [
+      { from: "write", to: "note", on: "success" },
+      { from: "note", to: "tell", on: "success" },
+      { from: "tell", to: "done", on: "success" },
+    ],
+  });
+  const find = (views: ReturnType<typeof channelNodes>, name: string) => views.find((v) => v.channel === name)!;
+
+  it("takes its counts from the team's own listing, by its local name", () => {
+    const views = channelNodes(own, [], [{ name: "journal", scope: "user", message_count: 3, held_count: 1 }]);
+    expect(find(views, "./journal").info).toEqual({ name: "journal", scope: "user", message_count: 3, held_count: 1 });
+    expect(find(views, "./journal").declared).toBe(true);
+  });
+
+  it("never takes them from a global channel of the same name, or the reverse", () => {
+    const views = channelNodes(own, [{ name: "journal", scope: "tenant", message_count: 9 }], [{ name: "journal", scope: "user", message_count: 3 }]);
+    expect(find(views, "./journal").info?.message_count).toBe(3);
+    expect(find(views, "journal").info?.message_count).toBe(9);
+    // With no listing of the team's own, the global one is not borrowed.
+    expect(find(channelNodes(own, [{ name: "journal", scope: "tenant", message_count: 9 }]), "./journal").info).toBeUndefined();
+  });
+});
+
 describe("channelNodes — where they are drawn", () => {
   it("auto-places an unplaced channel above the middle of what it connects", () => {
     // inbox (sorted first) is read only by intake at (0,0): directly above it.

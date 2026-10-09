@@ -282,6 +282,15 @@ export interface WorkflowDataLayer {
 
   /** Declared channels, for the publish composer's pre-flight (C7). */
   listChannels?(): Promise<ChannelInfo[]>;
+  /** The SAVED team's own channels (`./name`, RFC DV), each under its local
+   *  name (`journal`), with its counts (loomcycle 1.108). The runtime keeps
+   *  these out of `listChannels`. Optional: without it the canvas shows no
+   *  backlog for a team's own channel. */
+  listTeamChannels?(team: string): Promise<ChannelInfo[]>;
+  /** Read one of the team's own channels without consuming anything. `name`
+   *  is the local name. Optional: without it the Output panel says the
+   *  channel cannot be read from outside the team. */
+  peekTeamChannel?(team: string, name: string, opts: { max?: number }): Promise<ChannelMessage[]>;
 
   /** Publish one message to a channel — how an SDLC run actually starts.
    *
