@@ -23,17 +23,28 @@ import type { SavedTeam, TeamCheck, WorkflowDataLayer } from "./types";
 // save sends:
 //   - the stale-parent check (RFC CZ decision 6): a save is refused when the
 //     team's ACTIVE version is no longer the one this document last saw,
-//     rather than silently overwriting whoever moved it. A save here does not
-//     move it: loomcycle keeps saving a version and putting it in force
-//     apart, so the active version stays where it was unless the host
-//     promotes what it saves;
+//     rather than silently overwriting whoever moved it;
+//   - a save is made the team's active version (the owner's decision,
+//     2026-10-09): loomcycle's fork does not do that — saving a version and
+//     putting it in force are two calls — so the document promotes what it
+//     saved. A host that gives no `promoteTeam` is left to its own fork;
 //   - forkOverlay (lib/fork.ts): a section the draft dropped is cleared
 //     against that active version — the one the fork merges over.
 //
 // A document can also start from a TEMPLATE instead of a stored team (RFC DX
 // phase 4). It has no name and no parent until `saveAs` creates it.
 
-export type SaveResult = { ok: true; saved: SavedTeam } | { ok: false; error: string };
+export type SaveResult =
+  | {
+      ok: true;
+      saved: SavedTeam;
+      /** True: the saved version is now the team's active one. False: making
+       *  it so failed (`activeError`). Absent: the host gave no way to promote,
+       *  and whether its own fork did is the host's to know. */
+      active?: boolean;
+      activeError?: string;
+    }
+  | { ok: false; error: string };
 export type CheckResult = { ok: true; check: TeamCheck } | { ok: false; error: string };
 
 export interface TeamDocument {
@@ -207,7 +218,17 @@ export function useTeamDocument(
       // The saved graph IS the new baseline, so a subsequent save is not a
       // no-op fork of a stale parent.
       setModel((m) => (m ? { ...m, layoutDirty: false } : m));
-      return { ok: true, saved };
+      // Put it in force. The version exists either way, so a failed promote
+      // is reported beside a save that DID happen, not as a failed save.
+      if (!dataLayer.promoteTeam) return { ok: true, saved };
+      try {
+        await dataLayer.promoteTeam(saved.def_id);
+      } catch (e) {
+        return { ok: true, saved, active: false, activeError: msg(e) };
+      }
+      activeSeen.current = saved.def_id;
+      setActiveDefId(saved.def_id);
+      return { ok: true, saved, active: true };
     } catch (e) {
       return { ok: false, error: `Save failed: ${msg(e)}` };
     }

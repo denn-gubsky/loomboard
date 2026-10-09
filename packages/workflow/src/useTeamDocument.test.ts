@@ -90,6 +90,38 @@ describe("useTeamDocument", () => {
     expect(r2!).toMatchObject({ ok: true, saved: { def_id: "d3" } });
   });
 
+  it("makes the version it saved the team's active one", async () => {
+    const active: TeamDefDetail = { def_id: "d1", name: "blog", version: 1, definition: def };
+    const forkTeam = vi.fn(async () => ({ def_id: "d2", name: "blog", version: 2 }));
+    // As the runtime: only a promote moves the active version.
+    const promoteTeam = vi.fn(async (defId: string) => void (active.def_id = defId));
+    const { l } = layer({ getActiveTeamDef: async () => active, forkTeam, promoteTeam });
+    const { result } = renderHook(() => useTeamDocument(l, { teamName: "blog" }));
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    act(() => result.current.setModel((m) => (m ? { ...m, varsPatch: { tone: "warm" } } : m)));
+    let r: Awaited<ReturnType<typeof result.current.save>>;
+    await act(async () => void (r = await result.current.save()));
+    expect(r!).toEqual({ ok: true, saved: { def_id: "d2", name: "blog", version: 2 }, active: true });
+    expect(promoteTeam).toHaveBeenCalledWith("d2");
+    await waitFor(() => expect(result.current.activeDefId).toBe("d2"));
+    // And the next save forks from it without a false "moved on".
+    act(() => result.current.setModel((m) => (m ? { ...m, varsPatch: { tone: "dry" } } : m)));
+    expect(await result.current.save()).toMatchObject({ ok: true, active: true });
+  });
+
+  it("reports a version that was saved but could not be made active, as a save that happened", async () => {
+    const forkTeam = vi.fn(async () => ({ def_id: "d2", name: "blog", version: 2 }));
+    const promoteTeam = vi.fn(async () => Promise.reject(new Error("403 insufficient_scope")));
+    const active: TeamDefDetail = { def_id: "d1", name: "blog", version: 1, definition: def };
+    const { l } = layer({ getActiveTeamDef: async () => active, forkTeam, promoteTeam });
+    const { result } = renderHook(() => useTeamDocument(l, { teamName: "blog" }));
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    let r: Awaited<ReturnType<typeof result.current.save>>;
+    await act(async () => void (r = await result.current.save()));
+    expect(r!).toEqual({ ok: true, saved: { def_id: "d2", name: "blog", version: 2 }, active: false, activeError: "403 insufficient_scope" });
+    expect(result.current).toMatchObject({ parentDefId: "d2", unsaved: false });
+  });
+
   it("still refuses after its own save when someone else has promoted another version", async () => {
     const active: TeamDefDetail = { def_id: "d1", name: "blog", version: 1, definition: def };
     const forkTeam = vi.fn(async () => ({ def_id: "d2", name: "blog", version: 2 }));
