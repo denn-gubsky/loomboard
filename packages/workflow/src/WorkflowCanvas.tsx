@@ -92,7 +92,7 @@ import {
 } from "./lib/session";
 import { StateNode } from "./nodes/StateNode";
 import { contentKey, handlerChannels, handlerOf } from "./lib/model";
-import { nextDecisionEdge, routeEdge } from "./lib/decision";
+import { decisionTaken, nextDecisionEdge, routeEdge } from "./lib/decision";
 import { DecisionQuestionsEditor } from "./inspector/DecisionQuestionsEditor";
 import { newStartKey, startAttempt, startPrint, type StartAttempt } from "./lib/startKey";
 import { checkSummary, unlistedIssues } from "./lib/check";
@@ -384,6 +384,14 @@ function WorkflowCanvasInner({
   // The End node the result belongs on: the one the runtime says the walk
   // reached (G14), so two endings of one team stay apart.
   const endedAt = result && result.walkRunId === walk?.walkRunId ? result.terminal : undefined;
+  // Which way the walk went from a decision state, told from the states it
+  // reached: the ones that started a run, and the End it finished at.
+  const decisionWent = (stateId: string) => {
+    if (!model || !walk) return undefined;
+    const reached = new Set<string>(endedAt ? [endedAt] : []);
+    for (const r of walk.members.values()) if (r.state) reached.add(r.state);
+    return decisionTaken(model.edges.filter((e) => e.from === stateId), reached);
+  };
 
   // The team's output channels (M3b). Keyed by what the panel uses, so an
   // ordinary graph edit — which rebuilds every view — does not re-peek them.
@@ -1357,6 +1365,7 @@ function WorkflowCanvasInner({
                     rows={rowsForState(walk, selected.id)}
                     readRun={dataLayer.readRun}
                     readRunPrompt={dataLayer.readRunPrompt}
+                    noRuns={selected.kind === "decision" ? <DecisionWalkNote taken={decisionWent(selected.id)} /> : undefined}
                   />
                 </>
               ) : undefined
@@ -1437,6 +1446,29 @@ function WorkflowCanvasInner({
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+/** What Run mode says about a decision state, which starts no run. */
+function DecisionWalkNote({ taken }: { taken?: { on: string; to: string; answer?: string } }) {
+  return (
+    <div className="lb-wf-team__hint" data-testid="decision-walk-note">
+      <p>A decision node starts no run: the walk asks a decision model itself.</p>
+      {taken && (
+        <p>
+          {taken.answer !== undefined ? (
+            <>
+              It answered <code>{taken.answer}</code>: the walk went on to <code>{taken.to}</code>.
+            </>
+          ) : (
+            <>
+              The walk went on to <code>{taken.to}</code> by its <code>{taken.on}</code> transition.
+            </>
+          )}
+        </p>
+      )}
+      <p>The answer's probabilities are not on the walk's record yet; the runtime will report them in a later release.</p>
     </div>
   );
 }

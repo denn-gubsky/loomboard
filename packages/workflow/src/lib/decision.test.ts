@@ -4,6 +4,7 @@ import {
   ANY_MODEL,
   canRoute,
   choiceOptions,
+  decisionTaken,
   freeName,
   levelsOf,
   newQuestion,
@@ -188,6 +189,28 @@ describe("editing a decision's questions — each edit is a patch that keeps wha
     expect(levelsOf(score)).toEqual(["none", "some", "all"]);
     expect(withSide(noul, "true", "needs a reply now").criteria).toEqual({ true: "needs a reply now" });
     expect("criteria" in withSide(withSide(noul, "true", "x"), "true", "")).toBe(false);
+  });
+});
+
+describe("decisionTaken — which way a walk went from a decision, told from where it has been", () => {
+  const edges = [
+    { on: "conditional:billing", to: "billing-desk" },
+    { on: "conditional:support", to: "support-desk" },
+    { on: "success", to: "catch-all" },
+  ];
+
+  it("names the answer when exactly one of its transitions leads somewhere the walk reached", () => {
+    expect(decisionTaken(edges, new Set(["billing-desk"]))).toEqual({ on: "conditional:billing", to: "billing-desk", answer: "billing" });
+  });
+
+  it("names no answer for the success fallback: it took whichever answers have no edge of their own", () => {
+    expect(decisionTaken(edges, new Set(["catch-all"]))).toEqual({ on: "success", to: "catch-all" });
+  });
+
+  it("says nothing when the walk reached none of them, or more than one", () => {
+    expect(decisionTaken(edges, new Set(["elsewhere"]))).toBeUndefined();
+    expect(decisionTaken(edges, new Set(["billing-desk", "support-desk"]))).toBeUndefined();
+    expect(decisionTaken([], new Set(["x"]))).toBeUndefined();
   });
 });
 

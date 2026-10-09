@@ -280,3 +280,29 @@ export function withSide(q: JsonObject, side: "true" | "false", text: string): J
   return Object.keys(cur).length ? { ...rest, criteria: cur } : rest;
 }
 
+// ---- a decision state in a walk ----
+
+/** Which way a walk went from a decision state, when that can be told from
+ *  where the walk has been.
+ *
+ *  A decision state starts no run, so nothing on the walk's stream speaks for
+ *  it, and a detached walk's record keeps no step — the model's answer itself
+ *  is not readable until the runtime reports it (loomcycle RFC ED phase 2).
+ *  What IS known is which states the walk reached. If exactly one of the
+ *  state's transitions leads to one of them, that is the transition it took:
+ *  its label names the answer, unless it was the `success` fallback.
+ *
+ *  Undefined when none or more than one was reached (a loop back through the
+ *  node, say): then nothing can be said. */
+export function decisionTaken(
+  edges: readonly { on: string; to: string }[],
+  reached: ReadonlySet<string>,
+): { on: string; to: string; answer?: string } | undefined {
+  const taken = edges.filter((e) => reached.has(e.to));
+  // Two labels to one target are still one way out.
+  if (taken.length !== 1) return undefined;
+  const [e] = taken;
+  const answer = e.on.startsWith("conditional:") ? e.on.slice("conditional:".length) : undefined;
+  return { on: e.on, to: e.to, ...(answer !== undefined ? { answer } : {}) };
+}
+
