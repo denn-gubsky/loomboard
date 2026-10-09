@@ -62,6 +62,46 @@ describe("useTeamDocument", () => {
     expect(result.current).toMatchObject({ parentDefId: "d2", unsaved: false });
   });
 
+  it("saves and checks again after its own save, on a runtime that does not make a saved version active", async () => {
+    // Regression: loomcycle's fork does not promote. The stale-parent check
+    // compared the ACTIVE version with the version just SAVED, so after one
+    // save every later save and check was refused as "this team moved on".
+    const active: TeamDefDetail = { def_id: "d1", name: "blog", version: 1, definition: def };
+    let n = 1;
+    const forkTeam = vi.fn(async () => ({ def_id: `d${++n}`, name: "blog", version: n }));
+    const verifyTeam = vi.fn(async () => ({ valid: true, runnable: true, issues: [] }));
+    const { l } = layer({ getActiveTeamDef: async () => active, forkTeam, verifyTeam });
+    const { result } = renderHook(() => useTeamDocument(l, { teamName: "blog" }));
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    act(() => result.current.setModel((m) => (m ? { ...m, varsPatch: { tone: "warm" } } : m)));
+    let r1: Awaited<ReturnType<typeof result.current.save>>;
+    await act(async () => void (r1 = await result.current.save()));
+    expect(r1!).toMatchObject({ ok: true, saved: { def_id: "d2" } });
+    expect(result.current.parentDefId).toBe("d2");
+
+    expect(await result.current.check()).toMatchObject({ ok: true });
+    // Checked as a fork of what a save forks: the active version.
+    expect((verifyTeam.mock.calls[0] as unknown as [string, { parentDefId: string }])[1].parentDefId).toBe("d1");
+
+    act(() => result.current.setModel((m) => (m ? { ...m, varsPatch: { tone: "dry" } } : m)));
+    let r2: Awaited<ReturnType<typeof result.current.save>>;
+    await act(async () => void (r2 = await result.current.save()));
+    expect(r2!).toMatchObject({ ok: true, saved: { def_id: "d3" } });
+  });
+
+  it("still refuses after its own save when someone else has promoted another version", async () => {
+    const active: TeamDefDetail = { def_id: "d1", name: "blog", version: 1, definition: def };
+    const forkTeam = vi.fn(async () => ({ def_id: "d2", name: "blog", version: 2 }));
+    const { l } = layer({ getActiveTeamDef: async () => active, forkTeam });
+    const { result } = renderHook(() => useTeamDocument(l, { teamName: "blog" }));
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    await act(async () => void (await result.current.save()));
+    active.def_id = "someone-else";
+    expect(await result.current.save()).toMatchObject({ ok: false, error: expect.stringMatching(/moved on/) });
+    expect(forkTeam).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses to save over a version someone else promoted meanwhile", async () => {
     const { l, forkTeam, move } = layer();
     const { result } = renderHook(() => useTeamDocument(l, { teamName: "blog" }));

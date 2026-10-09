@@ -21,9 +21,12 @@ import type { SavedTeam, TeamCheck, WorkflowDataLayer } from "./types";
 //
 // Saving is a FORK of the version that was loaded. Two guards decide what a
 // save sends:
-//   - the stale-parent check (RFC CZ decision 6): a save whose parent is no
-//     longer the team's active version is refused rather than silently
-//     overwriting whoever moved it;
+//   - the stale-parent check (RFC CZ decision 6): a save is refused when the
+//     team's ACTIVE version is no longer the one this document last saw,
+//     rather than silently overwriting whoever moved it. A save here does not
+//     move it: loomcycle keeps saving a version and putting it in force
+//     apart, so the active version stays where it was unless the host
+//     promotes what it saves;
 //   - forkOverlay (lib/fork.ts): a section the draft dropped is cleared
 //     against that active version — the one the fork merges over.
 //
@@ -73,6 +76,11 @@ export function useTeamDocument(
   // Refs, not state: a save updates them and then re-renders through
   // setModel, and a click handler must read the value as of the click.
   const parentDefId = useRef<string | null>(null);
+  // The team's ACTIVE version as this document last saw it — what a fork
+  // merges over, and what "someone else moved the team" is judged against.
+  // Not `parentDefId`: after a save that is the version just saved, which the
+  // runtime does not make active.
+  const activeSeen = useRef<string | null>(null);
   const name = useRef<string | null>(null);
   // The CONTENT last loaded or saved (lib/model contentKey). Run starts that
   // saved version, so any difference means Start would not run what is shown.
@@ -90,6 +98,7 @@ export function useTeamDocument(
           let next = fromDefinition(template);
           if (needsAutoLayout(next)) next = withLayout(next, autoLayout(next), false);
           parentDefId.current = null;
+          activeSeen.current = null;
           name.current = null;
           // Nothing is saved yet, so every draft of it is unsaved.
           savedKey.current = "";
@@ -109,6 +118,9 @@ export function useTeamDocument(
         // a team that has no stored layout must never fork it.
         if (needsAutoLayout(next)) next = withLayout(next, autoLayout(next), false);
         parentDefId.current = detail.def_id;
+        // Opened by name, this IS the active version. Opened by id it may not
+        // be; the listing below says which one is.
+        activeSeen.current = defId ? null : detail.def_id;
         name.current = detail.name;
         // The promoted pointer, for C7's "a publish runs the PROMOTED version"
         // warning. Best-effort: a host without listTeams simply loses the
@@ -116,7 +128,10 @@ export function useTeamDocument(
         dataLayer
           .listTeams()
           .then((list) => {
-            if (!cancelled) setActiveDefId(list.find((t) => t.name === detail.name)?.active_def_id);
+            if (cancelled) return;
+            const active = list.find((t) => t.name === detail.name)?.active_def_id;
+            setActiveDefId(active);
+            activeSeen.current ??= active ?? null;
           })
           .catch(() => undefined);
         savedKey.current = contentKey(next);
@@ -159,7 +174,9 @@ export function useTeamDocument(
       // Stale-parent check. Two operators editing one team both fork from the
       // same parent, and without this the second silently wins.
       const current = await dataLayer.getActiveTeamDef(team);
-      if (parentDefId.current && current.def_id !== parentDefId.current) {
+      // Moved by someone else: neither the version last seen active, nor this
+      // document's own last save (a host may promote what it saves).
+      if (activeSeen.current && current.def_id !== activeSeen.current && current.def_id !== parentDefId.current) {
         return {
           error:
             `This team moved on while you were editing (active version is now ${current.def_id}). ` +
@@ -169,6 +186,7 @@ export function useTeamDocument(
       // The fork merges over the ACTIVE version, so that is what a dropped
       // section is cleared against — not what was loaded, which after one
       // save in this session is no longer the parent (lib/fork.ts).
+      activeSeen.current = current.def_id;
       const d = current.definition;
       const parent = typeof d === "object" && d !== null && !Array.isArray(d) ? (d as JsonObject) : {};
       return { overlay: forkOverlay(parent, toDefinition(draft)), parentDefId: current.def_id };
@@ -209,6 +227,8 @@ export function useTeamDocument(
         // one from.
         const saved = await dataLayer.createTeam(newName, viewDefinition(model));
         parentDefId.current = saved.def_id;
+        // A create promotes what it makes.
+        activeSeen.current = saved.def_id;
         name.current = saved.name;
         savedKey.current = contentKey(model);
         // A create promotes what it makes.

@@ -158,6 +158,22 @@ describe("WorkflowCanvas — Check with the runtime (RFC DX)", () => {
     expect(verifyTeam.mock.calls[0][1].overlay).toEqual(forkTeam.mock.calls[0][1]);
   });
 
+  it("checks after a save, and again on demand, when the runtime leaves the saved version inactive", async () => {
+    // Regression: seen on TrueNAS. loomcycle's fork does not promote, and the
+    // canvas then took its own save for someone else's change — no check after
+    // the save, and "this team moved on" on the next Check or Save.
+    const forkTeam = vi.fn(async (_n: string, _d: unknown): Promise<SavedTeam> => ({ def_id: "d2", name: "blog", version: 2 }));
+    const { l, verifyTeam } = layer(unrunnable, { forkTeam });
+    render(<WorkflowCanvas dataLayer={l} teamName="blog" />);
+    await screen.findByTestId("node-write");
+    fireEvent.click(screen.getByRole("button", { name: "Auto-layout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save new version" }));
+    expect((await screen.findByTestId("runtime-check")).textContent).toMatch(/a walk could not run it/);
+    fireEvent.click(screen.getByRole("button", { name: "Check" }));
+    await waitFor(() => expect(verifyTeam).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/moved on while you were editing/)).toBeNull();
+  });
+
   it("shows why a check could not be made, and no stale answer", async () => {
     const { l } = layer(unrunnable, { verifyTeam: vi.fn(async () => Promise.reject(new Error("503 runtime paused"))) });
     render(<WorkflowCanvas dataLayer={l} teamName="blog" />);
