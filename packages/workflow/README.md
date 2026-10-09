@@ -67,6 +67,7 @@ Five methods are required. Each of the others turns on one part of the canvas, a
 | Method | Needed for |
 |---|---|
 | `listTeams`, `getActiveTeamDef`, `getTeamDef`, `createTeam`, `forkTeam` | Opening and saving a team. **Required.** |
+| `promoteTeam` | Making a saved version the team's active one. See below. |
 | `verifyTeam` | The Check button (loomcycle 1.105 or later). |
 | `listAgents` | Agent pickers. |
 | `runTeamDetached`, `watchWalk`, `cancelWalk` | Run mode: start a walk, follow it, stop it. |
@@ -77,7 +78,8 @@ Five methods are required. Each of the others turns on one part of the canvas, a
 
 Two things the canvas relies on:
 
-- **`getActiveTeamDef(name)` returns the team's active version**, and after `forkTeam` that is the version just saved. A save first checks that the active version is still the one the canvas loaded or last saved, and refuses if someone else moved it.
+- **Save means "the team now runs this".** loomcycle's fork leaves a new version inactive, so after `forkTeam` the canvas calls `promoteTeam(defId)` with the version it saved. Leave `promoteTeam` out only if your `forkTeam` already makes the new version active.
+- **`getActiveTeamDef(name)` returns the team's active version.** A save first checks that it is still the one the canvas last saw, and refuses if someone else moved it.
 - **`createTeam` under a name that already exists is not refused by loomcycle**; it becomes that team's next active version. The canvas checks `listTeams` first and refuses a taken name itself.
 
 A complete binding to `@loomcycle/client` is in the loomboard repo: [`src/lib/workflowCanvasData.ts`](https://github.com/denn-gubsky/loomboard/blob/main/src/lib/workflowCanvasData.ts).
