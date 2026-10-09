@@ -75,6 +75,21 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
     // saves, so "Save" means the team now runs this.
     promoteTeam: (defId) => client.promoteTeam(defId),
 
+    // Decision models (loomcycle 1.107): which ones a call may name, and one
+    // call. `decide` is a real, metered call; a refusal rejects with the
+    // runtime's own code and text, which the canvas shows as they are.
+    async listDecisionModels() {
+      const { default: def, models } = await client.listDecisionModels();
+      return (models ?? []).map((m) => ({
+        name: m.name,
+        default: m.name === def,
+        served: m.model,
+        limits: { maxQuestions: m.limits.max_questions, minOptions: m.limits.min_options, maxOptions: m.limits.max_options },
+      }));
+    },
+
+    decide: (call) => client.decide(call as Parameters<typeof client.decide>[0]),
+
     // The pre-save check (loomcycle 1.105): the overlay is what the save sends.
     verifyTeam: (name, draft) =>
       client.verifyTeam(name, {
