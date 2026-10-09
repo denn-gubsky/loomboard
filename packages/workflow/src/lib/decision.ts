@@ -139,6 +139,147 @@ export function nextDecisionEdge(handler: JsonObject, used: ReadonlySet<string>)
   return used.has("success") ? undefined : "success";
 }
 
+// ---- editing a decision handler's questions ----
+//
+// Each returns a PATCH for the handler (`undefined` removes a key), so the
+// questions stay the definition's own JSON and whatever an edit does not own
+// — a field a newer runtime added to a question, the author's key order —
+// survives it.
+
+export type HandlerPatch = Record<string, Json | undefined>;
+
+function questionMap(handler: JsonObject): JsonObject {
+  return isObj(handler.questions) ? handler.questions : {};
+}
+
+/** The handler's questions in the order they are written. */
+export function questionsOf(handler: JsonObject): [string, JsonObject][] {
+  return Object.entries(questionMap(handler)).map(([name, q]) => [name, isObj(q) ? q : {}]);
+}
+
+/** A well-formed start for a question of `type`. A choice needs two options
+ *  and a score two levels, so each starts with two obvious placeholders. */
+export function newQuestion(type: QuestionType): JsonObject {
+  switch (type) {
+    case "choice":
+      return { type, instructions: "", criteria: { "option-1": null, "option-2": null } };
+    case "score":
+      return { type, instructions: "", criteria: ["lowest", "highest"] };
+    default:
+      return { type, instructions: "" };
+  }
+}
+
+/** The first of `base`, `base-2`, `base-3`… that `taken` does not hold. */
+export function freeName(base: string, taken: readonly string[]): string {
+  if (!taken.includes(base)) return base;
+  for (let i = 2; ; i++) if (!taken.includes(`${base}-${i}`)) return `${base}-${i}`;
+}
+
+export function addQuestion(handler: JsonObject, name: string, type: QuestionType): HandlerPatch {
+  const questions = questionMap(handler);
+  if (!name || name in questions) return {};
+  return { questions: { ...questions, [name]: newQuestion(type) } };
+}
+
+/** Replace one question, in place. */
+export function setQuestion(handler: JsonObject, name: string, q: JsonObject): HandlerPatch {
+  const questions = questionMap(handler);
+  if (!(name in questions)) return {};
+  return { questions: Object.fromEntries(Object.entries(questions).map(([k, v]) => [k, k === name ? q : v])) };
+}
+
+/** A question of another type: its instructions kept, its criteria replaced
+ *  by that type's start, since one type's criteria are never another's. When
+ *  it was the routed question and can no longer route, the route goes too. */
+export function retypeQuestion(handler: JsonObject, name: string, type: QuestionType): HandlerPatch {
+  const cur = questionMap(handler)[name];
+  if (!isObj(cur) || cur.type === type) return {};
+  const { criteria: _c, ...rest } = cur;
+  const next: JsonObject = { ...rest, ...newQuestion(type), instructions: typeof cur.instructions === "string" ? cur.instructions : "" };
+  const patch = setQuestion(handler, name, next);
+  if (handler.route === name) {
+    if (type === "score") Object.assign(patch, { route: undefined, threshold: undefined });
+    else if (type !== "noul") patch.threshold = undefined;
+  }
+  return patch;
+}
+
+// `$.answers.<name>` and whatever follows it, as a capture path names a
+// question's answer.
+function repoint(path: Json | undefined, from: string, to: string): Json | undefined {
+  if (typeof path !== "string") return path;
+  const prefix = `$.answers.${from}`;
+  if (path !== prefix && !path.startsWith(`${prefix}.`) && !path.startsWith(`${prefix}[`)) return path;
+  return `$.answers.${to}${path.slice(prefix.length)}`;
+}
+
+/** Rename a question, keeping its place — and keeping what points at it: the
+ *  `route`, and every `capture` path into its answer. */
+export function renameQuestion(handler: JsonObject, from: string, to: string): HandlerPatch {
+  const questions = questionMap(handler);
+  if (!to || from === to || !(from in questions) || to in questions) return {};
+  const patch: HandlerPatch = {
+    questions: Object.fromEntries(Object.entries(questions).map(([k, v]) => [k === from ? to : k, v])),
+  };
+  if (handler.route === from) patch.route = to;
+  if (isObj(handler.capture)) {
+    const capture = Object.fromEntries(Object.entries(handler.capture).map(([k, v]) => [k, repoint(v, from, to) as Json]));
+    if (JSON.stringify(capture) !== JSON.stringify(handler.capture)) patch.capture = capture;
+  }
+  return patch;
+}
+
+/** Remove a question. If it routed the state, the state routes on nothing. */
+export function removeQuestion(handler: JsonObject, name: string): HandlerPatch {
+  const questions = questionMap(handler);
+  if (!(name in questions)) return {};
+  const patch: HandlerPatch = { questions: Object.fromEntries(Object.entries(questions).filter(([k]) => k !== name)) };
+  if (handler.route === name) Object.assign(patch, { route: undefined, threshold: undefined });
+  return patch;
+}
+
+/** Route on `name`, or on nothing. A threshold belongs to a routed yes/no
+ *  question and is dropped with it. */
+export function setRoute(handler: JsonObject, name: string | undefined): HandlerPatch {
+  const q = name === undefined ? undefined : questionMap(handler)[name];
+  const patch: HandlerPatch = { route: name };
+  if (!(isObj(q) && q.type === "noul") && handler.threshold !== undefined) patch.threshold = undefined;
+  return patch;
+}
+
+/** A question that may route: a choice or a yes/no. */
+export function canRoute(q: JsonObject): boolean {
+  return q.type === "choice" || q.type === "noul";
+}
+
+/** A choice's options in the order written, each with its description
+ *  ("" for an option that explains itself). */
+export function optionsOf(q: JsonObject): [string, string][] {
+  return isObj(q.criteria) ? Object.entries(q.criteria).map(([k, v]) => [k, typeof v === "string" ? v : ""]) : [];
+}
+
+/** A choice with its options replaced. An empty description is written as
+ *  null: the option explains itself. */
+export function withOptions(q: JsonObject, options: readonly (readonly [string, string])[]): JsonObject {
+  return { ...q, criteria: Object.fromEntries(options.map(([k, d]) => [k, d === "" ? null : d])) };
+}
+
+/** A score's levels, lowest first. */
+export function levelsOf(q: JsonObject): string[] {
+  return Array.isArray(q.criteria) ? q.criteria.map((v) => (typeof v === "string" ? v : "")) : [];
+}
+
+/** A yes/no question with one side's description set, or cleared when empty.
+ *  With neither side described there are no criteria at all. */
+export function withSide(q: JsonObject, side: "true" | "false", text: string): JsonObject {
+  const cur = isObj(q.criteria) ? { ...q.criteria } : {};
+  if (text) cur[side] = text;
+  else delete cur[side];
+  const { criteria: _c, ...rest } = q;
+  return Object.keys(cur).length ? { ...rest, criteria: cur } : rest;
+}
+
 // ---- a decision state in a walk ----
 
 /** Which way a walk went from a decision state, when that can be told from

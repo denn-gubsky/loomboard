@@ -69,6 +69,14 @@ export type { Finding, FindingLevel } from "./lib/validate";
 
 export { autoLayout, needsAutoLayout, COLUMN_WIDTH, ROW_HEIGHT } from "./lib/layout";
 
+// Decision models (loomcycle 1.107 / 1.109): a decision state's questions and
+// their checks, and a model's answer as rows to show. Exported for a host
+// that tries questions against a model outside the canvas.
+export { ANY_MODEL, QUESTION_TYPES, questionFaults, routeAnswers, routeEdge } from "./lib/decision";
+export type { DecisionLimits, QuestionFault, QuestionType } from "./lib/decision";
+export { answerRows, percent, scoreText } from "./lib/decisionAnswer";
+export type { AnswerRow } from "./lib/decisionAnswer";
+
 // Building a team by hand (RFC DX phase 4): what a host's "New team" offers,
 // and the name rule it can apply before the canvas does.
 export { TEAM_TEMPLATES, teamNameError } from "./lib/newTeam";
@@ -204,6 +212,9 @@ export type {
   ChannelInfo,
   ChunkContent,
   DocumentTarget,
+  DecisionCall,
+  DecisionCallAnswer,
+  DecisionModelInfo,
   DetachedRun,
   PublishOutcome,
   RunChatTarget,
