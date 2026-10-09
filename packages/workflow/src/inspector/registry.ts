@@ -34,6 +34,7 @@ const KIND_OPTIONS = [
   "channel",
   "vars",
   "input",
+  "decision",
 ] as const;
 
 const FIELDS: readonly FieldSpec[] = [
@@ -45,7 +46,8 @@ const FIELDS: readonly FieldSpec[] = [
     options: KIND_OPTIONS,
     hint:
       "What this node does when the walk enters it. agent runs one; parallel fans out; " +
-      "consolidator judges the previous output and picks the outgoing edge; terminal ends the walk.",
+      "consolidator judges the previous output and picks the outgoing edge; decision asks a decision " +
+      "model typed questions and routes on an answer; terminal ends the walk.",
     unsetMeans: "invalid — every node needs a kind",
   },
 
@@ -153,6 +155,77 @@ const FIELDS: readonly FieldSpec[] = [
       "interpret it — it rides the definition so a team is self-describing and a headless " +
       "caller sees the same contract the canvas does.",
     unsetMeans: "the run takes a plain text input",
+  },
+
+  // ---- the decision state (loomcycle 1.109, RFC ED) ----
+  //
+  // It asks a decision model typed questions about `about`, binds the answers
+  // through `capture`, and takes the transition its routed question's answer
+  // selects. It starts no agent run.
+  {
+    key: "about",
+    label: "About",
+    group: "Decision",
+    type: "json",
+    hint:
+      "The JSON object the questions are about — all the model reads. A string value may use " +
+      "${var.*}, ${now.*}, ${team.*} and {{thread.output}} (what the previous node handed over); " +
+      "no other {{…}} placeholder.",
+    unsetMeans: "required on a decision node",
+  },
+  {
+    key: "questions",
+    label: "Questions",
+    group: "Decision",
+    type: "json",
+    hint:
+      "Name → question. A choice has criteria {option: description or null}; a noul (yes/no) has " +
+      "optional criteria describing \"true\" and \"false\"; a score has criteria as a list of level " +
+      "descriptions, lowest first. Every question needs instructions.",
+    unsetMeans: "required on a decision node — at least one question",
+  },
+  {
+    key: "route",
+    label: "Route on",
+    group: "Decision",
+    type: "text",
+    placeholder: "route",
+    hint:
+      "The question whose answer picks the outgoing transition: `conditional:<option>` for a choice, " +
+      "`conditional:true` / `conditional:false` for a yes/no. A score cannot route. Every answer needs " +
+      "a transition, or the node needs a `success` transition to take the rest.",
+    unsetMeans: "the node advances on `success`, and exists to bind variables",
+  },
+  {
+    key: "threshold",
+    label: "Yes threshold",
+    group: "Decision",
+    type: "float",
+    hint:
+      "For a routed yes/no question: the probability of yes at or above which the answer is `true`. " +
+      "Above 0 and below 1. The model's probabilities are not calibrated.",
+    unsetMeans: "0.5",
+    advanced: true,
+  },
+  {
+    key: "model",
+    label: "Decision model",
+    group: "Decision",
+    type: "text",
+    placeholder: "decide",
+    hint: "One of the operator's decision models. A model this runtime lacks is reported by Check, not refused at save.",
+    unsetMeans: "the operator's default decision model",
+    advanced: true,
+  },
+  {
+    key: "capture",
+    label: "Capture",
+    group: "Decision",
+    type: "kv",
+    hint:
+      "Variable name → a JSONPath into the answer: $.answers.<question>.choice, .noul, .score, " +
+      ".confidence or .probabilities.<option>. This is how an answer reaches later prompts as ${var.<name>}.",
+    unsetMeans: "no answer is kept as a variable",
   },
 
   // ---- the Starter (RFC CY L4) ----
@@ -415,6 +488,7 @@ export const teamHandlerRegistry: DefRegistry = {
     { name: "Sink", hint: "Where results are published." },
     { name: "Data", hint: "What this node pulls out of the message it read." },
     { name: "Variables", hint: "What this node assigns into ${var.*}." },
+    { name: "Decision", hint: "What a decision model is asked, and which answer routes the walk." },
     { name: "Form", hint: "The start form a client renders for this workflow." },
     { name: "Delivery", hint: "Cursor and redelivery semantics." },
     {
@@ -460,6 +534,10 @@ export function fieldsForKind(kind: string): string[] {
       return ["source", "fanout", "prompt", "sink", "binds", "ack", "timeout_ms", ...HOOK_KEYS];
     case "channel":
       return ["channel"];
+    case "decision":
+      // No agent, prompt or hook fields: it asks a model directly and starts
+      // no run, and the runtime refuses each of those on it.
+      return ["about", "questions", "route", "threshold", "model", "capture", "timeout_ms"];
     case "terminal":
       return [];
     default:

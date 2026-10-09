@@ -91,7 +91,8 @@ import {
   statusLabel,
 } from "./lib/session";
 import { StateNode } from "./nodes/StateNode";
-import { contentKey, handlerChannels } from "./lib/model";
+import { contentKey, handlerChannels, handlerOf } from "./lib/model";
+import { nextDecisionEdge } from "./lib/decision";
 import { checkSummary, unlistedIssues } from "./lib/check";
 import type { ChannelInfo, TeamCheck, WorkflowCanvasProps } from "./types";
 
@@ -568,8 +569,16 @@ function WorkflowCanvasInner({
         // same source defaults to a distinct pushback rather than a duplicate
         // `success` the validator would immediately refuse.
         const used = new Set(m.edges.filter((e) => e.from === from).map((e) => e.on));
-        const on = used.has("success") ? `pushback:${c.target}` : "success";
-        if (used.has(on)) return m;
+        // A decision state's edges are its answers: the next one without an
+        // edge, then `success` for the rest. It signals no pushback.
+        const source = m.nodes.find((x) => x.id === from);
+        const on =
+          source?.kind === "decision"
+            ? nextDecisionEdge(handlerOf(source), used)
+            : used.has("success")
+              ? `pushback:${c.target}`
+              : "success";
+        if (on === undefined || used.has(on)) return m;
         return {
           ...m,
           edges: [...m.edges, { from, to: c.target!, on, raw: { from, to: c.target!, on } }],

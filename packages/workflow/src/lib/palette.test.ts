@@ -38,7 +38,7 @@ describe("the palette — what it offers", () => {
     // C12. A Starter and an Input form share a group because both are where
     // work ENTERS — not because they share a shape.
     expect(entriesInGroup("Sources").map((e) => e.id)).toEqual(["starter", "input", "trigger"]);
-    expect(entriesInGroup("Work").map((e) => e.id)).toEqual(["agent", "parallel", "consolidator"]);
+    expect(entriesInGroup("Work").map((e) => e.id)).toEqual(["agent", "parallel", "consolidator", "decision"]);
     expect(entriesInGroup("Data").map((e) => e.id)).toEqual(["variable", "docref", "memref", "vars", "channelref", "publish"]);
     expect(entriesInGroup("End").map((e) => e.id)).toEqual(["terminal"]);
   });
