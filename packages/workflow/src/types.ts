@@ -91,8 +91,12 @@ export interface TeamRunStep {
  *  address. */
 export interface DetachedRun {
   run_id: string;
-  /** Always "running" — the walk has been started, not awaited. */
+  /** "running" for a walk just started. For one the key already held
+   *  (`deduplicated`), whatever state that walk is in now. */
   status?: string;
+  /** This start started nothing: its idempotency key was already held by
+   *  the walk described here. */
+  deduplicated?: boolean;
   name?: string;
   def_id?: string;
 }
@@ -237,6 +241,11 @@ export interface WorkflowDataLayer {
     /** Values for the team's declared variables, for this walk only (RFC DV).
      *  Only those the person changed: a default is not repeated. */
     vars?: Record<string, string>;
+    /** Makes the start safe to retry (loomcycle 1.109): a second start with
+     *  the same key starts nothing and answers with the walk the first one
+     *  started, marked `deduplicated`. The canvas sends one per start and the
+     *  same one on a retry of it. A host on an older runtime may drop it. */
+    idempotencyKey?: string;
   }): Promise<DetachedRun>;
 
   /** The documents a form's document picker offers (`x-loomcycle-picker:
