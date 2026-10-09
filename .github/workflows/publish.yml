@@ -1,12 +1,19 @@
 name: Publish
 
-# Publishes @loomboard/chat (repo root) and @loomboard/app (cli/) to npm.
+# Publishes @loomboard/chat (repo root), @loomboard/app (cli/) and
+# @loomboard/workflow (packages/workflow/) to npm.
 #
-# Trigger: push a version tag (e.g. `git tag v0.1.0 && git push --tags`), or run
-# manually from the Actions tab. Each package is published at the version in its
-# own package.json and SKIPPED if that version is already on npm — so a shared
-# tag can release both, re-runs are safe, and the two packages may diverge in
-# version. `prepack` rebuilds each package's artifacts at publish time; the gate
+# Trigger: push a version tag, or run manually from the Actions tab.
+#   v<version>            publishes @loomboard/chat and @loomboard/app
+#   workflow-v<version>   publishes @loomboard/workflow, and nothing else
+#   manual run            publishes all three
+# The canvas package has its own tag because a `v*` tag also starts release.yml
+# (desktop installers, the extension zip, a GitHub release), which a release of
+# the canvas alone must not.
+#
+# Each package is published at the version in its own package.json and SKIPPED
+# if that version is already on npm — so a shared tag can release both, re-runs
+# are safe, and the packages may diverge in version. `prepack` rebuilds each package's artifacts at publish time; the gate
 # below fails fast so we never publish a red build.
 #
 # One-time setup:
@@ -19,7 +26,7 @@ name: Publish
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "workflow-v*"]
   workflow_dispatch:
 
 permissions:
@@ -49,6 +56,14 @@ jobs:
           REF: ${{ github.ref_name }}
         run: |
           case "$REF" in
+            workflow-v[0-9]*.[0-9]*.[0-9]*)
+              tag="${REF#workflow-v}"
+              wf=$(node -p "require('./packages/workflow/package.json').version")
+              if [ "$tag" != "$wf" ]; then
+                echo "::error::Tag $REF ($tag) does not match @loomboard/workflow ($wf). Bump packages/workflow/package.json before tagging."
+                exit 1
+              fi
+              echo "· tag $REF matches workflow=$wf"; exit 0 ;;
             v[0-9]*.[0-9]*.[0-9]*) tag="${REF#v}" ;;
             *) echo "· $REF is not a vX.Y.Z tag — skipping check"; exit 0 ;;
           esac
@@ -60,14 +75,19 @@ jobs:
           fi
           echo "· tag $REF matches chat=$chat app=$app"
 
-      # Gate: don't publish anything if the build or tests are red. Build BOTH
-      # packages up front so we never publish one and then fail on the other.
+      # Gate: don't publish anything if the build or tests are red. Build every
+      # package up front so we never publish one and then fail on another. The
+      # canvas package has its own tsconfig and tests (see ci.yml).
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:lib
       - run: npm run build:standalone
+      - run: npm -w @loomboard/workflow run typecheck
+      - run: npm -w @loomboard/workflow run test
+      - run: npm -w @loomboard/workflow run build:lib
 
       - name: Publish @loomboard/chat
+        if: github.event_name == 'workflow_dispatch' || !startsWith(github.ref_name, 'workflow-v')
         run: |
           name=$(node -p "require('./package.json').name")
           ver=$(node -p "require('./package.json').version")
@@ -81,7 +101,23 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @loomboard/app
+        if: github.event_name == 'workflow_dispatch' || !startsWith(github.ref_name, 'workflow-v')
         working-directory: cli
+        run: |
+          name=$(node -p "require('./package.json').name")
+          ver=$(node -p "require('./package.json').version")
+          if npm view "$name@$ver" version >/dev/null 2>&1; then
+            echo "· $name@$ver already on npm — skipping"
+          else
+            echo "· publishing $name@$ver"
+            npm publish --provenance --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @loomboard/workflow
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'workflow-v')
+        working-directory: packages/workflow
         run: |
           name=$(node -p "require('./package.json').name")
           ver=$(node -p "require('./package.json').version")
