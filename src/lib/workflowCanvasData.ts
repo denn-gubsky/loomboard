@@ -71,6 +71,10 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
     forkTeam: (name, definition) =>
       client.forkTeam(name, definition as Record<string, unknown>) as Promise<SavedTeam>,
 
+    // A fork leaves the new version inactive; the canvas promotes what it
+    // saves, so "Save" means the team now runs this.
+    promoteTeam: (defId) => client.promoteTeam(defId),
+
     // The pre-save check (loomcycle 1.105): the overlay is what the save sends.
     verifyTeam: (name, draft) =>
       client.verifyTeam(name, {

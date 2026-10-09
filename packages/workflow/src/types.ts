@@ -207,6 +207,11 @@ export interface WorkflowDataLayer {
    *  than mutating in place — a definition other runs may be using is not
    *  ours to overwrite. */
   forkTeam(name: string, definition: unknown): Promise<SavedTeam>;
+  /** Make one version the team's ACTIVE one — what a run of the team by
+   *  name executes. The canvas calls it after every save, because loomcycle's
+   *  fork leaves the new version inactive. Optional: a host whose own
+   *  `forkTeam` already promotes can leave it out. */
+  promoteTeam?(defId: string): Promise<unknown>;
   /** Check an unsaved team with the runtime, writing nothing: `overlay` is
    *  exactly what createTeam / forkTeam would be sent. Optional — without it
    *  the canvas offers no Check, only its own findings. */

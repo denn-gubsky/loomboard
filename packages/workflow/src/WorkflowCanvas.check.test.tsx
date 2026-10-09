@@ -158,6 +158,42 @@ describe("WorkflowCanvas — Check with the runtime (RFC DX)", () => {
     expect(verifyTeam.mock.calls[0][1].overlay).toEqual(forkTeam.mock.calls[0][1]);
   });
 
+  it("checks after a save, and again on demand, when the runtime leaves the saved version inactive", async () => {
+    // Regression: seen on TrueNAS. loomcycle's fork does not promote, and the
+    // canvas then took its own save for someone else's change — no check after
+    // the save, and "this team moved on" on the next Check or Save.
+    const forkTeam = vi.fn(async (_n: string, _d: unknown): Promise<SavedTeam> => ({ def_id: "d2", name: "blog", version: 2 }));
+    const { l, verifyTeam } = layer(unrunnable, { forkTeam });
+    render(<WorkflowCanvas dataLayer={l} teamName="blog" />);
+    await screen.findByTestId("node-write");
+    fireEvent.click(screen.getByRole("button", { name: "Auto-layout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save new version" }));
+    expect((await screen.findByTestId("runtime-check")).textContent).toMatch(/a walk could not run it/);
+    fireEvent.click(screen.getByRole("button", { name: "Check" }));
+    await waitFor(() => expect(verifyTeam).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/moved on while you were editing/)).toBeNull();
+  });
+
+  it("says a saved version is now the active one, or that it was saved and could not be made so", async () => {
+    const ok = layer(unrunnable, { promoteTeam: vi.fn(async () => undefined) });
+    const { unmount } = render(<WorkflowCanvas dataLayer={ok.l} teamName="blog" />);
+    await screen.findByTestId("node-write");
+    fireEvent.click(screen.getByRole("button", { name: "Auto-layout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save new version" }));
+    expect(await screen.findByText("Saved version 2. It is now the team's active version.")).toBeTruthy();
+    unmount();
+
+    const forkTeam = vi.fn(async (_n: string, _d: unknown): Promise<SavedTeam> => ({ def_id: "d2", name: "blog", version: 2 }));
+    const bad = layer(unrunnable, { forkTeam, promoteTeam: vi.fn(async () => Promise.reject(new Error("403 insufficient_scope"))) });
+    render(<WorkflowCanvas dataLayer={bad.l} teamName="blog" />);
+    await screen.findByTestId("node-write");
+    fireEvent.click(screen.getByRole("button", { name: "Auto-layout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save new version" }));
+    expect(
+      await screen.findByText(/Version 2 is saved, but it could not be made the team's active version: 403 insufficient_scope\. The team still runs the version before it\./),
+    ).toBeTruthy();
+  });
+
   it("shows why a check could not be made, and no stale answer", async () => {
     const { l } = layer(unrunnable, { verifyTeam: vi.fn(async () => Promise.reject(new Error("503 runtime paused"))) });
     render(<WorkflowCanvas dataLayer={l} teamName="blog" />);

@@ -799,7 +799,15 @@ function WorkflowCanvasInner({
         setError(r.error);
         return;
       }
-      setStatus(`Saved version ${r.saved.version}.`);
+      // Saving puts the version in force. When it could not, say that the
+      // version exists and the team still runs the one before it.
+      setStatus(r.active ? `Saved version ${r.saved.version}. It is now the team's active version.` : `Saved version ${r.saved.version}.`);
+      if (r.active === false) {
+        setError(
+          `Version ${r.saved.version} is saved, but it could not be made the team's active version: ${r.activeError ?? "unknown error"}. ` +
+            "The team still runs the version before it.",
+        );
+      }
       onSaved?.(r.saved);
       // A save the runtime accepted can still be a team no walk can run (an
       // agent that does not resolve, say). Asked once, right after the save.
@@ -1001,7 +1009,12 @@ function WorkflowCanvasInner({
               Auto-layout
             </button>
             {doc.name ? (
-              <button className="lb-wf-btn lb-wf-btn--primary" onClick={save} disabled={!saveable}>
+              <button
+                className="lb-wf-btn lb-wf-btn--primary"
+                onClick={save}
+                disabled={!saveable}
+                title="Saves a new version and makes it the team's active one: what a run, a schedule or a publish will use from now on."
+              >
                 {busy ? "Saving…" : "Save new version"}
               </button>
             ) : (
