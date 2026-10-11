@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { agentDefRegistry } from "@loomcycle/def-fields";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowCanvas } from "./WorkflowCanvas";
@@ -1225,6 +1226,28 @@ describe("WorkflowCanvas — starting a team with declared variables (RFC DV)", 
       channels: { notes: { scope: "user" } },
       webhooks: { inbound: { auth: { kind: "hmac", signing_secret_env: "INBOUND_SECRET" }, channel: "./notes" } },
     });
+  });
+
+  it("gives the team's own agent the Decision tool and names the runtime's decision models (RFC EE item 3)", async () => {
+    const forkTeam = vi.fn(async () => ({ def_id: "d10", name: "local", version: 2 }));
+    const listDecisionModels = vi.fn(async () => [{ name: "decide", default: true }, { name: "decide-deep" }]);
+    render(<WorkflowCanvas dataLayer={layer({ forkTeam, listDecisionModels })} teamName="local" />);
+    fireEvent.click(await screen.findByTestId("node-write"));
+    fireEvent.click(await screen.findByRole("button", { name: /Edit \.\/writer/ }));
+    const note = await screen.findByTestId("own-agent-decision");
+    await waitFor(() => expect(note.textContent).toMatch(/On this runtime: decide \(default\), decide-deep\./));
+    expect(note.textContent).toMatch(/cannot ask them: Decision is not among its tools/);
+    // The agent form has the registry's own field for the block (def-fields
+    // 0.4.0); it is an advanced field, folded until asked for.
+    expect(agentDefRegistry.fields.find((f) => f.key === "decision")?.fields?.map((f) => f.key)).toEqual(["default", "models"]);
+    fireEvent.click(within(note).getByRole("button", { name: "Add Decision to its tools" }));
+    await waitFor(() => expect(note.textContent).toMatch(/asks them with its Decision tool/));
+    expect(note.textContent).toMatch(/Decision models, among the advanced fields of Tools & access/);
+    expect(within(note).queryByRole("button", { name: "Add Decision to its tools" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+    await waitFor(() => expect(forkTeam).toHaveBeenCalled());
+    const saved = (forkTeam.mock.calls[0] as unknown as [string, { local: unknown }])[1];
+    expect(saved.local).toEqual({ agents: { writer: { tier: "low", tools: ["Decision"] } } });
   });
 
   it("opens the team's own agent from a node that runs it, and renames it with every reference", async () => {

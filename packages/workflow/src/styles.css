@@ -712,6 +712,12 @@
   padding: 0;
   list-style: none;
 }
+/* Decision models for one of the team's own agents, under its form. */
+.loomboard-workflow .lb-wf-team-own__decision {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--lb-wf-border);
+}
 /* A run's sub-agents, set in under it. */
 .loomboard-workflow .lb-wf-runs__children {
   margin: 4px 0 4px 10px;
