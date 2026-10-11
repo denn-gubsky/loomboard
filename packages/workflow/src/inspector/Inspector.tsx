@@ -8,7 +8,7 @@ import type { ReleaseOutcome } from "../types";
 import type { ChannelSide } from "../lib/channels";
 import { MEMORY_VARIANTS, type BindingNodeView } from "../lib/bindings";
 import type { VariableNodeView } from "../lib/variables";
-import { varValueError, type TeamOwnEntry } from "../lib/teamLocal";
+import { localRef, varValueError, type TeamOwnEntry } from "../lib/teamLocal";
 import { TeamOwnEditor, type TeamOwnEditorProps } from "./TeamOwnEditor";
 import { sourceLabel } from "../nodes/VariableNode";
 import { HANDLER_OMIT_IN_LIST, fieldsForKind, teamHandlerRegistry } from "./registry";
@@ -321,9 +321,10 @@ function TeamChannelPanel({
   );
 }
 
-/** A channel node's details. Read-only: the channel is a ChannelDef that lives
- *  outside the TeamDef (decision C11), so its scope, hold and hooks are edited
- *  where it is declared. What the canvas CAN change is which of its nodes name
+/** A channel node's details. Read-only: a channel is a ChannelDef that lives
+ *  outside the TeamDef (decision C11) — or one of the team's own, declared in
+ *  `local.channels` — so its scope, hold and hooks are edited where it is
+ *  declared. What the canvas CAN change is which of its nodes name
  *  it, and the team's ACL — so the panel points at both. */
 function ChannelPanel({
   view,
@@ -367,13 +368,17 @@ function ChannelPanel({
     </div>
   );
   const missing = (["publish", "subscribe"] as const).filter((s) => grants[s] === false);
+  // `./name` is a channel the team declares itself (RFC DV).
+  const own = localRef(view.channel) !== undefined;
   return (
     <aside className="lb-wf-inspector lb-wf-inspector--channel">
       <h3 className="lb-wf-team__title">
         Channel <code>{view.channel}</code>
       </h3>
       <p className="lb-wf-team__hint">
-        Referenced, not owned: this team names it; its declaration lives outside the workflow.
+        {own
+          ? "The team's own: declared in this team and nowhere else. Its scope and hold are edited under The team's own, with nothing selected."
+          : "Referenced, not owned: this team names it; its declaration lives outside the workflow."}
       </p>
       {row("Publishers", view.publishers.join(", ") || "none")}
       {row("Readers", view.readers.join(", ") || "none — results are parked here")}
@@ -405,8 +410,9 @@ function ChannelPanel({
         row("Hooks", `${info!.hooks!.join(", ")} — each message is delivered only if they release it`)}
       {declared === false && (
         <div className="lb-wf-finding lb-wf-finding--error">
-          Not declared. The runtime refuses an undeclared channel — declare it in operator yaml or
-          with ChannelDef.
+          {own
+            ? "Not declared. This team names it as its own and does not declare it — add it under The team's own, with nothing selected."
+            : "Not declared. The runtime refuses an undeclared channel — declare it in operator yaml or with ChannelDef."}
         </div>
       )}
       {missing.length > 0 && (
