@@ -76,6 +76,8 @@ export { ANY_MODEL, QUESTION_TYPES, questionFaults, routeAnswers, routeEdge } fr
 export type { DecisionLimits, QuestionFault, QuestionType } from "./lib/decision";
 export { answerRows, percent, scoreText } from "./lib/decisionAnswer";
 export type { AnswerRow } from "./lib/decisionAnswer";
+// What a walk's decision states answered (loomcycle 1.110).
+export { decisionFace, decisionsOf, foldDecision, readDecision } from "./lib/walkDecisions";
 
 // Building a team by hand (RFC DX phase 4): what a host's "New team" offers,
 // and the name rule it can apply before the canvas does.
@@ -214,6 +216,7 @@ export type {
   DocumentTarget,
   DecisionCall,
   DecisionCallAnswer,
+  WalkDecision,
   DecisionModelInfo,
   DetachedRun,
   PublishOutcome,

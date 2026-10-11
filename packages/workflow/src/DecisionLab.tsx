@@ -207,7 +207,8 @@ function Bar({ p }: { p: number }) {
   );
 }
 
-function AnswerView({ row }: { row: AnswerRow }) {
+/** One question's answer: what was picked, and every probability behind it. */
+export function AnswerView({ row }: { row: AnswerRow }) {
   return (
     <div className="lb-wf-lab__row" data-testid={`answer-${row.question}`}>
       <code>{row.question}</code>

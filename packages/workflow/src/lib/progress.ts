@@ -16,6 +16,11 @@
 // visited AFTER `from` was. That keeps an unused pushback edge (review → code)
 // uncoloured until the walk actually goes back.
 //
+// A decision state starts no run either, but the walk records each visit to
+// one, with the transition it took (lib/walkDecisions.ts). So a decision is
+// never guessed at: it is passed once a visit is recorded, the transition
+// taken is the recorded one, and until then the walk is AT it, asking.
+//
 // A walk that has ended has no progress at all: Run mode resets its colours
 // when the run completes, and what it produced stays on the End node.
 //
@@ -23,6 +28,7 @@
 
 import type { CanvasModel } from "./model";
 import { instantMs, isTerminal, lastState, type WalkRunRow, type WalkView } from "./runs";
+import type { WalkDecision } from "../types";
 
 export interface WalkProgress {
   active: ReadonlySet<string>;
@@ -41,7 +47,11 @@ function visitOrder(r: WalkRunRow): number {
   return r.stateVisit ?? instantMs(r.ts);
 }
 
-export function walkProgress(model: CanvasModel, view: WalkView | undefined): WalkProgress | undefined {
+export function walkProgress(
+  model: CanvasModel,
+  view: WalkView | undefined,
+  decisions: readonly WalkDecision[] = [],
+): WalkProgress | undefined {
   if (!view || (view.walk && isTerminal(view.walk.status))) return undefined;
 
   const byState = new Map<string, WalkRunRow[]>();
@@ -60,6 +70,7 @@ export function walkProgress(model: CanvasModel, view: WalkView | undefined): Wa
     if (rows.some((r) => !isTerminal(r.status))) active.add(state);
     else passed.add(state);
   }
+  for (const d of decisions) if (!active.has(d.state)) passed.add(d.state);
 
   // A gap: the walk runs, yet nothing it started is live. It is between
   // states — heading to the successor of the state it ran last, or, before
@@ -67,21 +78,42 @@ export function walkProgress(model: CanvasModel, view: WalkView | undefined): Wa
   if (!active.size) {
     const last = lastState(view);
     let next = last ? successOf(last) : model.entry;
-    for (let hops = 0; next && INSTANT.has(kindOf.get(next) ?? "") && hops < model.nodes.length; hops++) {
-      next = successOf(next);
+    // Only a decision recorded AFTER the last run is on the way from it: one
+    // from an earlier pass through the same state is not.
+    let visit = Math.max(0, ...(last ? (byState.get(last) ?? []) : []).map((r) => r.stateVisit ?? 0));
+    let asking: string | undefined;
+    for (let hops = 0; next && hops < model.nodes.length + decisions.length; hops++) {
+      const kind = kindOf.get(next) ?? "";
+      if (INSTANT.has(kind)) next = successOf(next);
+      else if (kind === "decision") {
+        const at: string = next;
+        const d = decisions.find((x) => x.state === at && x.visit > visit);
+        if (!d) {
+          asking = at;
+          break;
+        }
+        visit = d.visit;
+        next = d.next;
+      } else break;
     }
-    if (next && kindOf.get(next) !== "terminal" && !passed.has(next)) active.add(next);
+    if (asking) {
+      passed.delete(asking);
+      active.add(asking);
+    } else if (next && kindOf.get(next) !== "terminal" && !passed.has(next)) active.add(next);
   }
 
   // An instant state is passed once the walk has reached a state after it:
   // the entry, or one fed by a state already passed. Iterated, since a chain
   // of them (input → vars → …) clears one per round.
   const reached = (id: string) => active.has(id) || passed.has(id);
+  // A decision leaves by the transition its record names, and by no other.
+  const decided = (e: { from: string; to: string; on: string }) =>
+    decisions.some((d) => d.state === e.from && d.edge === e.on && d.next === e.to);
   for (let changed = true; changed; ) {
     changed = false;
     for (const [id, kind] of kindOf) {
       if (!INSTANT.has(kind) || passed.has(id)) continue;
-      const fed = id === model.entry || model.edges.some((e) => e.to === id && passed.has(e.from));
+      const fed = id === model.entry || model.edges.some((e) => e.to === id && passed.has(e.from) && (kindOf.get(e.from) !== "decision" || decided(e)));
       const left = model.edges.some((e) => e.from === id && reached(e.to));
       if (fed && left) {
         passed.add(id);
@@ -94,6 +126,10 @@ export function walkProgress(model: CanvasModel, view: WalkView | undefined): Wa
   const latest = (id: string) => Math.max(...(byState.get(id) ?? []).map(visitOrder));
   const taken = new Set<string>();
   for (const e of model.edges) {
+    if (kindOf.get(e.from) === "decision") {
+      if (decided(e)) taken.add(`${e.from} ${e.on} ${e.to}`);
+      continue;
+    }
     // A state that ran may be running AGAIN (re-entered by a pushback) and
     // still have left by this edge before; an instant one has left only once
     // it is passed.

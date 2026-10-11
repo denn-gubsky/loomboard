@@ -2,11 +2,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkflowCanvas } from "./WorkflowCanvas";
-import type { TeamDefDetail, WorkflowDataLayer } from "./types";
+import type { TeamDefDetail, WalkDecision, WorkflowDataLayer } from "./types";
 
-// A decision state in Run mode. It starts no run, and a detached walk's
-// record keeps no step, so the canvas says which way the walk went from where
-// the walk has been — not the model's answer, which it cannot read yet.
+// A decision state in Run mode. It starts no run, and a detached walk
+// returns no steps: the walk's own run records each visit (loomcycle 1.110),
+// and the canvas shows that record. Without one — an older runtime — it says
+// which way the walk went from where the walk has been.
 
 afterEach(cleanup);
 
@@ -31,7 +32,20 @@ const definition = {
   ],
 };
 
-function layer(terminal?: string) {
+const visit: WalkDecision = {
+  state: "triage",
+  visit: 1,
+  edge: "conditional:billing",
+  next: "billing-desk",
+  answer: {
+    model: "decide",
+    served_model: "nimble",
+    answers: { route: { type: "choice", choice: "billing", probabilities: { billing: 0.91, support: 0.09 } } },
+    usage: { input_tokens: 120, output_tokens: 3 },
+  },
+};
+
+function layer(terminal?: string, recorded?: WalkDecision[]) {
   const active: TeamDefDetail = { def_id: "d1", name: "desk", version: 1, definition };
   const l: WorkflowDataLayer = {
     listTeams: async () => [{ name: "desk", active_def_id: "d1" }],
@@ -47,11 +61,18 @@ function layer(terminal?: string) {
     },
     readRun: async (runId) => ({ runId, status: "completed", finalText: "the ticket", terminal }),
   };
+  if (recorded) {
+    l.watchWalkDecisions = (_walkRunId, onDecision) => {
+      // Twice, as a replayed stream delivers them.
+      for (const d of [...recorded, ...recorded]) onDecision(d);
+      return () => undefined;
+    };
+  }
   return l;
 }
 
-async function walked(terminal?: string) {
-  render(<WorkflowCanvas dataLayer={layer(terminal)} teamName="desk" />);
+async function walked(terminal?: string, recorded?: WalkDecision[]) {
+  render(<WorkflowCanvas dataLayer={layer(terminal, recorded)} teamName="desk" />);
   await screen.findByTestId("node-triage");
   fireEvent.click(screen.getByRole("button", { name: "Run" }));
   await screen.findByTestId("walk-id");
@@ -71,6 +92,30 @@ describe("WorkflowCanvas — a decision state in a walk", () => {
   it("does not guess when the walk reached none of its transitions' targets", async () => {
     const note = await walked(undefined);
     expect(note.textContent).not.toMatch(/It answered/);
-    expect(note.textContent).toMatch(/probabilities are not on the walk's record yet/);
+    expect(note.textContent).toMatch(/has recorded no answer for this node/);
+  });
+
+  it("shows the answer the walk recorded: the transition taken, the model, and every probability", async () => {
+    const note = await walked("billing-desk", [visit]);
+    const shown = await screen.findByTestId("decision-visit-1");
+    expect(shown.textContent).toMatch(/The walk took conditional:billing to billing-desk\./);
+    expect(shown.textContent).toMatch(/decide \(nimble\) · 120 tokens in, 3 out/);
+    expect(screen.getByTestId("answer-route").textContent).toMatch(/billing 91\.0%.*support 9\.0%/);
+    // The record replaces the guess, and a replayed visit is shown once.
+    expect(note.textContent).not.toMatch(/It answered/);
+    expect(screen.getAllByTestId(/^decision-visit-/)).toHaveLength(1);
+    expect(note.textContent).toMatch(/not calibrated/);
+  });
+
+  it("keeps the latest answer on the node's face after the walk has ended", async () => {
+    await walked("billing-desk", [visit]);
+    await waitFor(() => expect(screen.getByTestId("decided-triage").textContent).toBe("billing 91.0% → billing-desk"));
+  });
+
+  it("numbers the visits of a state the walk passed through twice, latest first", async () => {
+    await walked("billing-desk", [{ ...visit, edge: "conditional:support", next: "support-desk" }, { ...visit, visit: 4 }]);
+    const shown = await screen.findAllByTestId(/^decision-visit-/);
+    expect(shown.map((e) => e.getAttribute("data-testid"))).toEqual(["decision-visit-4", "decision-visit-1"]);
+    expect(shown[0].textContent).toMatch(/Visit 4: the walk took conditional:billing/);
   });
 });
