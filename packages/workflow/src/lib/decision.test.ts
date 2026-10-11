@@ -4,7 +4,9 @@ import {
   ANY_MODEL,
   canRoute,
   choiceOptions,
+  decisionBlockFaults,
   decisionTaken,
+  hasDecisionTool,
   freeName,
   levelsOf,
   newQuestion,
@@ -211,6 +213,44 @@ describe("decisionTaken — which way a walk went from a decision, told from whe
     expect(decisionTaken(edges, new Set(["elsewhere"]))).toBeUndefined();
     expect(decisionTaken(edges, new Set(["billing-desk", "support-desk"]))).toBeUndefined();
     expect(decisionTaken([], new Set(["x"]))).toBeUndefined();
+  });
+});
+
+describe("an agent's own decision block", () => {
+  const listed = ["decide", "decide-deep"];
+
+  it("knows an agent can ask decision models by its Decision tool, or by every tool", () => {
+    expect(hasDecisionTool({ tools: ["WebSearch", "Decision"] })).toBe(true);
+    expect(hasDecisionTool({ tools: ["*"] })).toBe(true);
+    expect(hasDecisionTool({ tools: ["WebSearch"] })).toBe(false);
+    expect(hasDecisionTool({})).toBe(false);
+  });
+
+  it("finds nothing wrong with no block, or with one that narrows to listed models", () => {
+    expect(decisionBlockFaults({ tools: ["Decision"] }, listed)).toEqual([]);
+    expect(decisionBlockFaults({ tools: ["Decision"], decision: { default: "decide", models: ["decide", "decide-deep"] } }, listed)).toEqual([]);
+    expect(decisionBlockFaults({ tools: ["Decision"], decision: { default: "decide-deep" } }, listed)).toEqual([]);
+  });
+
+  it("names a model the runtime does not list — the block can only narrow", () => {
+    expect(decisionBlockFaults({ tools: ["Decision"], decision: { default: "nimble", models: ["nimble", "decide"] } }, listed)).toEqual([
+      '"nimble" is not a decision model this runtime lists',
+    ]);
+  });
+
+  it("says a default outside the agent's own models is refused", () => {
+    expect(decisionBlockFaults({ tools: ["Decision"], decision: { default: "decide", models: ["decide-deep"] } }, listed)).toEqual([
+      'the default model "decide" is not among the models this agent may ask',
+    ]);
+  });
+
+  it("says a block does nothing without the tool, and does not judge names it cannot check", () => {
+    expect(decisionBlockFaults({ decision: { default: "anything" } })).toEqual(["the block has no effect: Decision is not among this agent's tools"]);
+    expect(decisionBlockFaults({ tools: ["Decision"], decision: { default: "anything" } })).toEqual([]);
+  });
+
+  it("says a block that is not an object is not one", () => {
+    expect(decisionBlockFaults({ tools: ["Decision"], decision: "decide" }, listed)).toEqual(["decision must be an object with default and models"]);
   });
 });
 

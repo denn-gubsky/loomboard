@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { FoldedFieldList, agentDefRegistry, type DefValue } from "@loomcycle/def-fields";
+import { DECISION_TOOL, decisionBlockFaults, hasDecisionTool } from "../lib/decision";
+import type { DecisionModelInfo } from "../types";
 import type { JsonObject } from "../lib/model";
 import { LOCAL_KINDS, type LocalKind, type TeamOwnEntry } from "../lib/teamLocal";
 import { WEBHOOK_SECRET_FIELD } from "../lib/localEdit";
@@ -44,9 +46,12 @@ export interface TeamOwnEditorProps {
   /** An entry to open, as "kind/name" (e.g. from a node's Edit link). A new
    *  object each time it is asked for, so asking again reopens it. */
   focus?: { key: string };
+  /** The runtime's decision models, for an own agent's Decision tool.
+   *  Absent: not loaded, or the host cannot list them. */
+  decisionModels?: DecisionModelInfo[];
 }
 
-export function TeamOwnEditor({ entries, bodies, disabled, onAdd, onSet, onRemove, onRename, focus }: TeamOwnEditorProps) {
+export function TeamOwnEditor({ entries, bodies, disabled, onAdd, onSet, onRemove, onRename, focus, decisionModels }: TeamOwnEditorProps) {
   const [open, setOpen] = useState<string | undefined>(focus?.key);
   useEffect(() => {
     if (focus) setOpen(focus.key);
@@ -110,6 +115,7 @@ export function TeamOwnEditor({ entries, bodies, disabled, onAdd, onSet, onRemov
                         kind={kind}
                         body={bodies[kind][e.name] ?? {}}
                         channels={ownChannels}
+                        decisionModels={decisionModels}
                         disabled={disabled}
                         onChange={(b) => onSet(kind, e.name, b)}
                       />
@@ -196,6 +202,66 @@ function AddRow({ kind, disabled, onAdd }: { kind: LocalKind; disabled?: boolean
   );
 }
 
+/** Decision models for one of the team's own agents: which ones this runtime
+ *  has, whether the agent can ask them, and what is wrong with its `decision`
+ *  block. The block itself is edited in the fields above ("Decision models",
+ *  an advanced field under Tools & access, def-fields 0.4.0); the registry's
+ *  inputs are free text, so the names are given here. Shown only where it has something to say. */
+function AgentDecisionNote({
+  body,
+  models,
+  disabled,
+  onChange,
+}: {
+  body: JsonObject;
+  models?: DecisionModelInfo[];
+  disabled?: boolean;
+  onChange: (b: JsonObject) => void;
+}) {
+  const can = hasDecisionTool(body);
+  const faults = decisionBlockFaults(body, models?.map((m) => m.name));
+  if (!models?.length && !can && body.decision === undefined) return null;
+  const tools = Array.isArray(body.tools) ? body.tools : [];
+  return (
+    <div className="lb-wf-team-own__decision" data-testid="own-agent-decision">
+      <span className="lb-wf-field__label">Decision models</span>
+      {models?.length ? (
+        <p className="lb-wf-team__hint">
+          On this runtime:{" "}
+          {models.map((m, i) => (
+            <span key={m.name}>
+              {i > 0 && ", "}
+              <code>{m.name}</code>
+              {m.default ? " (default)" : ""}
+            </span>
+          ))}
+          . {can ? "This agent asks them with its Decision tool." : "This agent cannot ask them: Decision is not among its tools."}
+        </p>
+      ) : (
+        <p className="lb-wf-team__hint">
+          {can ? "This agent asks decision models with its Decision tool." : "This agent cannot ask a decision model: Decision is not among its tools."}
+        </p>
+      )}
+      {can && (
+        <p className="lb-wf-team__hint">
+          To narrow which ones it may ask, set <em>Decision models</em>, among the advanced fields of Tools &amp; access
+          above.
+        </p>
+      )}
+      {!can && (
+        <button type="button" className="lb-wf-btn" disabled={disabled} onClick={() => onChange({ ...body, tools: [...tools, DECISION_TOOL] })}>
+          Add Decision to its tools
+        </button>
+      )}
+      {faults.map((f) => (
+        <div key={f} className="lb-wf-finding lb-wf-finding--error">
+          {f}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function str(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
@@ -224,12 +290,14 @@ function BodyEditor({
   channels,
   disabled,
   onChange,
+  decisionModels,
 }: {
   kind: LocalKind;
   body: JsonObject;
   channels: string[];
   disabled?: boolean;
   onChange: (b: JsonObject) => void;
+  decisionModels?: DecisionModelInfo[];
 }) {
   const field = (label: string, control: React.ReactNode) => (
     <label className="lb-wf-field lb-wf-team-own__field">
@@ -276,6 +344,7 @@ function BodyEditor({
           disabled={disabled}
           hideToolbar
         />
+        <AgentDecisionNote body={body} models={decisionModels} disabled={disabled} onChange={onChange} />
       </div>
     );
   }

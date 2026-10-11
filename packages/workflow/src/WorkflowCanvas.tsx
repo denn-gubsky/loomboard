@@ -101,7 +101,7 @@ import { DecisionQuestionsEditor } from "./inspector/DecisionQuestionsEditor";
 import { AnswerView, DecisionLab, type DecisionLabSeed } from "./DecisionLab";
 import { newStartKey, startAttempt, startPrint, type StartAttempt } from "./lib/startKey";
 import { checkSummary, unlistedIssues } from "./lib/check";
-import type { ChannelInfo, ReleaseOutcome, TeamCheck, WalkDecision, WorkflowCanvasProps } from "./types";
+import type { ChannelInfo, DecisionModelInfo, ReleaseOutcome, TeamCheck, WalkDecision, WorkflowCanvasProps } from "./types";
 
 /** No decisions, as one stable value: a fresh [] would rebuild every node. */
 const NO_DECISIONS: readonly WalkDecision[] = [];
@@ -410,6 +410,22 @@ function WorkflowCanvasInner({
     setSelectedId(null);
     setOwnFocus({ key: `agents/${name}` });
   }, []);
+  // The runtime's decision models, for a team's own agents (RFC EE item 3):
+  // read once a team that declares an agent is being edited.
+  const [decisionModels, setDecisionModels] = useState<DecisionModelInfo[]>();
+  const declaresOwnAgents = !!model && localNames(model, "agents").length > 0;
+  useEffect(() => {
+    if (!editable || !declaresOwnAgents || !dataLayer.listDecisionModels) return;
+    let cancelled = false;
+    dataLayer
+      .listDecisionModels()
+      .then((list) => !cancelled && setDecisionModels(list))
+      // Without the listing the editor says less; nothing is blocked.
+      .catch(() => !cancelled && setDecisionModels(undefined));
+    return () => {
+      cancelled = true;
+    };
+  }, [dataLayer, editable, declaresOwnAgents]);
   // Editing the team's own definitions (RFC DV). Content: each forks on save.
   const teamOwnEdit = useMemo(
     () => ({
@@ -430,8 +446,9 @@ function WorkflowCanvasInner({
         return why;
       },
       focus: ownFocus,
+      decisionModels,
     }),
-    [model, ownFocus],
+    [model, ownFocus, decisionModels],
   );
   const teamOwn = useMemo(
     () => (model ? teamOwnEntries(model, doc.name ?? teamName ?? "", agentNames) : []),

@@ -306,3 +306,42 @@ export function decisionTaken(
   return { on: e.on, to: e.to, ...(answer !== undefined ? { answer } : {}) };
 }
 
+// ---- an agent's own narrowing of the decision models (loomcycle 1.107) ----
+//
+// An agent asks decision models with the `Decision` tool. Its `decision`
+// block — `{default, models}` — may narrow which ones; it can only narrow, so
+// every name must be one the runtime lists.
+
+/** The tool an agent asks decision models with. */
+export const DECISION_TOOL = "Decision";
+
+function names(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "") : [];
+}
+
+/** True when the agent may call the Decision tool: it is listed by name, or
+ *  by the pattern that grants every tool. */
+export function hasDecisionTool(agent: JsonObject): boolean {
+  return names(agent.tools).some((t) => t === DECISION_TOOL || t === "*");
+}
+
+/** What is wrong with an agent's `decision` block, in words. `listed` is the
+ *  runtime's decision model names; undefined (not loaded) checks only what
+ *  the block says about itself. */
+export function decisionBlockFaults(agent: JsonObject, listed?: readonly string[]): string[] {
+  const block = agent.decision;
+  if (block === undefined) return [];
+  if (typeof block !== "object" || block === null || Array.isArray(block)) return ["decision must be an object with default and models"];
+  const b = block as JsonObject;
+  const models = names(b.models);
+  const def = typeof b.default === "string" ? b.default : "";
+  const out: string[] = [];
+  if (def && models.length && !models.includes(def)) out.push(`the default model ${JSON.stringify(def)} is not among the models this agent may ask`);
+  if (listed) {
+    for (const n of new Set([...(def ? [def] : []), ...models])) {
+      if (!listed.includes(n)) out.push(`${JSON.stringify(n)} is not a decision model this runtime lists`);
+    }
+  }
+  if (!hasDecisionTool(agent)) out.push(`the block has no effect: ${DECISION_TOOL} is not among this agent's tools`);
+  return out;
+}
