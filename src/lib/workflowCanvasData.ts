@@ -8,7 +8,7 @@ import type {
   WorkflowDataLayer,
 } from "@loomboard/workflow";
 import { getChunk, queryChunks, queryDocuments } from "./workflowApi";
-import { hookNamesOf } from "@loomboard/workflow";
+import { hookNamesOf, readDecision } from "@loomboard/workflow";
 import { runLineFolder } from "./runLines";
 import type { PreviewLine } from "./tilePreview";
 
@@ -118,6 +118,24 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
     // the caller's own user, which is where a walk's runs are filed since
     // loomcycle 1.101 (gap G9; before it, every walk ran as `http-admin`).
     watchWalk: (walkRunId, onRows, onError) => watchWalk(client, selfUserId, walkRunId, onRows, onError),
+
+    // What the walk's decision states answered (loomcycle 1.110): the
+    // team_decision events on the walk's OWN run. The stream replays the run
+    // from its start and then tails it, so this serves a walk that is running
+    // and one that has ended alike.
+    watchWalkDecisions(walkRunId, onDecision, onError) {
+      const ac = new AbortController();
+      (async () => {
+        for await (const ev of client.streamRunByID(walkRunId, { signal: ac.signal })) {
+          if (ev.type !== "team_decision") continue;
+          const d = readDecision(ev.team_decision);
+          if (d) onDecision(d);
+        }
+      })().catch((e) => {
+        if (!ac.signal.aborted) onError?.(e);
+      });
+      return () => ac.abort();
+    },
 
     // A member run's last few lines for its node (Run mode). The stream
     // replays the run from its start, then tails it until it ends; updates

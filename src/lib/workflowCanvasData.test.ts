@@ -68,6 +68,22 @@ describe("workflowDataLayer — run and channel reads", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("watchWalkDecisions reads the walk's own run for its decisions, and passes over every other event", async () => {
+    const decision = { state: "triage", visit: 2, edge: "conditional:billing", next: "billing-desk", answer: { model: "decide", answers: { route: { type: "choice", choice: "billing" } } } };
+    const streamRunByID = vi.fn(async function* () {
+      yield { type: "agent", run_id: "r_walk" };
+      yield { type: "team_decision", team_decision: decision };
+      // Not a record: nothing is handed over for it.
+      yield { type: "team_decision", team_decision: { state: "triage" } };
+      yield { type: "done" };
+    });
+    const got: unknown[] = [];
+    workflowDataLayer(client({ streamRunByID })).watchWalkDecisions!("r_walk", (d) => got.push(d));
+    await vi.waitFor(() => expect(got.length).toBeGreaterThan(0));
+    expect(streamRunByID).toHaveBeenCalledWith("r_walk", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(got).toEqual([decision]);
+  });
+
   it("readChunk finds a chunk in the user's documents, else the tenant's, and says which", async () => {
     const document = vi.fn(async (input: { scope: string; id: string }) => {
       if (input.scope === "user") throw new Error("not found");

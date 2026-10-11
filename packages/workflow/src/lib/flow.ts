@@ -61,6 +61,8 @@ export interface FlowNodeData {
   current?: boolean;
   /** An agent state with a run going: that run's last few lines, live. */
   lines?: RunLine[];
+  /** A Decision node's latest recorded answer in this walk, in a few words. */
+  decided?: string;
   /** End nodes only: what the walk that finished here produced. */
   result?: ResultItem[];
   /** The entry Input node only, when a walk can be started: opens Start. */

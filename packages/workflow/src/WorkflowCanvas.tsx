@@ -93,12 +93,16 @@ import {
 import { StateNode } from "./nodes/StateNode";
 import { contentKey, handlerChannels, handlerOf } from "./lib/model";
 import { decisionTaken, nextDecisionEdge, routeEdge } from "./lib/decision";
+import { answerRows } from "./lib/decisionAnswer";
+import { decisionFace, decisionsOf, foldDecision } from "./lib/walkDecisions";
 import { DecisionQuestionsEditor } from "./inspector/DecisionQuestionsEditor";
-import { DecisionLab, type DecisionLabSeed } from "./DecisionLab";
+import { AnswerView, DecisionLab, type DecisionLabSeed } from "./DecisionLab";
 import { newStartKey, startAttempt, startPrint, type StartAttempt } from "./lib/startKey";
 import { checkSummary, unlistedIssues } from "./lib/check";
-import type { ChannelInfo, TeamCheck, WorkflowCanvasProps } from "./types";
+import type { ChannelInfo, TeamCheck, WalkDecision, WorkflowCanvasProps } from "./types";
 
+/** No decisions, as one stable value: a fresh [] would rebuild every node. */
+const NO_DECISIONS: readonly WalkDecision[] = [];
 const NODE_TYPES = { state: StateNode, channel: ChannelNode, binding: BindingNode, agent: AgentNode, variable: VariableNode };
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -152,6 +156,27 @@ function WorkflowCanvasInner({
       (e) => console.warn("[canvas] walk stream error (reconnecting):", e),
     );
   }, [dataLayer, session.runId]);
+
+  // What the walk's decision states answered (loomcycle 1.110): recorded on
+  // the walk's own run, since a decision starts no member run. Read again
+  // once the walk has ended — the record replays from its start, so a
+  // connection lost mid-walk costs nothing.
+  const [decisions, setDecisions] = useState<{ walkRunId: string; list: readonly WalkDecision[] }>();
+  const walkEnded = !!walk?.walk && isTerminal(walk.walk.status);
+  useEffect(() => {
+    const runId = session.runId;
+    if (!runId || !dataLayer.watchWalkDecisions) {
+      setDecisions(undefined);
+      return;
+    }
+    setDecisions((v) => (v?.walkRunId === runId ? v : { walkRunId: runId, list: [] }));
+    return dataLayer.watchWalkDecisions(
+      runId,
+      (d) => setDecisions((v) => (v?.walkRunId === runId ? { walkRunId: runId, list: foldDecision(v.list, d) } : v)),
+      (e) => console.warn("[canvas] reading the walk's decisions failed:", e),
+    );
+  }, [dataLayer, session.runId, walkEnded]);
+  const decided = decisions && decisions.walkRunId === walk?.walkRunId ? decisions.list : NO_DECISIONS;
 
   // The walk's OWN run drives the session: it ending ends the session (so
   // Back to Edit appears — the canvas used to stay "Running" forever), and it
@@ -325,7 +350,7 @@ function WorkflowCanvasInner({
   agentViewsRef.current = agentViews;
   const pulses = useMemo(() => (walk ? statePulses(walk) : undefined), [walk]);
   // Where a RUNNING walk is; none once it has ended (lib/progress.ts).
-  const progress = useMemo(() => (model ? walkProgress(model, walk) : undefined), [model, walk]);
+  const progress = useMemo(() => (model ? walkProgress(model, walk, decided) : undefined), [model, walk, decided]);
   // The run going in each state, followed live on its node. Empty once the
   // walk has ended, which closes every follow and clears the lines.
   const liveRuns = useMemo(() => (walk ? liveRunByState(walk) : new Map<string, WalkRunRow>()), [walk]);
@@ -432,8 +457,20 @@ function WorkflowCanvasInner({
               const p = progressOf(progress, n.id);
               // A Starter's lines show on its agent node, where the run is.
               const lines = dispatchesAgent(n.data.node) ? undefined : runLines.get(n.id);
-              return p || lines
-                ? { ...n, data: { ...n.data, ...(p ? { progress: p, current: p === "active" } : {}), ...(lines ? { lines } : {}) } }
+              // A Decision node's latest answer, kept after the walk ends.
+              const last = n.data.node.kind === "decision" ? decisionsOf(decided, n.id)[0] : undefined;
+              const routed = last ? handlerOf(n.data.node).route : undefined;
+              const route = typeof routed === "string" ? routed : undefined;
+              return p || lines || last
+                ? {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      ...(p ? { progress: p, current: p === "active" } : {}),
+                      ...(lines ? { lines } : {}),
+                      ...(last ? { decided: decisionFace(last, route) } : {}),
+                    },
+                  }
                 : n;
             }),
             ...toAgentFlowNodes(agentViews, selectedId, measured).map((n) => {
@@ -457,7 +494,7 @@ function WorkflowCanvasInner({
             ...toVariableFlowNodes(variableViews, selectedId, measured),
           ]
         : [],
-    [model, findings, selectedId, measured, channelViews, bindingViews, variableViews, agentViews, pulses, progress, runLines, endedAt, result, plan, canRun, openStart],
+    [model, findings, selectedId, measured, channelViews, bindingViews, variableViews, agentViews, pulses, progress, runLines, decided, endedAt, result, plan, canRun, openStart],
   );
   // Control edges and the DERIVED data edges, in one array because xyflow takes
   // one. Data edges come second so a control edge wins the z-order where they
@@ -1408,7 +1445,7 @@ function WorkflowCanvasInner({
                     rows={rowsForState(walk, selected.id)}
                     readRun={dataLayer.readRun}
                     readRunPrompt={dataLayer.readRunPrompt}
-                    noRuns={selected.kind === "decision" ? <DecisionWalkNote taken={decisionWent(selected.id)} /> : undefined}
+                    noRuns={selected.kind === "decision" ? <DecisionWalkNote visits={decisionsOf(decided, selected.id)} taken={decisionWent(selected.id)} /> : undefined}
                   />
                 </>
               ) : undefined
@@ -1493,12 +1530,33 @@ function WorkflowCanvasInner({
   );
 }
 
-/** What Run mode says about a decision state, which starts no run. */
-function DecisionWalkNote({ taken }: { taken?: { on: string; to: string; answer?: string } }) {
+/** What Run mode says about a decision state, which starts no run: each
+ *  visit the walk recorded, latest first. Without a record (a runtime before
+ *  loomcycle 1.110, or a host that does not read them) it says which way the
+ *  walk went, as far as the states it reached tell. */
+function DecisionWalkNote({ visits, taken }: { visits: readonly WalkDecision[]; taken?: { on: string; to: string; answer?: string } }) {
   return (
     <div className="lb-wf-team__hint" data-testid="decision-walk-note">
       <p>A decision node starts no run: the walk asks a decision model itself.</p>
-      {taken && (
+      {visits.map((d) => (
+        <section key={d.visit} className="lb-wf-lab__answer" aria-label={`Visit ${d.visit}`} data-testid={`decision-visit-${d.visit}`}>
+          <p>
+            {visits.length > 1 ? `Visit ${d.visit}: the` : "The"} walk took <code>{d.edge}</code> to <code>{d.next}</code>.
+          </p>
+          <p>
+            {d.answer.model ?? "the default model"}
+            {d.answer.served_model ? ` (${d.answer.served_model})` : ""}
+            {d.answer.usage ? ` · ${d.answer.usage.input_tokens ?? 0} tokens in, ${d.answer.usage.output_tokens ?? 0} out` : ""}
+          </p>
+          {answerRows(d.answer).map((r) => (
+            <AnswerView key={r.question} row={r} />
+          ))}
+        </section>
+      ))}
+      {visits.length > 0 && (
+        <p>The probabilities are the model's judgement and are not calibrated: compare the options within one answer.</p>
+      )}
+      {!visits.length && taken && (
         <p>
           {taken.answer !== undefined ? (
             <>
@@ -1511,7 +1569,7 @@ function DecisionWalkNote({ taken }: { taken?: { on: string; to: string; answer?
           )}
         </p>
       )}
-      <p>The answer's probabilities are not on the walk's record yet; the runtime will report them in a later release.</p>
+      {!visits.length && <p>This walk has recorded no answer for this node.</p>}
     </div>
   );
 }

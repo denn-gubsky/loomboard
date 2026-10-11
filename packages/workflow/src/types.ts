@@ -95,6 +95,21 @@ export interface DecisionCallAnswer {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
+/** One visit of a walk to a decision state, as the walk's own run records it
+ *  (loomcycle 1.110, the `team_decision` event). */
+export interface WalkDecision {
+  /** The decision state's id. */
+  state: string;
+  /** The walk's ordinal of state visits at this one — the number a member run
+   *  carries as its state visit. Two passes through one state are two visits. */
+  visit: number;
+  /** The transition taken: `conditional:<answer>`, or `success`. */
+  edge: string;
+  /** The state that transition leads to. */
+  next: string;
+  answer: DecisionCallAnswer;
+}
+
 /** The identifiers a create/fork returns. */
 export interface SavedTeam {
   def_id: string;
@@ -306,6 +321,18 @@ export interface WorkflowDataLayer {
   watchWalk?(
     walkRunId: string,
     onRows: (rows: WalkRunRow[]) => void,
+    onError?: (e: unknown) => void,
+  ): () => void;
+
+  /** Follow what one walk's decision states answered (loomcycle 1.110): each
+   *  visit recorded on the walk's own run, from its start — so it works for a
+   *  walk that has already ended — until the returned function is called. A
+   *  visit may be delivered more than once; lib/walkDecisions.ts
+   *  `foldDecision` keeps one per visit. Optional: without it a Decision node
+   *  says only which way the walk went. */
+  watchWalkDecisions?(
+    walkRunId: string,
+    onDecision: (decision: WalkDecision) => void,
     onError?: (e: unknown) => void,
   ): () => void;
 
