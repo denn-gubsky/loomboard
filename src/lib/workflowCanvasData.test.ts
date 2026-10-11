@@ -84,6 +84,22 @@ describe("workflowDataLayer — run and channel reads", () => {
     expect(got).toEqual([decision]);
   });
 
+  it("releaseChannel releases a user-scoped channel at the caller's own user, and maps the counts", async () => {
+    const releaseChannel = vi.fn(async () => ({ channel: "inbox", released: ["m1"], released_count: 1, still_held: 4 }));
+    const layer = workflowDataLayer(client({ releaseChannel }));
+    expect(await layer.releaseChannel!("inbox", { scope: "user", count: 1 })).toEqual({ released: 1, stillHeld: 4 });
+    expect(releaseChannel).toHaveBeenCalledWith("inbox", { scope: "user", count: 1, scope_id: "u-self" });
+    await layer.releaseChannel!("inbox", { scope: "tenant", count: 5 });
+    expect(releaseChannel).toHaveBeenLastCalledWith("inbox", { scope: "tenant", count: 5 });
+  });
+
+  it("releaseTeamChannel releases a team's own channel by its local name", async () => {
+    const releaseTeamChannel = vi.fn(async () => ({ team: "desk", name: "journal", released: [], released_count: 0, still_held: 0 }));
+    const out = await workflowDataLayer(client({ releaseTeamChannel })).releaseTeamChannel!("desk", "journal", { count: 3 });
+    expect(releaseTeamChannel).toHaveBeenCalledWith("desk", "journal", { count: 3 });
+    expect(out).toEqual({ released: 0, stillHeld: 0 });
+  });
+
   it("readChunk finds a chunk in the user's documents, else the tenant's, and says which", async () => {
     const document = vi.fn(async (input: { scope: string; id: string }) => {
       if (input.scope === "user") throw new Error("not found");

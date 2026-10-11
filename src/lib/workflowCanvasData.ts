@@ -235,6 +235,17 @@ export function workflowDataLayer(client: LoomcycleClient): WorkflowDataLayer {
       }));
     },
 
+    // Deliver held messages (RFC EE item 2). A user-scoped channel is released
+    // at the caller's own user, as it is published and peeked.
+    async releaseChannel(channel, { scope, count }) {
+      const r = await client.releaseChannel(channel, { scope, count, ...(scope === "user" ? { scope_id: await selfUserId() } : {}) });
+      return { released: r.released_count, stillHeld: r.still_held };
+    },
+    async releaseTeamChannel(team, name, { count }) {
+      const r = await client.releaseTeamChannel(team, name, { count });
+      return { released: r.released_count, stillHeld: r.still_held };
+    },
+
     async peekTeamChannel(team, name, { max }) {
       const { messages } = await client.peekTeamChannel(team, name, { maxMessages: max });
       return (messages ?? []).map((m) => ({ id: m.id, publishedAt: m.published_at, value: m.value }));

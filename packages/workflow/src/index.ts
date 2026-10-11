@@ -129,7 +129,7 @@ export type {
 
 // Channel nodes: the channels a team names, drawn as the junction data edges
 // route through. toDataEdges takes these views.
-export { channelNodes, channelNodeId, channelBacklog, CHANNEL_NODE_PREFIX } from "./lib/channelNodes";
+export { channelNodes, channelNodeId, channelBacklog, releaseChoices, CHANNEL_NODE_PREFIX, RELEASE_MAX } from "./lib/channelNodes";
 export type { ChannelNodeView } from "./lib/channelNodes";
 
 // Wiring a channel by drag (M5c): what a connection to or from a channel node
@@ -212,6 +212,7 @@ export type { IssueLevel, Preflight, PreflightInput, PublishIssue } from "./lib/
 export type {
   CanvasMode,
   ChannelInfo,
+  ReleaseOutcome,
   ChunkContent,
   DocumentTarget,
   DecisionCall,
