@@ -24,11 +24,16 @@ export interface WalkRunRow {
   status: string;
   /** RFC3339 of this state; the newer row wins. */
   ts: string;
+  /** When the run started, where the source says. */
+  startedAt?: string;
   /** Members only: the state that started this run, and the WALK's ordinal of
    *  that state visit (1 = the first state the walk ran) — not a per-state
    *  count; visitNumbers turns it into one. */
   state?: string;
   stateVisit?: number;
+  /** The run that started this one. A member's is the walk; a background
+   *  sub-agent's is the member (or sub-agent) that spawned it. */
+  parentRunId?: string;
   /** Starter members only. */
   waveId?: string;
   waveIndex?: number;
@@ -50,6 +55,10 @@ export interface WalkView {
   walk?: WalkRunRow;
   /** Every member run, by run id. */
   members: ReadonlyMap<string, WalkRunRow>;
+  /** The runs members started themselves — sub-agents, at any depth — by run
+   *  id. Kept apart from `members`: a state's counts, its place in the walk's
+   *  progress and its live lines are its members' alone. */
+  children?: ReadonlyMap<string, WalkRunRow>;
 }
 
 export function emptyWalk(walkRunId: string): WalkView {
@@ -93,6 +102,7 @@ export function instantMs(ts: string): number {
 export function foldWalk(view: WalkView, rows: readonly WalkRunRow[]): WalkView {
   let walk = view.walk;
   let members: Map<string, WalkRunRow> | undefined;
+  let children: Map<string, WalkRunRow> | undefined;
   const newer = (prev: WalkRunRow | undefined, next: WalkRunRow) => {
     if (!prev) return true;
     if (isTerminal(prev.status) && !isTerminal(next.status)) return false;
@@ -103,13 +113,23 @@ export function foldWalk(view: WalkView, rows: readonly WalkRunRow[]): WalkView 
       if (newer(walk, r)) walk = r;
       continue;
     }
+    // A run some OTHER run started is a sub-agent, not a member — by its own
+    // row, so the order rows arrive in does not matter. A frame that omits the
+    // parent is of whatever the run is already known to be.
+    const known = (children ?? view.children)?.get(r.runId);
+    if (known || (r.parentRunId && r.parentRunId !== view.walkRunId)) {
+      if (!newer(known, r)) continue;
+      children ??= new Map(view.children);
+      children.set(r.runId, known ? withIdentity(r, known) : r);
+      continue;
+    }
     const cur = (members ?? view.members).get(r.runId);
     if (!newer(cur, r)) continue;
     members ??= new Map(view.members);
     members.set(r.runId, cur ? withIdentity(r, cur) : r);
   }
-  if (walk === view.walk && !members) return view;
-  return { ...view, walk, members: members ?? view.members };
+  if (walk === view.walk && !members && !children) return view;
+  return { ...view, walk, members: members ?? view.members, ...(children || view.children ? { children: children ?? view.children } : {}) };
 }
 
 /** The newer row is authoritative for everything that CHANGES — status, and
@@ -123,6 +143,8 @@ export function foldWalk(view: WalkView, rows: readonly WalkRunRow[]): WalkView 
 function withIdentity(next: WalkRunRow, prev: WalkRunRow): WalkRunRow {
   return {
     ...next,
+    parentRunId: next.parentRunId ?? prev.parentRunId,
+    startedAt: next.startedAt ?? prev.startedAt,
     state: next.state ?? prev.state,
     stateVisit: next.stateVisit ?? prev.stateVisit,
     waveId: next.waveId ?? prev.waveId,
@@ -231,6 +253,28 @@ export function rowsForState(view: WalkView, state: string): WalkRunRow[] {
         (a.waveIndex ?? 0) - (b.waveIndex ?? 0) ||
         instantMs(a.ts) - instantMs(b.ts),
     );
+}
+
+/** The runs `runId` started itself, oldest first. */
+export function childRows(view: WalkView, runId: string): WalkRunRow[] {
+  return [...(view.children?.values() ?? [])]
+    .filter((r) => r.parentRunId === runId)
+    .sort((a, b) => instantMs(a.startedAt ?? a.ts) - instantMs(b.startedAt ?? b.ts) || (a.runId < b.runId ? -1 : 1));
+}
+
+/** `rows`, each followed by everything it started, depth first — a state's
+ *  runs with their sub-agents, for a picker. */
+export function withDescendants(view: WalkView, rows: readonly WalkRunRow[]): WalkRunRow[] {
+  const out: WalkRunRow[] = [];
+  const seen = new Set<string>();
+  const visit = (r: WalkRunRow) => {
+    if (seen.has(r.runId)) return;
+    seen.add(r.runId);
+    out.push(r);
+    childRows(view, r.runId).forEach(visit);
+  };
+  rows.forEach(visit);
+  return out;
 }
 
 /** Each state's most recent run that is still going — the one Run mode

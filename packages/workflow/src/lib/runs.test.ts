@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  childRows,
   emptyWalk,
+  withDescendants,
   foldWalk,
   liveRunByState,
   pulseLabel,
@@ -277,3 +279,45 @@ describe("liveRunByState — the run Run mode follows on each node", () => {
     expect(live.get("write")!.runId).toBe("w2");
   });
 });
+
+describe("sub-agents — the runs a member started itself", () => {
+  const member = row({ runId: "m1", parentRunId: WALK, state: "lead", stateVisit: 1 });
+  const c1 = row({ runId: "c1", parentRunId: "m1", agent: "helper", startedAt: "2026-10-01T10:00:05Z" });
+  const c2 = row({ runId: "c2", parentRunId: "m1", agent: "helper", startedAt: "2026-10-01T10:00:02Z" });
+  const g1 = row({ runId: "g1", parentRunId: "c1", agent: "leaf" });
+
+  it("are kept apart from members, whatever order the rows arrive in", () => {
+    const v = foldWalk(emptyWalk(WALK), [g1, c1, member, c2]);
+    expect([...v.members.keys()]).toEqual(["m1"]);
+    expect([...(v.children?.keys() ?? [])].sort()).toEqual(["c1", "c2", "g1"]);
+  });
+
+  it("do not count towards their state, even when the runtime stamps the state on them", () => {
+    // A sub-agent that inherits its parent's place in the walk must not read
+    // as a second run of that state.
+    const v = foldWalk(emptyWalk(WALK), [member, { ...c1, state: "lead", stateVisit: 1 }]);
+    expect(statePulses(v).get("lead")?.total).toBe(1);
+    expect(rowsForState(v, "lead").map((r) => r.runId)).toEqual(["m1"]);
+    expect(liveRunByState(v).get("lead")?.runId).toBe("m1");
+  });
+
+  it("stay sub-agents when a later frame omits the parent", () => {
+    const v = foldWalk(foldWalk(emptyWalk(WALK), [member, c1]), [{ ...c1, parentRunId: undefined, status: "completed", ts: "2026-10-01T10:05:00Z" }]);
+    expect(v.members.has("c1")).toBe(false);
+    expect(v.children?.get("c1")).toMatchObject({ status: "completed", parentRunId: "m1" });
+  });
+
+  it("are listed under the run that started them, oldest first", () => {
+    const v = foldWalk(emptyWalk(WALK), [member, c1, c2, g1]);
+    expect(childRows(v, "m1").map((r) => r.runId)).toEqual(["c2", "c1"]);
+    expect(childRows(v, "c1").map((r) => r.runId)).toEqual(["g1"]);
+    expect(childRows(v, "g1")).toEqual([]);
+  });
+
+  it("follow their run in a picker, depth first", () => {
+    const other = row({ runId: "m2", parentRunId: WALK, state: "lead", stateVisit: 3 });
+    const v = foldWalk(emptyWalk(WALK), [member, other, c1, c2, g1]);
+    expect(withDescendants(v, rowsForState(v, "lead")).map((r) => r.runId)).toEqual(["m1", "c2", "c1", "g1", "m2"]);
+  });
+});
+

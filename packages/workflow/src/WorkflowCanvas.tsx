@@ -48,7 +48,9 @@ import {
 import { bindingNodeId, bindingNodes } from "./lib/bindings";
 import {
   emptyWalk,
+  childRows,
   liveRunByState,
+  withDescendants,
   foldWalk,
   isTerminal,
   pulseLabel,
@@ -1437,7 +1439,7 @@ function WorkflowCanvasInner({
           <RunChatColumn
             key={selected.id}
             state={selected.id}
-            rows={rowsForState(walk, selected.id)}
+            rows={withDescendants(walk, rowsForState(walk, selected.id))}
             renderRunChat={renderRunChat}
             onDetails={() => setSideTab("details")}
           />
@@ -1476,6 +1478,7 @@ function WorkflowCanvasInner({
                     rows={rowsForState(walk, selected.id)}
                     readRun={dataLayer.readRun}
                     readRunPrompt={dataLayer.readRunPrompt}
+                    childrenOf={(runId) => childRows(walk, runId)}
                     noRuns={selected.kind === "decision" ? <DecisionWalkNote visits={decisionsOf(decided, selected.id)} taken={decisionWent(selected.id)} /> : undefined}
                   />
                 </>
