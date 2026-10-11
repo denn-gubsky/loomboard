@@ -1,6 +1,6 @@
 {
   "name": "@loomboard/workflow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Reusable React canvas for loomcycle TeamDef workflows — author the agent-team graph, run it, monitor it, and interact with its agents.",
   "license": "Apache-2.0",

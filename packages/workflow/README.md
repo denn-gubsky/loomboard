@@ -7,7 +7,10 @@ It is the canvas of the [loomboard](https://github.com/denn-gubsky/loomboard) ap
 - **Edit** a team's states and transitions on a graph, with an inspector for each state.
 - **JSON view** of the same team, kept in sync with the graph (Canvas, JSON or Split).
 - **Check** asks the runtime what a save would meet, without saving.
-- **Run** a team and follow the walk: which state is active, each run's prompt and result, and the output.
+- **Run** a team and follow the walk: which state is active, each run's prompt and result, the sub-agents a run started, and the output.
+- **Decision nodes:** a state that asks a decision model typed questions and routes on the answer, with a questions editor, a lab to try the questions against a model, and the model's answer with its probabilities once a walk has passed through.
+- **Held channels:** release held messages from a channel's panel, for any channel and for a team's own.
+- **A team's own definitions:** its agents, skills, channels, schedules and webhooks, edited with the team.
 - **Build by hand:** a new team from a template, save as a new team, import, copy and download.
 
 The component is presentational. It has no HTTP client of its own: the host hands it a small `WorkflowDataLayer`, so it works with `@loomcycle/client` or with any other way of reaching the runtime.
@@ -18,7 +21,7 @@ The component is presentational. It has no HTTP client of its own: the host hand
 npm install @loomboard/workflow @loomcycle/def-fields react react-dom
 ```
 
-`react` (18 or 19), `react-dom` and `@loomcycle/def-fields` (0.2) are peer dependencies.
+`react` (18 or 19), `react-dom` and `@loomcycle/def-fields` (0.4) are peer dependencies.
 
 ## Use
 
@@ -72,15 +75,21 @@ Five methods are required. Each of the others turns on one part of the canvas, a
 | `listAgents` | Agent pickers. |
 | `runTeamDetached`, `watchWalk`, `cancelWalk` | Run mode: start a walk, follow it, stop it. |
 | `readRun`, `readRunPrompt`, `watchRunLines` | A run's result, its prompt, and its last lines on the node. |
+| `watchWalkDecisions` | What a walk's Decision nodes answered (loomcycle 1.110 or later). Without it a Decision node says only which way the walk went. |
+| `listDecisionModels`, `decide` | The Decision lab, and the decision model names shown for a team's own agents (loomcycle 1.107 or later). |
 | `listChannels`, `peekChannel`, `publishChannel` | Channel backlog, the Output panel, the publish composer. |
 | `listTeamChannels`, `peekTeamChannel` | A team's own channels (loomcycle 1.108 or later). |
+| `releaseChannel`, `releaseTeamChannel` | Releasing held messages from a channel's panel. |
 | `listDocuments`, `listChunks`, `readChunk` | Document pickers in the start form, and a result shown as a chunk. |
 
-Two things the canvas relies on:
+What the canvas relies on:
 
 - **Save means "the team now runs this".** loomcycle's fork leaves a new version inactive, so after `forkTeam` the canvas calls `promoteTeam(defId)` with the version it saved. Leave `promoteTeam` out only if your `forkTeam` already makes the new version active.
 - **`getActiveTeamDef(name)` returns the team's active version.** A save first checks that it is still the one the canvas last saw, and refuses if someone else moved it.
 - **`createTeam` under a name that already exists is not refused by loomcycle**; it becomes that team's next active version. The canvas checks `listTeams` first and refuses a taken name itself.
+- **`runTeamDetached` is given an `idempotencyKey`**, one per press of Start and the same one on a retry of that press. Pass it to the runtime (loomcycle 1.109 or later), so a start whose answer was lost does not start a second walk.
+- **`watchWalk` hands over every run of the walk as a row**, sub-agents included. A row's `parentRunId` is what tells them apart: a member's is the walk's own run, a sub-agent's is the run that started it. The canvas lists a sub-agent under its run and does not count it towards its state.
+- **`decide` is a real call.** The Decision lab says so before the operator presses Ask: the runtime charges it to the caller.
 
 A complete binding to `@loomcycle/client` is in the loomboard repo: [`src/lib/workflowCanvasData.ts`](https://github.com/denn-gubsky/loomboard/blob/main/src/lib/workflowCanvasData.ts).
 
@@ -105,7 +114,33 @@ if (!canSave(findings)) console.log(findings.filter((f) => f.level === "error"))
 
 ## Compatibility
 
-Built against loomcycle 1.108. Saving needs 1.104 or later (a team's own definitions and variables). Check needs 1.105, and reading a team's own channels needs 1.108; on an older runtime those calls fail and the canvas says why.
+Built against loomcycle 1.111. Saving needs 1.104 or later (a team's own definitions and variables). On an older runtime the calls below fail, or the feature is absent, and the canvas says why.
+
+| Feature | loomcycle |
+|---|---|
+| Check | 1.105 |
+| The Decision lab | 1.107 |
+| A team's own channels: reading and releasing | 1.108 |
+| The Decision node; a Start that is safe to retry | 1.109 |
+| A Decision node's answer after a walk | 1.110 |
+| A run's sub-agents as rows | 1.111 |
+
+## Changes
+
+### 0.2.0
+
+- The Decision node: a state that asks a decision model and routes on its answer, with a questions editor, the Decision lab, and the recorded answer in Run mode.
+- Release held messages from a channel's panel.
+- A run's sub-agents listed under it, each with its own answer and prompt.
+- Decision models for a team's own agents: the `Decision` tool and the agent's own narrowing of the models.
+- Start sends an idempotency key, so a retried start does not begin a second walk.
+- Run mode colours only the transition a walk took out of a Decision node.
+- `@loomcycle/def-fields` peer dependency is now 0.4.
+- New optional data-layer methods: `watchWalkDecisions`, `listDecisionModels`, `decide`, `releaseChannel`, `releaseTeamChannel`. `WalkRunRow` gains `parentRunId` and `startedAt`; `WalkView` gains `children`.
+
+### 0.1.0
+
+The first release: the graph and JSON views, Check, Run mode, a team's own definitions and variables, and building a team by hand.
 
 ## License
 
