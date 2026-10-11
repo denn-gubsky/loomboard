@@ -178,6 +178,26 @@ export function channelNodes(
   return out;
 }
 
+/** The most one release call may deliver (loomcycle's cap, for an ordinary
+ *  channel and for a team's own). */
+export const RELEASE_MAX = 1000;
+
+export interface ReleaseChoice {
+  count: number;
+  label: string;
+}
+
+/** What a held channel offers: one message, and everything held — or the
+ *  first RELEASE_MAX of it, said as such, when more is held than one call
+ *  takes. Nothing when nothing is held. */
+export function releaseChoices(info?: ChannelInfo): ReleaseChoice[] {
+  const held = info?.held_count ?? 0;
+  if (held <= 0) return [];
+  const one: ReleaseChoice = { count: 1, label: "Release 1" };
+  if (held === 1) return [one];
+  return [one, held > RELEASE_MAX ? { count: RELEASE_MAX, label: `Release ${RELEASE_MAX} of ${held}` } : { count: held, label: `Release all ${held}` }];
+}
+
 /** One line for the channel's face: what is stored and what a reader can
  *  actually see. `message_count` includes held messages and those awaiting
  *  the channel's hooks, which no reader sees yet. */

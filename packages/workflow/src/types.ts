@@ -95,6 +95,13 @@ export interface DecisionCallAnswer {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
+/** What a release did: how many messages were delivered, and how many the
+ *  channel still holds. */
+export interface ReleaseOutcome {
+  released: number;
+  stillHeld: number;
+}
+
 /** One visit of a walk to a decision state, as the walk's own run records it
  *  (loomcycle 1.110, the `team_decision` event). */
 export interface WalkDecision {
@@ -370,6 +377,16 @@ export interface WorkflowDataLayer {
    *  is the local name. Optional: without it the Output panel says the
    *  channel cannot be read from outside the team. */
   peekTeamChannel?(team: string, name: string, opts: { max?: number }): Promise<ChannelMessage[]>;
+
+  /** Deliver the oldest `count` messages held on a channel to its readers
+   *  (RFC EE item 2). `scope` is the channel's own declared scope, resolved by
+   *  the canvas as for publish; a user-scoped channel is released at the
+   *  caller's own user. Optional: without it a held channel shows its count
+   *  and no action. */
+  releaseChannel?(channel: string, opts: { scope: string; count: number }): Promise<ReleaseOutcome>;
+  /** The same for one of the team's own channels (loomcycle 1.108). `name` is
+   *  the local name. */
+  releaseTeamChannel?(team: string, name: string, opts: { count: number }): Promise<ReleaseOutcome>;
 
   /** Publish one message to a channel — how an SDLC run actually starts.
    *

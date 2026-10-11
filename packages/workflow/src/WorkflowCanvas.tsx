@@ -20,7 +20,7 @@ import { useRunLines } from "./useRunLines";
 import { useTeamDocument } from "./useTeamDocument";
 import { useJsonDraft } from "./useJsonDraft";
 import { TeamJsonView, type TeamJsonViewHandle } from "./TeamJsonView";
-import { LOCAL_KINDS, localKind, localNames, teamOwnEntries, teamVars, type LocalKind } from "./lib/teamLocal";
+import { LOCAL_KINDS, localKind, localNames, localRef, teamOwnEntries, teamVars, type LocalKind } from "./lib/teamLocal";
 import { addLocal, localNameError, removeLocal, renameLocal, setLocal } from "./lib/localEdit";
 import { RunChatColumn } from "./RunChatColumn";
 import { InputFieldsPanel } from "./inspector/InputFieldsPanel";
@@ -72,7 +72,7 @@ import {
   variableNodeId,
   variableNodes,
 } from "./lib/variables";
-import { channelNodes } from "./lib/channelNodes";
+import { channelNodes, type ChannelNodeView } from "./lib/channelNodes";
 import { agentNodes, agentOwner, dispatchesAgent } from "./lib/agentNodes";
 import { AgentNode } from "./nodes/AgentNode";
 import { channelsInUse, withGrant, type ChannelSide } from "./lib/channels";
@@ -99,7 +99,7 @@ import { DecisionQuestionsEditor } from "./inspector/DecisionQuestionsEditor";
 import { AnswerView, DecisionLab, type DecisionLabSeed } from "./DecisionLab";
 import { newStartKey, startAttempt, startPrint, type StartAttempt } from "./lib/startKey";
 import { checkSummary, unlistedIssues } from "./lib/check";
-import type { ChannelInfo, TeamCheck, WalkDecision, WorkflowCanvasProps } from "./types";
+import type { ChannelInfo, ReleaseOutcome, TeamCheck, WalkDecision, WorkflowCanvasProps } from "./types";
 
 /** No decisions, as one stable value: a fresh [] would rebuild every node. */
 const NO_DECISIONS: readonly WalkDecision[] = [];
@@ -303,6 +303,13 @@ function WorkflowCanvasInner({
     [model, editable],
   );
 
+  // Bumped after a release and when a walk ends, so both channel listings are read again and the
+  // counts on the nodes are what the runtime now holds.
+  const [channelsRead, setChannelsRead] = useState(0);
+  // And when a walk ends: what it published is what there is to release.
+  useEffect(() => {
+    if (walkEnded) setChannelsRead((n) => n + 1);
+  }, [walkEnded]);
   useEffect(() => {
     if (!(entryChannel || namesChannels) || !dataLayer.listChannels) return;
     let cancelled = false;
@@ -315,7 +322,7 @@ function WorkflowCanvasInner({
     return () => {
       cancelled = true;
     };
-  }, [dataLayer, entryChannel, namesChannels]);
+  }, [dataLayer, entryChannel, namesChannels, channelsRead]);
 
   // The team's own channels (`./name`) are listed per team, never among the
   // others (loomcycle 1.108): their counts, for the channel nodes and the
@@ -335,7 +342,30 @@ function WorkflowCanvasInner({
       cancelled = true;
     };
     // Again after a save: the saved team may now declare another channel.
-  }, [dataLayer, declaresOwnChannels, teamNameNow, doc.parentDefId]);
+  }, [dataLayer, declaresOwnChannels, teamNameNow, doc.parentDefId, channelsRead]);
+
+  // Deliver held messages (RFC EE item 2): a team's own channel through the
+  // team, any other at its declared scope. It acts on the runtime, not on the
+  // draft, so it is offered in Edit and in Run mode alike. A read-only embed
+  // has no Inspector, and so no release.
+  const releaseHeld = useCallback(
+    async (view: ChannelNodeView, count: number) => {
+      const own = localRef(view.channel);
+      let call: Promise<ReleaseOutcome>;
+      if (own !== undefined) {
+        if (!dataLayer.releaseTeamChannel || !teamNameNow) throw new Error("this team's own channels cannot be released from here");
+        call = dataLayer.releaseTeamChannel(teamNameNow, own, { count });
+      } else {
+        const scope = view.info?.scope;
+        if (!dataLayer.releaseChannel || !scope) throw new Error("this channel's scope is not known, so it cannot be released from here");
+        call = dataLayer.releaseChannel(view.channel, { scope, count });
+      }
+      // Read the counts again whatever happened: a refusal may mean they moved.
+      return call.finally(() => setChannelsRead((n) => n + 1));
+    },
+    [dataLayer, teamNameNow],
+  );
+  const canRelease = !!(dataLayer.releaseChannel || dataLayer.releaseTeamChannel);
 
   // The channels the graph names, as nodes its data edges route through.
   const channelViews = useMemo(() => (model ? channelNodes(model, channels, ownChannels) : []), [model, channels, ownChannels]);
@@ -1425,6 +1455,7 @@ function WorkflowCanvasInner({
             channels={model ? teamChannels(model) : undefined}
             onChannelsChange={onChannelsChange}
             onGrantChannel={editable ? onGrantChannel : undefined}
+            onReleaseChannel={canRelease ? releaseHeld : undefined}
             walkHooks={model ? walkHooks(model) : undefined}
             onWalkHooksChange={onWalkHooksChange}
             channel={channelViews.find((v) => v.id === selectedId) ?? null}

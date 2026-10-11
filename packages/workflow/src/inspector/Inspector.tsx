@@ -3,7 +3,8 @@ import { FoldedFieldList, HookEventsControl, type DefValue } from "@loomcycle/de
 import type { CanvasNode, Json, JsonObject, TeamChannels } from "../lib/model";
 import { KNOWN_KINDS, handlerOf } from "../lib/model";
 import type { Finding } from "../lib/validate";
-import { channelBacklog, type ChannelNodeView } from "../lib/channelNodes";
+import { channelBacklog, releaseChoices, type ChannelNodeView } from "../lib/channelNodes";
+import type { ReleaseOutcome } from "../types";
 import type { ChannelSide } from "../lib/channels";
 import { MEMORY_VARIANTS, type BindingNodeView } from "../lib/bindings";
 import type { VariableNodeView } from "../lib/variables";
@@ -29,6 +30,8 @@ export interface InspectorProps {
   channel?: ChannelNodeView | null;
   /** Grant the sides a channel needs in the team ACL. Absent: no button. */
   onGrantChannel?: (channel: string, sides: ChannelSide[]) => void;
+  /** Deliver held messages of the selected channel. Absent: no action. */
+  onReleaseChannel?: (view: ChannelNodeView, count: number) => Promise<ReleaseOutcome>;
   /** A selected binding node, shown read-only. */
   binding?: BindingNodeView | null;
   /** A selected variable node. */
@@ -79,6 +82,7 @@ export function Inspector({
   onWalkHooksChange,
   channel,
   onGrantChannel,
+  onReleaseChannel,
   binding,
   variable,
   teamOwn,
@@ -124,7 +128,7 @@ export function Inspector({
     );
   }
   if (!node && binding) return <BindingPanel view={binding} />;
-  if (!node && channel) return <ChannelPanel view={channel} disabled={disabled} onGrant={onGrantChannel} />;
+  if (!node && channel) return <ChannelPanel view={channel} disabled={disabled} onGrant={onGrantChannel} onRelease={onReleaseChannel} />;
 
   if (!node) {
     // With nothing selected the inspector shows the TEAM's own configuration
@@ -325,12 +329,37 @@ function ChannelPanel({
   view,
   disabled,
   onGrant,
+  onRelease,
 }: {
   view: ChannelNodeView;
   disabled?: boolean;
   onGrant?: (channel: string, sides: ChannelSide[]) => void;
+  onRelease?: (view: ChannelNodeView, count: number) => Promise<ReleaseOutcome>;
 }) {
   const { info, grants, declared } = view;
+  // A release acts on the runtime, not on the draft: it is offered in Edit
+  // and in Run mode alike, and is not held back by `disabled`.
+  const [releasing, setReleasing] = useState(false);
+  const [released, setReleased] = useState<{ channel: string; text: string; error?: boolean }>();
+  const choices = onRelease ? releaseChoices(info) : [];
+  const release = async (count: number) => {
+    if (!onRelease) return;
+    setReleasing(true);
+    setReleased(undefined);
+    try {
+      const r = await onRelease(view, count);
+      setReleased({
+        channel: view.channel,
+        text: r.released
+          ? `Delivered ${r.released} ${r.released === 1 ? "message" : "messages"}; ${r.stillHeld} still held.`
+          : "Nothing was held: no message was delivered.",
+      });
+    } catch (e) {
+      setReleased({ channel: view.channel, text: `Not released: ${e instanceof Error ? e.message : String(e)}`, error: true });
+    } finally {
+      setReleasing(false);
+    }
+  };
   const row = (label: string, value: string) => (
     <div className="lb-wf-field">
       <span className="lb-wf-field__label">{label}</span>
@@ -351,6 +380,27 @@ function ChannelPanel({
       {info && row("Scope", info.scope ?? "not declared")}
       {info && row("Stored", channelBacklog(info) ?? "")}
       {info?.hold && row("Hold", "HELD — stored, delivered to nobody until released")}
+      {choices.length > 0 && (
+        <div className="lb-wf-field" data-testid="channel-release">
+          <span className="lb-wf-field__label">Release</span>
+          <span className="lb-wf-team__hint">
+            Delivers the oldest held messages to this channel&rsquo;s readers. A Starter that reads it per message starts
+            one run for each.
+          </span>
+          <span className="lb-wf-lab__actions">
+            {choices.map((c) => (
+              <button key={c.label} type="button" className="lb-wf-btn" disabled={releasing} onClick={() => void release(c.count)}>
+                {c.label}
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
+      {released && released.channel === view.channel && (
+        <div className={`lb-wf-finding lb-wf-finding--${released.error ? "error" : "info"}`} role={released.error ? "alert" : "status"}>
+          {released.text}
+        </div>
+      )}
       {(info?.hooks?.length ?? 0) > 0 &&
         row("Hooks", `${info!.hooks!.join(", ")} — each message is delivered only if they release it`)}
       {declared === false && (

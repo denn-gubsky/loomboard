@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHANNEL_CLEARANCE, CHANNEL_LIFT, CHANNEL_NODE_PREFIX, channelBacklog, channelNodeId, channelNodes } from "./channelNodes";
+import { CHANNEL_CLEARANCE, CHANNEL_LIFT, CHANNEL_NODE_PREFIX, channelBacklog, channelNodeId, channelNodes, releaseChoices } from "./channelNodes";
 import { CHANNEL_LAYOUT_PREFIX, fromDefinition, toDefinition, type CanvasModel } from "./model";
 
 const starter = (source?: string, sink?: string) => ({
@@ -198,5 +198,24 @@ describe("channelBacklog", () => {
     );
     expect(channelBacklog({ name: "c", message_count: 0 })).toBe("0 readable");
     expect(channelBacklog(undefined)).toBeUndefined();
+  });
+});
+
+describe("releaseChoices", () => {
+  it("offers nothing when nothing is held", () => {
+    expect(releaseChoices(undefined)).toEqual([]);
+    expect(releaseChoices({ name: "c", hold: true, message_count: 4 })).toEqual([]);
+  });
+
+  it("offers one message, and all of them by their count", () => {
+    expect(releaseChoices({ name: "c", held_count: 1 })).toEqual([{ count: 1, label: "Release 1" }]);
+    expect(releaseChoices({ name: "c", held_count: 7 })).toEqual([
+      { count: 1, label: "Release 1" },
+      { count: 7, label: "Release all 7" },
+    ]);
+  });
+
+  it("does not call a capped release \"all\": one call delivers at most 1000", () => {
+    expect(releaseChoices({ name: "c", held_count: 2500 })[1]).toEqual({ count: 1000, label: "Release 1000 of 2500" });
   });
 });
