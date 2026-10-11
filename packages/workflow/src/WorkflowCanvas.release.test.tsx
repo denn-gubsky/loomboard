@@ -110,6 +110,15 @@ describe("WorkflowCanvas — releasing held messages", () => {
     await waitFor(() => expect(listChannels.mock.calls.length).toBeGreaterThan(before));
   });
 
+  it("says whose a channel is: the team's own is declared in the team, any other outside it", async () => {
+    await open(layer().l, "./journal");
+    expect(screen.getByText(/The team's own: declared in this team and nowhere else/)).toBeTruthy();
+    expect(screen.queryByText(/Referenced, not owned/)).toBeNull();
+    cleanup();
+    await open(layer().l, "inbox");
+    expect(screen.getByText(/Referenced, not owned/)).toBeTruthy();
+  });
+
   it("offers no release on a host that cannot release", async () => {
     const { l } = layer({ releaseChannel: undefined, releaseTeamChannel: undefined });
     await open(l, "inbox");
