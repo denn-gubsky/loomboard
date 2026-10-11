@@ -712,6 +712,10 @@
   padding: 0;
   list-style: none;
 }
+/* A run's sub-agents, set in under it. */
+.loomboard-workflow .lb-wf-runs__children {
+  margin: 4px 0 4px 10px;
+}
 .loomboard-workflow .lb-wf-runs__row {
   border: 1px solid var(--lb-wf-border);
   border-left-width: 3px;

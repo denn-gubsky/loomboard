@@ -10,7 +10,8 @@ import type { RunChatTarget } from "./types";
 
 export interface RunChatColumnProps {
   state: string;
-  /** The state's runs, in order (lib/runs.ts rowsForState). */
+  /** The state's runs, in order (lib/runs.ts rowsForState), each followed by
+   *  the sub-agents it started (withDescendants). */
   rows: readonly WalkRunRow[];
   renderRunChat: (run: RunChatTarget) => ReactNode;
   onDetails: () => void;
@@ -18,9 +19,14 @@ export interface RunChatColumnProps {
 
 export function RunChatColumn({ state, rows, renderRunChat, onDetails }: RunChatColumnProps) {
   const [picked, setPicked] = useState<string>();
-  const live = [...rows].reverse().find((r) => !isTerminal(r.status));
-  const run = rows.find((r) => r.runId === picked) ?? live ?? rows[rows.length - 1];
-  const visits = visitNumbers(rows);
+  // A sub-agent is in the picker, and is never what the column opens on:
+  // the default is one of the state's own runs.
+  const ids = new Set(rows.map((r) => r.runId));
+  const isSub = (r: WalkRunRow) => !!r.parentRunId && ids.has(r.parentRunId);
+  const own = rows.filter((r) => !isSub(r));
+  const live = [...own].reverse().find((r) => !isTerminal(r.status));
+  const run = rows.find((r) => r.runId === picked) ?? live ?? own[own.length - 1] ?? rows[rows.length - 1];
+  const visits = visitNumbers(own);
 
   return (
     <aside className="lb-wf-runchat" aria-label={`Conversation of ${state}`}>
@@ -32,9 +38,11 @@ export function RunChatColumn({ state, rows, renderRunChat, onDetails }: RunChat
             value={run.runId}
             onChange={(e) => setPicked(e.target.value)}
           >
-            {rows.map((r, i) => (
+            {rows.map((r) => (
               <option key={r.runId} value={r.runId}>
-                {`#${i + 1}${visits.get(r.runId) ? ` · visit ${visits.get(r.runId)}` : ""} · ${rowPhase(r)}`}
+                {isSub(r)
+                  ? `↳ ${r.agent} · ${rowPhase(r)}`
+                  : `#${own.indexOf(r) + 1}${visits.get(r.runId) ? ` · visit ${visits.get(r.runId)}` : ""} · ${rowPhase(r)}`}
               </option>
             ))}
           </select>

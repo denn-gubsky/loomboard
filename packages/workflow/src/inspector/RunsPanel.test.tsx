@@ -93,4 +93,31 @@ describe("RunsPanel", () => {
     expect(await screen.findByText(evil)).toBeTruthy();
     expect(container.querySelector("img")).toBeNull();
   });
+
+  it("lists a run's sub-agents under it, and theirs under them", () => {
+    const kids: Record<string, WalkRunRow[]> = {
+      r1: [row({ runId: "c1", agent: "helper", status: "completed" }), row({ runId: "c2", agent: "helper" })],
+      c2: [row({ runId: "g1", agent: "leaf" })],
+    };
+    render(<RunsPanel rows={[row({ runId: "r1", awaited: "children", awaitedOn: "c1,c2" })]} childrenOf={(id) => kids[id] ?? []} />);
+    const subs = screen.getByRole("list", { name: "Sub-agents of marketing/editor" });
+    expect(subs.querySelector('[data-testid="run-c1"]')?.textContent).toMatch(/completed.*helper/);
+    expect(screen.getByRole("list", { name: "Sub-agents of helper" }).textContent).toMatch(/leaf/);
+    // With the rows below it, the note does not repeat their ids.
+    expect(screen.getByTestId("run-r1").textContent).toMatch(/waiting for its background sub-agents to finish/);
+    expect(screen.getByTestId("run-r1").textContent).not.toMatch(/c1, c2/);
+  });
+
+  it("opens a sub-agent's answer like a member's, read from its own run", async () => {
+    const readRun = vi.fn(async (runId: string): Promise<RunDetail> => ({ runId, status: "completed", finalText: "alpha" }));
+    render(<RunsPanel rows={[row({ runId: "r1" })]} childrenOf={(id) => (id === "r1" ? [row({ runId: "c1", agent: "helper", status: "completed" })] : [])} readRun={readRun} />);
+    fireEvent.click(screen.getByRole("button", { name: /helper/ }));
+    expect(await screen.findByText("alpha")).toBeTruthy();
+    expect(readRun).toHaveBeenCalledWith("c1");
+  });
+
+  it("stops drawing sub-agents at a fixed depth, so a listing that loops cannot hang the panel", () => {
+    render(<RunsPanel rows={[row({ runId: "r1" })]} childrenOf={() => [row({ runId: "loop", agent: "loop" })]} />);
+    expect(screen.getAllByTestId("run-loop")).toHaveLength(4);
+  });
 });

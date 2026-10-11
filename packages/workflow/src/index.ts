@@ -172,6 +172,8 @@ export {
   rowPhase,
   waitingNote,
   rowsForState,
+  childRows,
+  withDescendants,
   statePulses,
   walkSignal,
 } from "./lib/runs";
