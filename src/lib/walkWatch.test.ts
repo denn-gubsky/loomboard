@@ -71,11 +71,7 @@ describe("rowFromAgent / rowFromEvent", () => {
  *  applies the server's filter — `run_id == walkId || parent_context.walk_id
  *  == walkId` — so the walk's own start, end and pause arrive on it. It has
  *  NO getRun: the watcher must never need to read the walk's run itself. */
-function fakeClient(pages: Agent[][][], streams: RunStateEvent[][], userRuns: Agent[][] = [[]]) {
-  // The user's own run listing, where a member's sub-agents are found: one
-  // answer per read, the last repeated.
-  let userRead = 0;
-  const listUserAgents = vi.fn(async (_userId: string) => userRuns[Math.min(userRead++, userRuns.length - 1)]);
+function fakeClient(pages: Agent[][][], streams: RunStateEvent[][]) {
   let hydration = 0;
   let pageIdx = 0;
   let streamIdx = 0;
@@ -97,8 +93,7 @@ function fakeClient(pages: Agent[][][], streams: RunStateEvent[][], userRuns: Ag
     }
   });
   return {
-    client: { listWalkRuns, streamUserRunStates, listUserAgents } as unknown as LoomcycleClient,
-    listUserAgents,
+    client: { listWalkRuns, streamUserRunStates } as unknown as LoomcycleClient,
     listWalkRuns,
     streamUserRunStates,
   };
@@ -189,50 +184,18 @@ describe("watchWalk", () => {
     expect(listWalkRuns.mock.calls.length).toBe(calls);
   });
 
-  // loomcycle 1.110: a run an agent spawns carries its parent run and no walk
-  // id, so it is in neither the walk's listing nor its stream.
-  const walkPage = [[agent({ run_id: WALK }), agent({ run_id: "m1", parent_run_id: WALK, parent_context: { walk_id: WALK, state: "s" } })]];
-  const sub = (o: Partial<Agent>) => agent({ parent_run_id: "m1", agent: "helper", ...o });
-
-  it("finds a member's sub-agents in the user's runs, by the run that started them — at any depth, and no one else's", async () => {
-    const { client, listUserAgents } = fakeClient([walkPage], [[]], [
-      [sub({ run_id: "c1" }), agent({ run_id: "g1", parent_run_id: "c1" }), agent({ run_id: "x", parent_run_id: "other-run" }), agent({ run_id: "top" })],
-    ]);
-    const got: WalkRunRow[] = [];
-    const stop = watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), undefined, { reconnectMs: 10_000 });
-    await settle();
-    stop();
-    expect(got.map((r) => r.runId)).toEqual([WALK, "m1", "c1", "g1"]);
-    expect(got.find((r) => r.runId === "c1")).toMatchObject({ parentRunId: "m1", agent: "helper" });
-    // Every status: the listing's default is running runs only, and a
-    // sub-agent that ended would otherwise never be seen to end.
-    expect(listUserAgents).toHaveBeenCalledWith("u", expect.objectContaining({ status: "all" }));
-  });
-
-  it("reads the sub-agents again when a member starts waiting for them, and when that wait is over", async () => {
-    const { client, listUserAgents } = fakeClient(
-      [walkPage],
-      [[member({ run_id: "m1", awaited_state: "children", awaited_on: "c1" }), member({ run_id: "m1", ts: "2026-10-01T10:02:00Z" }), member({ run_id: "m1", ts: "2026-10-01T10:03:00Z" })]],
-      [[], [sub({ run_id: "c1" })], [sub({ run_id: "c1", status: "completed", completed_at: "2026-10-01T10:01:30Z" })]],
+  it("passes on a member's sub-agents from the walk's own listing and stream, each with the run that started it (G25)", async () => {
+    // loomcycle 1.111: a sub-agent carries the member's walk id and state.
+    const ctx = { walk_id: WALK, state: "s", state_visit: 1 };
+    const { client } = fakeClient(
+      [[[agent({ run_id: WALK }), agent({ run_id: "m1", parent_run_id: WALK, parent_context: ctx }), agent({ run_id: "c1", parent_run_id: "m1", agent: "helper", parent_context: ctx })]]],
+      [[event({ run_id: "c1", parent_run_id: "m1", agent: "helper", status: "completed", parent_context: ctx })]],
     );
     const got: WalkRunRow[] = [];
     const stop = watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), undefined, { reconnectMs: 10_000 });
     await settle();
     stop();
-    // Once at hydration, once per change of the wait — not once per frame.
-    expect(listUserAgents).toHaveBeenCalledTimes(3);
-    expect(got.filter((r) => r.runId === "c1").map((r) => r.status)).toEqual(["running", "completed"]);
-  });
-
-  it("keeps following the walk when the user's runs cannot be listed, and says so", async () => {
-    const { client, listUserAgents } = fakeClient([walkPage], [[member({ run_id: "m1", status: "completed" })]]);
-    listUserAgents.mockRejectedValue(new Error("403"));
-    const got: WalkRunRow[] = [];
-    const errors: unknown[] = [];
-    const stop = watchWalk(client, async () => "u", WALK, (rows) => got.push(...rows), (e) => errors.push(e), { reconnectMs: 10_000 });
-    await settle();
-    stop();
-    expect(got.map((r) => r.runId)).toEqual([WALK, "m1", "m1"]);
-    expect(String(errors[0])).toMatch(/403/);
+    expect(got.filter((r) => r.runId === "c1").map((r) => [r.parentRunId, r.status])).toEqual([["m1", "running"], ["m1", "completed"]]);
+    expect(got.find((r) => r.runId === "m1")?.parentRunId).toBe(WALK);
   });
 });
