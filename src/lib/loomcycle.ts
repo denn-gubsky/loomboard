@@ -1,7 +1,6 @@
 import { LoomcycleClient } from "@loomcycle/client";
 import type { ConnectionSettings } from "../state/settings";
-import { isTauri, proxyMode } from "./proxyMode";
-import { getNativeFetch } from "./nativeTransport";
+import { transportFor } from "./buildConnection";
 
 // The APP's client singleton, used to validate a connection (whoami) and by the
 // sidebar (fork cleanup on delete). The embeddable <Chat> builds its own client
@@ -14,35 +13,16 @@ export function getClient(s: ConnectionSettings): LoomcycleClient {
   // NUL-join so a token containing the baseUrl (or vice versa) can't collide.
   const sig = `${s.baseUrl} ${s.token}`;
   if (!client || sig !== signature) {
-    // In proxy mode (dev server or the standalone CLI) we call same-origin /v1
-    // and name the target runtime via a header the proxy routes on — so any
-    // reachable loomcycle (local, LAN/TrueNAS, remote) works with no CORS. A
-    // plain production build has no proxy, so we hit the Base URL directly
-    // (needs CORS or a same-origin reverse proxy).
-    const target = s.baseUrl;
-    // Desktop (Tauri): call the absolute loomcycle URL directly over native HTTP
-    // (Rust), which bypasses webview CORS — proxyMode is false in that build, so
-    // no target header is injected. Blank URL → the same local default the CLI
-    // uses. The native fetch is a stable singleton (see nativeTransport).
-    const nativeFetch = isTauri ? getNativeFetch() : null;
-
+    // The transport every client of the app shares (see transportFor): the
+    // dev/CLI proxy, Tauri's native HTTP, or the Base URL directly.
+    const t = transportFor(s.baseUrl);
     client = new LoomcycleClient({
-      baseUrl: proxyMode ? "" : s.baseUrl || (isTauri ? "http://127.0.0.1:8787" : ""),
+      baseUrl: t.baseUrl,
       authToken: s.token || undefined,
-      // Wrap fetch for two reasons: (1) the SDK calls its stored fetch as a
-      // method (`ctx.fetchImpl(url)`), and the browser's native fetch rejects a
-      // non-global receiver with "Illegal invocation"; (2) inject the
-      // dynamic-proxy target header in proxy mode. In Tauri, delegate to the
-      // native fetch instead.
-      fetch: (input, init) => {
-        if (nativeFetch) return nativeFetch(input, init);
-        if (proxyMode && target) {
-          const headers = new Headers(init?.headers);
-          headers.set("x-loomcycle-target", target);
-          return fetch(input, { ...init, headers });
-        }
-        return fetch(input, init);
-      },
+      // Always a plain function: the SDK calls its stored fetch as a method
+      // (`ctx.fetchImpl(url)`), and the browser's native fetch rejects a
+      // non-global receiver with "Illegal invocation".
+      fetch: (input, init) => (t.fetch ? t.fetch(input, init) : fetch(input, init)),
     });
     signature = sig;
   }
