@@ -23,6 +23,7 @@ import AgentPortfolioGrid from "./components/agentchat/AgentPortfolioGrid";
 import WorkflowArea from "./components/workflow/WorkflowArea";
 import CanvasArea from "./components/workflow/CanvasArea";
 import PendingApprovals from "./components/PendingApprovals";
+import MyAccess from "./components/MyAccess";
 
 function ChatArea() {
   const { settings, signIn } = useConnection();
@@ -220,7 +221,8 @@ function AppShell() {
     new URLSearchParams(window.location.search).has("board");
   // A view the principal cannot reach (its nav entry is hidden too) falls back
   // to chat rather than render a wall of 403s.
-  const shown: SidebarView = view !== "chat" && capabilities.views[view] ? view : "chat";
+  const shown: SidebarView =
+    view === "chat" || view === "access" || capabilities.views[view] ? view : "chat";
   return (
     <ConversationsProvider>
       <ActiveChatProvider>
@@ -242,6 +244,8 @@ function AppShell() {
             <CanvasArea onOpenDocument={capabilities.views.documents ? openDocument : undefined} />
           ) : shown === "users" ? (
             <PendingApprovals />
+          ) : shown === "access" ? (
+            <MyAccess />
           ) : (
             <ChatArea />
           )}
