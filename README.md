@@ -109,7 +109,9 @@ auth:
         - http://127.0.0.1:5173                            # `npm run dev` (4173 for the loomboard CLI)
 ```
 
-The desktop app signs in only to an `https` loomcycle, or one on this machine over `http`: it opens nothing but that server's own sign-in page. A web app on `127.0.0.1` needs no redirect entry (the preset's loopback one matches any port), only its origin. Over plain http, open loomboard at `127.0.0.1`, not `localhost`: loomcycle accepts http redirects only to a loopback IP. A static host must answer `/auth/callback` with `index.html`.
+The desktop app opens nothing but that server's own sign-in page, over `https`, or over plain `http` only when the Base URL is an IP literal on this machine or a private network (`10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `fc00::/7`, `fe80::/10` — a plain-HTTP LAN install such as `http://192.168.0.77:8787`). A host name over `http` is refused: a name can resolve anywhere.
+
+**A plain-HTTP LAN loomcycle** works with these settings: `LOOMCYCLE_PUBLIC_URL=http://<lan-ip>:<port>` (the same address people enter as the Base URL), a token or password gate (OIDC, OAuth and passkey gates refuse a non-loopback `http` public URL at load), and, in `auth.mode: strict`, `LOOMCYCLE_UI_INSECURE_COOKIES=1` for the sign-in page's session over http. The desktop app's loopback redirect and Tauri origins come from the `loomboard` preset unchanged. A web app on `127.0.0.1` needs no redirect entry (the preset's loopback one matches any port), only its origin. Over plain http, open loomboard at `127.0.0.1`, not `localhost`: loomcycle accepts http redirects only to a loopback IP. A static host must answer `/auth/callback` with `index.html`.
 
 **Per form factor:**
 

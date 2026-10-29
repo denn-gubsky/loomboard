@@ -162,17 +162,31 @@ fn web_origin(url: &str) -> Option<String> {
     }
 }
 
-fn loopback_host(u: &Url) -> bool {
+/// Whether plain http may be used to this host: only an IP literal on this
+/// machine or a private network (a LAN loomcycle such as the TrueNAS app).
+/// Never a name — a name can resolve anywhere, so names stay https-only —
+/// and never a public address.
+fn plain_http_host(u: &Url) -> bool {
+    use std::net::IpAddr;
     let Some(host) = u.host_str() else { return false };
     let host = host.trim_start_matches('[').trim_end_matches(']');
-    host == "localhost" || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
+    match host.parse::<IpAddr>() {
+        Ok(IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+        Ok(IpAddr::V6(ip)) => {
+            let first = ip.segments()[0];
+            ip.is_loopback()
+                || (first & 0xfe00) == 0xfc00 // fc00::/7, unique local
+                || (first & 0xffc0) == 0xfe80 // fe80::/10, link local
+        }
+        Err(_) => false,
+    }
 }
 
-/// An https URL — or http to this machine — of loomcycle's authorize
-/// endpoint, on `origin`.
+/// An https URL — or http to this machine or a private-network address — of
+/// loomcycle's authorize endpoint, on `origin`.
 fn authorize_url_allowed(url: &str, origin: &str) -> bool {
     let Ok(u) = Url::parse(url) else { return false };
-    let secure = u.scheme() == "https" || (u.scheme() == "http" && loopback_host(&u));
+    let secure = u.scheme() == "https" || (u.scheme() == "http" && plain_http_host(&u));
     secure
         && u.username().is_empty()
         && u.password().is_none()
@@ -480,6 +494,40 @@ mod tests {
         assert!(!authorize_url_allowed("file:///etc/passwd", o));
         assert!(!authorize_url_allowed("http://lc.example/v1/_oauth/authorize", "http://lc.example"));
         assert!(authorize_url_allowed("http://127.0.0.1:8787/v1/_oauth/authorize", "http://127.0.0.1:8787"));
+    }
+
+    #[test]
+    fn opens_plain_http_only_to_a_private_network_ip_literal() {
+        let ok = |url: &str| authorize_url_allowed(url, &web_origin(url).unwrap());
+        // A plain-HTTP loomcycle on the LAN (the TrueNAS app) or this machine.
+        for url in [
+            "http://192.168.0.77:8787/v1/_oauth/authorize",
+            "http://10.1.2.3/v1/_oauth/authorize",
+            "http://172.16.0.9:8787/v1/_oauth/authorize",
+            "http://172.31.255.1/v1/_oauth/authorize",
+            "http://169.254.10.20/v1/_oauth/authorize",
+            "http://[fd12:3456::1]:8787/v1/_oauth/authorize",
+            "http://[fe80::1]/v1/_oauth/authorize",
+            "http://127.0.0.1:8787/v1/_oauth/authorize",
+            "http://[::1]:8787/v1/_oauth/authorize",
+        ] {
+            assert!(ok(url), "{url} should be allowed");
+        }
+        // Public addresses and any name — a name can resolve anywhere — stay https-only.
+        for url in [
+            "http://8.8.8.8/v1/_oauth/authorize",
+            "http://172.32.0.1/v1/_oauth/authorize",
+            "http://[2001:4860::8888]/v1/_oauth/authorize",
+            "http://evil.example/v1/_oauth/authorize",
+            "http://localhost:8787/v1/_oauth/authorize",
+            "http://loomcycle.local/v1/_oauth/authorize",
+        ] {
+            assert!(!ok(url), "{url} should be refused");
+        }
+        let lan = "http://192.168.0.77:8787";
+        assert!(!authorize_url_allowed("http://192.168.0.77:8787/ui/login", lan));
+        assert!(!authorize_url_allowed("http://192.168.0.78:8787/v1/_oauth/authorize", lan));
+        assert!(!authorize_url_allowed("http://192.168.0.77:9999/v1/_oauth/authorize", lan));
     }
 
     #[test]
