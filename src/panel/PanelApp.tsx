@@ -6,7 +6,21 @@ import {
   type ChatConversation,
   type Connection,
 } from "../chat";
-import type { ConnectionSettings } from "../state/settings";
+import {
+  LoomcycleClient,
+  type OAuthTokenProvider,
+  type OAuthTokenSet,
+} from "@loomcycle/client";
+import { signInSettings, type ConnectionSettings } from "../state/settings";
+import { chromeSessionRefreshStore } from "../state/signInStore";
+import { buildConnection } from "../lib/buildConnection";
+import {
+  describeSignInError,
+  resumeTokens,
+  startTokenProvider,
+  type SignInProblemKind,
+} from "../lib/appSignIn";
+import { extSignIn } from "../lib/extSignIn";
 import { saveExtSettings, clearExtSettings } from "../state/extSettings";
 import { persistConversation, newConversation } from "../state/extConversation";
 import { saveMode, type ActionMode } from "../state/extMode";
@@ -21,7 +35,15 @@ import ActionBar from "./ActionBar";
 import ModeToggle from "./ModeToggle";
 import BridgeStatusBar from "./BridgeStatusBar";
 
-type Status = "idle" | "connecting" | "connected" | "error";
+/** "signing-in" = the sign-in window is open; the panel keeps its form up. */
+type Status = "idle" | "connecting" | "signing-in" | "connected" | "error";
+
+// A sign-in's refresh token lives in chrome.storage.session: memory-only,
+// gone when the browser quits, and unreadable from content scripts.
+const refreshStore = () => chromeSessionRefreshStore(chrome.storage.session);
+
+const signedOutMessage =
+  "Your loomcycle sign-in has ended — it was signed out, expired, or revoked. Sign in again.";
 
 interface Props {
   initialSettings: ConnectionSettings | null;
@@ -32,7 +54,8 @@ interface Props {
 // The side-panel root: a single chat against the browser-assistant agent. No
 // sidebar / Library / conversation list — one conversation, persisted to
 // chrome.storage. Transport is a plain fetch to the absolute loomcycle URL
-// (host_permissions bypass page CORS), so the Connection needs no fetch override.
+// (host_permissions bypass page CORS); a sign-in adds only the bearer (see
+// buildConnection).
 export default function PanelApp({
   initialSettings,
   initialConversation,
@@ -45,55 +68,146 @@ export default function PanelApp({
     initialSettings ? "connecting" : "idle",
   );
   const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<SignInProblemKind | null>(null);
+  const [signIn, setSignIn] = useState<OAuthTokenProvider | null>(null);
+  // The live sign-in, for onSignedOut (is it still the current one?) and a
+  // synchronous disconnect.
+  const signInRef = useRef<OAuthTokenProvider | null>(null);
   // The principal (whoami.subject) the client-tool host runs under — display
   // only; the WebSocket derives the routing key from the bearer, not this value.
   const [userId, setUserId] = useState<string | null>(null);
   const [conversation, setConversation] =
     useState<ChatConversation>(initialConversation);
 
-  // Stable Connection identity (keyed on settings) so <Chat>'s client memo
-  // doesn't churn. No fetch override — the default fetch reaches loomcycle
-  // directly under the granted host permission.
+  // Stable Connection identity (keyed on settings + sign-in) so <Chat>'s
+  // client memo doesn't churn. The default fetch reaches loomcycle directly
+  // under the granted host permission.
   const connection = useMemo<Connection | null>(
-    () =>
-      settings ? { baseUrl: settings.baseUrl, token: settings.token } : null,
-    [settings],
+    () => (settings ? buildConnection(settings, signIn) : null),
+    [settings, signIn],
   );
 
-  const connect = useCallback(async (s: ConnectionSettings) => {
-    setStatus("connecting");
-    setError(null);
+  // Validate a client and make it the panel's connection. whoami is the only
+  // hard gate. Registering the agent uses a surface a plain user token may
+  // lack scope for (agent def creation) — it must NOT block connect. The
+  // client-tool host itself only needs the bearer.
+  const finishConnect = useCallback(async (client: LoomcycleClient, s: ConnectionSettings) => {
+    const me = await client.whoami();
     try {
-      const client = createLoomcycleClient({
-        baseUrl: s.baseUrl,
-        token: s.token,
-      });
-      // whoami is the only hard gate. Registering the agent uses a surface a
-      // plain user token may lack scope for (agent def creation) — it must NOT
-      // block connect. The client-tool host itself only needs the bearer.
-      const me = await client.whoami();
-      try {
-        await ensureChromeAssistant(client);
-      } catch (e) {
-        console.warn("[loomboard] could not ensure chrome-assistant agent:", e);
-      }
-      await saveExtSettings(s);
-      setSettings(s);
-      setUserId(me.subject);
-      setStatus("connected");
+      await ensureChromeAssistant(client);
     } catch (e) {
-      setError(describeError(e));
-      setStatus("error");
+      console.warn("[loomboard] could not ensure chrome-assistant agent:", e);
     }
+    await saveExtSettings(s);
+    setSettings(s);
+    setUserId(me.subject);
+    setError(null);
+    setProblem(null);
+    setStatus("connected");
   }, []);
 
-  // Validate persisted settings once on mount (avoids a login-screen flash).
+  const connect = useCallback(
+    async (s: ConnectionSettings) => {
+      setStatus("connecting");
+      setError(null);
+      setProblem(null);
+      try {
+        await finishConnect(createLoomcycleClient({ baseUrl: s.baseUrl, token: s.token }), s);
+      } catch (e) {
+        setError(describeError(e));
+        setStatus("error");
+      }
+    },
+    [finishConnect],
+  );
+
+  const fail = useCallback((e: unknown) => {
+    const p = describeSignInError(e);
+    setError(p.message);
+    setProblem(p.kind);
+    setStatus("error");
+  }, []);
+
+  // Make a sign-in's tokens the panel's connection. `fresh` = straight from a
+  // code exchange, so its refresh token is not stored yet.
+  const adoptSignIn = useCallback(
+    async (s: ConnectionSettings, tokens: OAuthTokenSet, fresh: boolean) => {
+      const store = refreshStore();
+      if (fresh) await store.save({ baseUrl: s.baseUrl, refreshToken: tokens.refresh_token });
+      const provider = startTokenProvider({
+        t: { baseUrl: s.baseUrl },
+        baseUrl: s.baseUrl,
+        tokens,
+        store,
+        onSignedOut: () => {
+          if (signInRef.current !== provider) return; // signed out on purpose
+          signInRef.current = null;
+          void store.clear();
+          setSignIn(null);
+          setUserId(null);
+          setError(signedOutMessage);
+          setProblem(null);
+          setStatus("error");
+        },
+      });
+      signInRef.current = provider;
+      // Set before "connected" is, so no render ever builds a token-less
+      // connection for a signed-in panel.
+      setSignIn(provider);
+      try {
+        const client = new LoomcycleClient({
+          baseUrl: s.baseUrl,
+          tokenProvider: provider,
+          fetch: (i, init) => fetch(i, init),
+        });
+        await finishConnect(client, s);
+      } catch (e) {
+        if (signInRef.current === provider) {
+          signInRef.current = null;
+          setSignIn(null);
+        }
+        throw e;
+      }
+    },
+    [finishConnect],
+  );
+
+  const signInWithLoomcycle = useCallback(
+    async (baseUrl: string, override?: string) => {
+      setStatus("signing-in");
+      setError(null);
+      setProblem(null);
+      try {
+        const tokens = await extSignIn(baseUrl, chrome.identity, override);
+        await adoptSignIn(signInSettings(baseUrl, override), tokens, true);
+      } catch (e) {
+        fail(e);
+      }
+    },
+    [adoptSignIn, fail],
+  );
+
+  // Once on mount: resume a stored sign-in, or validate a persisted token
+  // connection (avoids a login-screen flash).
   const validated = useRef(false);
   useEffect(() => {
     if (validated.current) return;
     validated.current = true;
-    if (initialSettings) void connect(initialSettings);
-  }, [initialSettings, connect]);
+    if (!initialSettings) return;
+    if (initialSettings.auth !== "oauth") {
+      void connect(initialSettings);
+      return;
+    }
+    void (async () => {
+      const refreshToken = await refreshStore().load(initialSettings.baseUrl);
+      // No stored sign-in (the browser restarted, or it was signed out).
+      if (!refreshToken) {
+        setStatus("idle");
+        return;
+      }
+      await adoptSignIn(initialSettings, resumeTokens(refreshToken), false);
+    })().catch(fail);
+  }, [initialSettings, connect, adoptSignIn, fail]);
 
   const onConversationChange = useCallback(
     (patch: Partial<ChatConversation>) => {
@@ -115,11 +229,19 @@ export default function PanelApp({
   }, [status, conversation.baseAgent, onConversationChange]);
 
   // The client-tool host's client — a separate WebSocket context from <Chat>'s
-  // own streaming client, sharing the same connection.
-  const loopClient = useMemo(
-    () => (connection ? createLoomcycleClient(connection) : null),
-    [connection],
-  );
+  // own streaming client, sharing the same connection. A WebSocket carries no
+  // fetch, so a signed-in host takes the token provider itself.
+  const loopClient = useMemo(() => {
+    if (!connection) return null;
+    if (signIn) {
+      return new LoomcycleClient({
+        baseUrl: connection.baseUrl,
+        tokenProvider: signIn,
+        fetch: (i, init) => fetch(i, init),
+      });
+    }
+    return createLoomcycleClient(connection);
+  }, [connection, signIn]);
 
   // Action mode. The host reads it through a ref (updated by the toggle) so a
   // mid-run switch takes effect without restarting the host; `mode` state drives
@@ -142,6 +264,16 @@ export default function PanelApp({
   }, []);
 
   const disconnect = useCallback(async () => {
+    const provider = signInRef.current;
+    signInRef.current = null;
+    if (provider) {
+      // Revoke on the server (RFC 7009) and forget the stored refresh token;
+      // either can fail offline, the tokens are forgotten locally regardless.
+      void provider.signOut();
+      await refreshStore().clear();
+    }
+    setSignIn(null);
+    setProblem(null);
     await clearExtSettings();
     setSettings(null);
     setUserId(null);
@@ -186,7 +318,10 @@ export default function PanelApp({
     return (
       <Connect
         onConnect={connect}
+        onSignIn={signInWithLoomcycle}
+        busy={status === "signing-in"}
         error={status === "error" ? error : null}
+        problem={problem}
         initial={settings}
       />
     );

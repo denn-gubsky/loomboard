@@ -5,21 +5,16 @@
 // SECURITY: `token` is a secret (CLAUDE.md). It lives here only; never log it,
 // never serialize it into a channel payload, screenshot, or telemetry.
 
-import type { ConnectionSettings } from "./settings";
+// A sign-in stores only {baseUrl, auth: "oauth"} here; its refresh token lives
+// in chrome.storage.session (state/signInStore), never in local storage.
+
+import { parseConnectionSettings, type ConnectionSettings } from "./settings";
 import { storageGet, storageRemove, storageSet } from "./chromeStorage";
 
 const KEY = "loomboard.connection";
 
 export async function loadExtSettings(): Promise<ConnectionSettings | null> {
-  const parsed = await storageGet<Partial<ConnectionSettings>>(KEY);
-  if (
-    !parsed ||
-    typeof parsed.baseUrl !== "string" ||
-    typeof parsed.token !== "string"
-  ) {
-    return null;
-  }
-  return { baseUrl: parsed.baseUrl, token: parsed.token };
+  return parseConnectionSettings(await storageGet<unknown>(KEY));
 }
 
 export async function saveExtSettings(s: ConnectionSettings): Promise<void> {
