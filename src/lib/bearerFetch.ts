@@ -55,6 +55,12 @@ export function bearerFetch(
   return async (input, init) => {
     const url = requestUrl(input, pageHref);
     if (!url || !url.startsWith(prefix)) return inner(input, init);
+    // A Request's own body is consumed by the first send, so keep a copy for
+    // the retry (only when it has one and init does not replace it).
+    const spare =
+      typeof Request !== "undefined" && input instanceof Request && input.body !== null && init?.body === undefined
+        ? input.clone()
+        : input;
     const token = await provider.getToken();
     const first = await inner(input, withBearer(input, init, token));
     if (first.status !== 401 || !provider.onUnauthorized) return first;
@@ -62,6 +68,6 @@ export function bearerFetch(
     const fresh = await provider.onUnauthorized(token);
     if (!fresh || fresh === token) return first;
     await first.body?.cancel().catch(() => undefined);
-    return inner(input, withBearer(input, init, fresh));
+    return inner(spare, withBearer(spare, init, fresh));
   };
 }

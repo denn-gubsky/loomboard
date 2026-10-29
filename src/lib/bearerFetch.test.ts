@@ -40,6 +40,22 @@ describe("apiPrefix", () => {
 describe("bearerFetch", () => {
   const prefix = "https://lc.example/v1/";
 
+  it("retries a Request with a body after a 401 without re-sending a consumed body", async () => {
+    // A fetch reads a Request's body, so the same Request cannot be sent twice.
+    const bodies: string[] = [];
+    let status = 401;
+    const inner = (async (input: RequestInfo | URL) => {
+      bodies.push(await (input as Request).text());
+      const r = new Response(null, { status });
+      status = 200;
+      return r;
+    }) as typeof fetch;
+    const f = bearerFetch(inner, provider(["at-1", "at-2"]), prefix);
+    const res = await f(new Request(`${prefix}runs`, { method: "POST", body: '{"agent":"a"}' }));
+    expect(res.status).toBe(200);
+    expect(bodies).toEqual(['{"agent":"a"}', '{"agent":"a"}']);
+  });
+
   it("sends the current access token to the connected loomcycle's API", async () => {
     const r = recorder();
     const f = bearerFetch(r.fetch, provider(["at-1"]), prefix);
