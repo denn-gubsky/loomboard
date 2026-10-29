@@ -24,6 +24,7 @@ import WorkflowArea from "./components/workflow/WorkflowArea";
 import CanvasArea from "./components/workflow/CanvasArea";
 import PendingApprovals from "./components/PendingApprovals";
 import MyAccess from "./components/MyAccess";
+import AppClients from "./components/AppClients";
 
 function ChatArea() {
   const { settings, signIn } = useConnection();
@@ -244,6 +245,8 @@ function AppShell() {
             <CanvasArea onOpenDocument={capabilities.views.documents ? openDocument : undefined} />
           ) : shown === "users" ? (
             <PendingApprovals />
+          ) : shown === "apps" ? (
+            <AppClients />
           ) : shown === "access" ? (
             <MyAccess />
           ) : (

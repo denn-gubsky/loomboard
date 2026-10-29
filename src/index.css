@@ -736,6 +736,143 @@ button {
   font-size: 0.78rem;
 }
 
+/* ---- apps (the app clients loomcycle signs people in for) ---- */
+.apps-pane {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+  font-size: 0.9rem;
+}
+.apps-pane__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+.apps-pane__bar h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.apps-pane__note {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+.apps-pane__loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.apps-pane__note code {
+  overflow-wrap: anywhere;
+}
+.apps-pane__error {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+.apps-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.apps-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+}
+.apps-row__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.apps-row__who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+.apps-row__who span {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.apps-row__lists {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 1rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+}
+.apps-row__lists dt {
+  color: var(--text-dim);
+}
+.apps-row__lists dd {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+}
+.apps-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+}
+.apps-confirm p {
+  flex: 1 1 100%;
+  margin: 0;
+}
+.apps-confirm__go {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35em 0.8em;
+}
+.apps-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  max-width: 36rem;
+  margin-top: 1.4rem;
+}
+.apps-form h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.apps-form > .btn-ghost {
+  align-self: flex-start;
+}
+.apps-form > .btn-primary {
+  align-self: flex-start;
+}
+.apps-form textarea {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.6em 0.7em;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  resize: vertical;
+}
+.apps-form textarea:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+.apps-form__check {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
 /* ---- my access (the caller's own connection and access rules) ---- */
 .access-pane {
   flex: 1;

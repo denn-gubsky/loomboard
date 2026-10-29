@@ -16,7 +16,7 @@ import type { ServerCapabilities } from "@loomcycle/library";
 
 /** The views a principal may or may not reach. Chat is not among them: it is
  *  the view the app falls back to. */
-export type GatedView = "library" | "documents" | "memory" | "boards" | "workflow" | "canvas" | "users";
+export type GatedView = "library" | "documents" | "memory" | "boards" | "workflow" | "canvas" | "users" | "apps";
 
 // Each view's loomcycle pages, keyed as internal/api/http/nav_capabilities.go
 // keys them: the pages whose primary route is the view's own first call.
@@ -31,10 +31,15 @@ const VIEW_SURFACES: Record<GatedView, readonly string[]> = {
   workflow: ["paths", "teams"],
   canvas: ["teams"],
   users: ["users"],
+  // loomcycle's console has no page for app clients, so its summary never
+  // names this one and the operator rule always decides: registering apps
+  // needs substrate:tenant or admin. The access rules (def:client) are asked
+  // by each call, and the view shows their refusal.
+  apps: ["apps"],
 };
 
-// The pages loomcycle marks Operator in nav_capabilities.go.
-const OPERATOR_PAGES: ReadonlySet<string> = new Set(["users"]);
+// The pages loomcycle marks Operator in nav_capabilities.go, and Apps.
+const OPERATOR_PAGES: ReadonlySet<string> = new Set(["users", "apps"]);
 
 export interface Capabilities {
   /** Per view, whether the principal may reach it. */
