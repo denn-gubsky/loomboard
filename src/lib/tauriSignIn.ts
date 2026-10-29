@@ -40,11 +40,29 @@ export async function tauriSignIn(
     throw e;
   }
   const { url, pending } = begun;
-  await invoke<void>("oauth_open_browser", { url });
-  const target = await invoke<string | null>("oauth_loopback_wait", { expectedState: pending.state });
+  try {
+    await invoke<void>("oauth_open_browser", { url });
+  } catch (e) {
+    // Cancelled while the metadata was read: the listener is already gone.
+    if (e === NOT_IN_PROGRESS) throw new SignInCancelledError();
+    // Refused (e.g. a plain-http host name): nothing will be redirected.
+    await invoke<void>("oauth_loopback_cancel").catch(() => undefined);
+    throw e;
+  }
+  let target: string | null;
+  try {
+    target = await invoke<string | null>("oauth_loopback_wait", { expectedState: pending.state });
+  } catch (e) {
+    if (e === NOT_IN_PROGRESS) throw new SignInCancelledError();
+    throw e;
+  }
   if (!target) throw new SignInCancelledError();
   return completeSignIn(t, pending, `${origin}${target}`);
 }
+
+/** What the loopback commands answer once their sign-in was cancelled or
+ *  replaced (src-tauri/src/sign_in.rs NOT_IN_PROGRESS). */
+export const NOT_IN_PROGRESS = "no sign-in is in progress";
 
 /** Stop a desktop sign-in that is waiting for the browser. */
 export function cancelTauriSignIn(invoke: Invoke): Promise<void> {

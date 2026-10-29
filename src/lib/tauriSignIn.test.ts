@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Invoke } from "../state/signInStore";
 import { SignInAddressMismatchError, SignInCancelledError } from "./appSignIn";
-import { tauriSignIn } from "./tauriSignIn";
+import { NOT_IN_PROGRESS, tauriSignIn } from "./tauriSignIn";
 
 const ISSUER = "https://lc.example";
 // What the Base URL's metadata answers; a test swaps it for another server's.
@@ -83,6 +83,33 @@ describe("tauriSignIn", () => {
     } finally {
       issuer = ISSUER;
     }
+  });
+
+  it("ends as cancelled, without opening a page, when Cancel came before the browser opened", async () => {
+    // The Rust side refuses to open the browser once its sign-in was cancelled.
+    const srv = fakeServer();
+    const calls: string[] = [];
+    const invoke = vi.fn(async (cmd: string) => {
+      calls.push(cmd);
+      if (cmd === "oauth_loopback_start") return 53817;
+      if (cmd === "oauth_open_browser") throw NOT_IN_PROGRESS;
+      return undefined;
+    }) as unknown as Invoke;
+    await expect(tauriSignIn(srv.t, ISSUER, invoke)).rejects.toBeInstanceOf(SignInCancelledError);
+    expect(calls).toEqual(["oauth_loopback_start", "oauth_open_browser"]);
+  });
+
+  it("releases the listener when the browser cannot be opened", async () => {
+    const srv = fakeServer();
+    const calls: string[] = [];
+    const invoke = vi.fn(async (cmd: string) => {
+      calls.push(cmd);
+      if (cmd === "oauth_loopback_start") return 53817;
+      if (cmd === "oauth_open_browser") throw "sign-in can only open loomcycle's sign-in page for this Base URL";
+      return undefined;
+    }) as unknown as Invoke;
+    await expect(tauriSignIn(srv.t, ISSUER, invoke)).rejects.toMatch(/sign-in page/);
+    expect(calls).toEqual(["oauth_loopback_start", "oauth_open_browser", "oauth_loopback_cancel"]);
   });
 
   it("ends as cancelled when the listener gives up", async () => {

@@ -41,6 +41,10 @@ const MAX_CONNECTIONS: usize = 16;
 /// The longest request line read from the browser; a redirect carrying a code,
 /// a state and an issuer is far shorter.
 const MAX_REQUEST_LINE: usize = 8 * 1024;
+/// The error a command returns once its sign-in was cancelled or replaced.
+/// The frontend reads exactly this text as a cancel (src/lib/tauriSignIn.ts
+/// NOT_IN_PROGRESS).
+const NOT_IN_PROGRESS: &str = "no sign-in is in progress";
 const KEYCHAIN_SERVICE: &str = "com.loomboard.app";
 const KEYCHAIN_ACCOUNT: &str = "loomcycle-sign-in";
 /// Bounds on a stored sign-in record (src/state/signInStore.ts STORED_LIMITS).
@@ -87,7 +91,7 @@ pub async fn oauth_loopback_wait(
         .lock()
         .map_err(|_| "sign-in state is poisoned")?
         .take()
-        .ok_or("no sign-in is in progress")?;
+        .ok_or(NOT_IN_PROGRESS)?;
     let mine = state.generation.load(Ordering::SeqCst);
     let current = Arc::clone(&state.generation);
     tauri::async_runtime::spawn_blocking(move || {
@@ -99,31 +103,48 @@ pub async fn oauth_loopback_wait(
     .map_err(|e| e.to_string())?
 }
 
-/// Stop a sign-in: a wait in progress returns None, and a listener nobody is
-/// waiting on yet is closed.
+/// Stop a sign-in: a wait in progress returns None, a listener nobody is
+/// waiting on yet is closed, and the browser can no longer be opened for it
+/// (a cancel during discovery must not still open the sign-in page).
 #[tauri::command]
 pub fn oauth_loopback_cancel(state: State<'_, Loopback>) {
-    state.generation.fetch_add(1, Ordering::SeqCst);
-    if let Ok(mut l) = state.listener.lock() {
+    cancel(&state);
+}
+
+fn cancel(lb: &Loopback) {
+    lb.generation.fetch_add(1, Ordering::SeqCst);
+    if let Ok(mut l) = lb.listener.lock() {
         *l = None;
+    }
+    if let Ok(mut o) = lb.origin.lock() {
+        *o = None;
     }
 }
 
 /// Open the authorize page in the system browser. Only loomcycle's authorize
-/// endpoint on the Base URL this sign-in started for: the URL comes from the
-/// webview, and the OS would otherwise open whatever a URL names.
+/// endpoint on the Base URL this sign-in started for, and only while its
+/// listener is still bound: the URL comes from the webview, and the OS would
+/// otherwise open whatever a URL names.
 #[tauri::command]
 pub fn oauth_open_browser(app: tauri::AppHandle, state: State<'_, Loopback>, url: String) -> Result<(), String> {
-    let origin = state
+    may_open(&state, &url)?;
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+fn may_open(lb: &Loopback, url: &str) -> Result<(), String> {
+    let origin = lb
         .origin
         .lock()
         .map_err(|_| "sign-in state is poisoned")?
         .clone()
-        .ok_or("no sign-in is in progress")?;
-    if !authorize_url_allowed(&url, &origin) {
+        .ok_or(NOT_IN_PROGRESS)?;
+    if lb.listener.lock().map_err(|_| "sign-in state is poisoned")?.is_none() {
+        return Err(NOT_IN_PROGRESS.into());
+    }
+    if !authorize_url_allowed(url, &origin) {
         return Err("sign-in can only open loomcycle's sign-in page for this Base URL".into());
     }
-    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+    Ok(())
 }
 
 #[tauri::command]
@@ -481,6 +502,20 @@ mod tests {
     fn wait_gives_up_at_the_deadline() {
         let (l, _) = listener();
         assert_eq!(wait_for_callback(l, "s1", Instant::now(), || false).unwrap(), None);
+    }
+
+    #[test]
+    fn a_cancelled_sign_in_cannot_open_the_browser() {
+        // Cancel pressed while the frontend is still reading the server's
+        // metadata: the browser must not open on the sign-in page afterwards.
+        let lb = Loopback::default();
+        let (l, _) = listener();
+        *lb.listener.lock().unwrap() = Some(l);
+        *lb.origin.lock().unwrap() = Some("https://lc.example".into());
+        let url = "https://lc.example/v1/_oauth/authorize?client_id=loomboard";
+        assert_eq!(may_open(&lb, url), Ok(()));
+        cancel(&lb);
+        assert_eq!(may_open(&lb, url), Err(NOT_IN_PROGRESS.to_string()));
     }
 
     #[test]
