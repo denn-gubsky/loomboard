@@ -11,6 +11,7 @@ import {
   PanelLeftOpen,
   Sun,
   Share2,
+  ShieldCheck,
   UserCheck,
   Workflow,
   type LucideIcon,
@@ -26,7 +27,8 @@ import logoWhite from "../assets/loomboard-logo-white.svg";
 import logoBlack from "../assets/loomboard-logo-black.svg";
 import brandMark from "../assets/loomboard-favicon.svg";
 
-export type SidebarView = "chat" | GatedView;
+/** Chats and My access are open to everyone; the rest are gated. */
+export type SidebarView = "chat" | "access" | GatedView;
 
 interface Props {
   view: SidebarView;
@@ -128,6 +130,13 @@ export default function Sidebar({ view, onViewChange }: Props) {
             <Icon size={16} /> <span className="label">{label}</span>
           </button>
         ))}
+        <button
+          className={view === "access" ? "side-nav-btn active" : "side-nav-btn"}
+          onClick={() => onViewChange("access")}
+          title="My access — how you are connected and what your access rules allow"
+        >
+          <ShieldCheck size={16} /> <span className="label">My access</span>
+        </button>
       </nav>
 
       {view === "chat" ? (

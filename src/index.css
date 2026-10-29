@@ -736,6 +736,116 @@ button {
   font-size: 0.78rem;
 }
 
+/* ---- my access (the caller's own connection and access rules) ---- */
+.access-pane {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+  font-size: 0.9rem;
+}
+.access-pane h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.1rem;
+}
+.access-pane h3 {
+  margin: 1.2rem 0 0.4rem;
+  font-size: 0.95rem;
+}
+.access-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+.access-facts > div {
+  display: contents;
+}
+.access-facts dt {
+  color: var(--text-dim);
+}
+.access-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.access-note {
+  color: var(--text-dim);
+  margin: 0 0 0.5rem;
+}
+.access-error {
+  color: var(--danger);
+}
+.access-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.access-ask input {
+  min-width: 0;
+  width: 10rem;
+  padding: 0.35em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text);
+}
+.access-ask .btn-primary {
+  padding: 0.4em 0.9em;
+}
+.access-answer {
+  margin-top: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+}
+.access-answer p {
+  margin: 0.3rem 0;
+}
+.access-pill {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-radius: 5px;
+  padding: 0.1em 0.5em;
+  border: 1px solid var(--border);
+}
+.access-pill--allow {
+  color: #16a34a;
+  border-color: #16a34a;
+}
+.access-pill--deny {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.access-pill--no_match {
+  color: var(--text-dim);
+}
+.access-trace {
+  width: 100%;
+  margin-top: 0.5rem;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.access-trace caption {
+  text-align: left;
+  color: var(--text-dim);
+  padding-bottom: 0.2rem;
+}
+.access-trace th,
+.access-trace td {
+  text-align: left;
+  padding: 0.3rem 0.5rem;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.access-trace th {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
 .explorer-pane__bar {
   padding: 0.4rem 0.7rem;
   border-bottom: 1px solid var(--border);
