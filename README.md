@@ -109,17 +109,19 @@ auth:
         - http://127.0.0.1:5173                            # `npm run dev` (4173 for the loomboard CLI)
 ```
 
-A web app on `127.0.0.1` needs no redirect entry (the preset's loopback one matches any port), only its origin. Over plain http, open loomboard at `127.0.0.1`, not `localhost`: loomcycle accepts http redirects only to a loopback IP. A static host must answer `/auth/callback` with `index.html`.
+The desktop app signs in only to an `https` loomcycle, or one on this machine over `http`: it opens nothing but that server's own sign-in page. A web app on `127.0.0.1` needs no redirect entry (the preset's loopback one matches any port), only its origin. Over plain http, open loomboard at `127.0.0.1`, not `localhost`: loomcycle accepts http redirects only to a loopback IP. A static host must answer `/auth/callback` with `index.html`.
 
 **Per form factor:**
 
 | | How the person signs in | Where the tokens live |
 |---|---|---|
-| web | full-page redirect, back to `/auth/callback` (code and state are wiped from the address bar first) | access token in memory; refresh token in the tab's `sessionStorage` (survives a reload, gone with the tab) |
-| extension | `chrome.identity.launchWebAuthFlow`, back to `https://<id>.chromiumapp.org/` | access token in memory; refresh token in `chrome.storage.session` (cleared when the browser quits) |
-| desktop | the system browser, back to a one-shot listener on a random `127.0.0.1` port | access token in memory; refresh token in the OS keychain (`com.loomboard.app`) |
+| web | full-page redirect, back to `/auth/callback` (code and state are wiped from the address bar first; the page sends no `Referer`) | the tab's `sessionStorage` (survives a reload, gone with the tab) |
+| extension | `chrome.identity.launchWebAuthFlow`, back to `https://<id>.chromiumapp.org/` | `chrome.storage.session` (cleared when the browser quits), shared by the extension's panels |
+| desktop | the system browser, back to a one-shot listener on a random `127.0.0.1` port that answers only this sign-in's state | the OS keychain (`com.loomboard.app`) |
 
-No token is ever written to `localStorage` or a URL. Sign-out revokes the sign-in on loomcycle (RFC 7009); a sign-in loomcycle ends (revoked, user disabled, expired) returns to the sign-in screen with a message. One sign-in per tab: duplicating a tab copies its `sessionStorage`, and the two then refresh the same token, which loomcycle treats as a replay and ends the sign-in.
+What is stored is the refresh token with the current access token and its expiry, so a start within the token's hour refreshes nothing. No token is ever written to `localStorage` or a URL. Sign-out — and connecting with a pasted token instead — revokes the sign-in on loomcycle (RFC 7009) and clears what was stored; a sign-in loomcycle ends (revoked, user disabled, expired) returns to the sign-in screen with a message.
+
+A refresh token rotates on every use, and two holders refreshing it at once end the sign-in. Refreshes take turns under a Web Lock and pick up a rotation another holder made, which is how extension panels in several windows share one sign-in. Browser tabs do not share `sessionStorage`, so a sign-in belongs to the tab that made it: a duplicated tab (which copies `sessionStorage`) does not resume it and asks you to sign in again — quick if you are still signed in to loomcycle in that browser.
 
 **The sign-in address check.** loomboard signs in only if the server's issuer (`LOOMCYCLE_PUBLIC_URL`) is on the origin of the Base URL you entered; the button shows the host you will be sent to. The code exchange always goes to the Base URL, so a server — or a proxy in front of one — that named another server's sign-in would receive that server's code. There is no override: if the check fails, enter loomcycle's public address as the Base URL.
 

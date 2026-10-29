@@ -101,7 +101,7 @@ line under the toolbar.
 
 Enter the loomcycle URL and **Sign in with loomcycle**: loomcycle's sign-in page opens in a
 window of its own (`chrome.identity`, hence the `identity` permission) and closes when you are
-signed in. The refresh token stays in `chrome.storage.session` and is gone when the browser
+signed in. The sign-in stays in `chrome.storage.session` and is gone when the browser
 quits; **Disconnect** revokes the sign-in. A bearer can still be pasted under **Advanced**.
 Chat with the assistant about the open page — e.g.
 "summarize this page", "collect the product prices into a table and save them", "fill

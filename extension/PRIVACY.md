@@ -30,9 +30,8 @@ analytics, and shows no ads.
 - **Connection settings are stored locally**, in `chrome.storage.local` on your
   own device. They are never transmitted anywhere except as described next, and
   are removed when you disconnect or uninstall the extension.
-- **Sign-in tokens are kept in memory**: the access token in the side panel,
-  the refresh token in `chrome.storage.session`, which Chrome clears when the
-  browser quits and which page scripts cannot read. Disconnecting revokes the
+- **Sign-in tokens are kept in memory**: in `chrome.storage.session`, which
+  Chrome clears when the browser quits and which page scripts cannot read. Disconnecting revokes the
   sign-in on your loomcycle server.
 - **Your bearer token** is sent **only to the loomcycle server you configured**,
   to authenticate your requests (over the `Authorization` header for HTTP and the
