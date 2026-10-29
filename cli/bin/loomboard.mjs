@@ -60,11 +60,17 @@ const serve = sirv(publicDir, { single: true, dev: false });
 // falling back to defaultTarget. changeOrigin so the upstream sees its own
 // host. TLS certs are verified by default; --insecure allows a self-signed
 // runtime on your LAN.
+// What goes to loomcycle: the /v1 API, and its OAuth authorization server
+// metadata, which "Sign in with loomcycle" reads first (RFC 8414 serves it at
+// the root, outside /v1).
+const OAUTH_METADATA = "/.well-known/oauth-authorization-server";
+const proxied = (url) => url.startsWith("/v1") || url.split("?")[0] === OAUTH_METADATA;
+
 const proxy = createProxyMiddleware({
   target: defaultTarget,
   changeOrigin: true,
   secure: !insecure,
-  pathFilter: (path) => path.startsWith("/v1"),
+  pathFilter: (path) => proxied(path),
   router: (req) => {
     const t = req.headers["x-loomcycle-target"];
     const target = Array.isArray(t) ? t[0] : t;
@@ -91,7 +97,7 @@ const server = http.createServer((req, res) => {
     res.end("Forbidden");
     return;
   }
-  if (req.url && req.url.startsWith("/v1")) {
+  if (req.url && proxied(req.url)) {
     proxy(req, res, () => {
       res.statusCode = 502;
       res.end("Bad gateway");

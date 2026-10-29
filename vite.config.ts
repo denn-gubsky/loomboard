@@ -33,7 +33,10 @@ function dynamicLoomcycleProxy(): PluginOption {
         target: defaultTarget,
         changeOrigin: true,
         secure: false,
-        pathFilter: (path) => path.startsWith("/v1"),
+        // The /v1 API, plus the OAuth metadata "Sign in with loomcycle" reads
+        // first (RFC 8414 serves it at the root, outside /v1).
+        pathFilter: (path) =>
+          path.startsWith("/v1") || path === "/.well-known/oauth-authorization-server",
         router: (req) => {
           const t = req.headers["x-loomcycle-target"];
           const target = Array.isArray(t) ? t[0] : t;
