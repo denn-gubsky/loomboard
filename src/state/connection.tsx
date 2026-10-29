@@ -177,6 +177,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const signInWithLoomcycle = useCallback(
     async (baseUrl: string, override?: string) => {
       const s = signInSettings(baseUrl, override);
+      // The form remounts after the splash: keep what the person entered.
+      setSettings(s);
       setStatus(isTauri ? "signing-in" : "connecting");
       setError(null);
       setProblem(null);
