@@ -24,6 +24,9 @@ interface Props {
   waitingLabel?: string;
   onCancel?: () => void;
   onSignIn: () => void;
+  /** Resume a sign-in that is kept because loomcycle did not answer
+   *  (problem "unreachable"). */
+  onRetry?: () => void;
   /** The pasted-token path (RFC FL D7), kept under "Advanced". */
   onConnectToken: (token: string) => void;
   initialToken: string;
@@ -84,7 +87,14 @@ export default function SignInCard(p: Props) {
             <small>{p.baseUrlHint}</small>
           </label>
 
-          {p.error && <Problem kind={p.problem} message={p.error} registration={p.registration} />}
+          {p.error && (
+            <Problem
+              kind={p.problem}
+              message={p.error}
+              registration={p.registration}
+              onRetry={p.busy ? undefined : p.onRetry}
+            />
+          )}
 
           {p.busy && p.waitingLabel ? (
             <div className="connect-waiting">
@@ -152,10 +162,12 @@ function Problem({
   kind,
   message,
   registration,
+  onRetry,
 }: {
   kind: SignInProblemKind | null;
   message: string;
   registration: Registration;
+  onRetry?: () => void;
 }) {
   if (kind === "pending") {
     return (
@@ -171,6 +183,11 @@ function Problem({
       <div>
         <span>{message}</span>
         {kind === "unregistered" && <RegistrationHint r={registration} />}
+        {kind === "unreachable" && onRetry && (
+          <button type="button" className="btn-ghost sm" onClick={onRetry}>
+            Try again
+          </button>
+        )}
       </div>
     </div>
   );

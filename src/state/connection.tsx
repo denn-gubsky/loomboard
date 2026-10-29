@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { LoomcycleClient, WhoamiResponse } from "@loomcycle/client";
+import { SIGNED_OUT_MESSAGE, adoptSignIn } from "../lib/signInLifecycle";
 import { getClient, resetClient } from "../lib/loomcycle";
 import { deriveCapabilities, type Capabilities } from "../lib/capabilities";
 import { describeError } from "../chat/lib/errors";
@@ -23,7 +24,7 @@ import {
   type StoredSignIn,
 } from "../lib/appSignIn";
 import {
-  SignInSession,
+  type SignInSession,
   claimSignIn,
   newSignInId,
   storedFrom,
@@ -65,6 +66,9 @@ interface ConnectionState {
   /** "Sign in with loomcycle": on the web this navigates away and comes back
    *  to the callback; on the desktop it waits for the system browser. */
   signInWithLoomcycle: (baseUrl: string) => Promise<void>;
+  /** Resume the stored sign-in after loomcycle did not answer
+   *  (problem "unreachable"). */
+  retrySignIn: () => void;
   /** Stop a desktop sign-in that is waiting for the browser. */
   cancelSignIn: () => void;
   /** Sign out (revokes a sign-in on the server) and forget the connection. */
@@ -72,9 +76,6 @@ interface ConnectionState {
 }
 
 const Ctx = createContext<ConnectionState | null>(null);
-
-const signedOutMessage =
-  "Your loomcycle sign-in has ended — it was signed out, expired, or revoked. Sign in again.";
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<ConnectionSettings | null>(() =>
@@ -154,12 +155,11 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
   // Make a sign-in the app's connection. `fresh` = it came from a code
   // exchange just now (so it is not stored yet); a resumed one already is.
-  // Throws if it cannot be used, after revoking and forgetting it.
-  const adoptSignIn = useCallback(
+  // Throws if it cannot be used; adoptSignIn decides whether it is kept for
+  // a retry or revoked and forgotten.
+  const adopt = useCallback(
     async (stored: StoredSignIn, fresh: boolean) => {
-      const { baseUrl } = stored;
       const store = await platformRefreshStore();
-      if (fresh) await store.save(stored);
       if (!isTauri) {
         // One tab per sign-in: a duplicated tab carries a copy of this one,
         // and two tabs refreshing it would end it for both.
@@ -170,12 +170,13 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         }
         releaseRef.current = release;
       }
-      const s = signInSettings(baseUrl);
-      const session: SignInSession = new SignInSession({
-        oauth: oauthFor(transportFor(baseUrl)),
+      const s = signInSettings(stored.baseUrl);
+      await adoptSignIn({
         stored,
+        fresh,
         store,
-        onSignedOut: () => {
+        oauth: oauthFor(transportFor(stored.baseUrl)),
+        onSignedOut: (session) => {
           if (signInRef.current !== session) return; // signed out on purpose
           signInRef.current = null;
           releaseRef.current?.();
@@ -183,32 +184,59 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           resetClient();
           setSignIn(null);
           setPrincipal(null);
-          setError(signedOutMessage);
+          setError(SIGNED_OUT_MESSAGE);
           setProblem(null);
           setStatus("error");
         },
+        use: async (session) => {
+          signInRef.current = session;
+          resetClient();
+          const me = await getClient(s, session).whoami();
+          saveSettings(s);
+          setSettings(s);
+          setSignIn(session);
+          setPrincipal(me);
+          setError(null);
+          setProblem(null);
+          setStatus("connected");
+        },
+        end: endSignIn,
+        drop: () => {
+          // Kept for a retry: remember which server it belongs to, so a
+          // reload or a restart resumes it too.
+          signInRef.current = null;
+          releaseRef.current?.();
+          releaseRef.current = null;
+          resetClient();
+          saveSettings(s);
+          setSettings(s);
+        },
       });
-      signInRef.current = session;
-      resetClient();
-      let me: WhoamiResponse;
-      try {
-        me = await getClient(s, session).whoami();
-      } catch (e) {
-        // Not connected after all: revoke it and forget it, rather than keep
-        // a refresh token nothing will use or sign out.
-        await endSignIn();
-        throw e;
-      }
-      saveSettings(s);
-      setSettings(s);
-      setSignIn(session);
-      setPrincipal(me);
-      setError(null);
-      setProblem(null);
-      setStatus("connected");
     },
     [endSignIn],
   );
+
+  // Resume the sign-in stored for baseUrl; none stored = the sign-in screen
+  // with the Base URL filled in.
+  const resume = useCallback(
+    async (baseUrl: string) => {
+      const stored = await (await platformRefreshStore()).load(baseUrl);
+      if (!stored) {
+        setStatus("idle");
+        return;
+      }
+      await adopt(stored, false);
+    },
+    [adopt],
+  );
+
+  const retrySignIn = useCallback(() => {
+    if (!settings) return;
+    setStatus("connecting");
+    setError(null);
+    setProblem(null);
+    void resume(settings.baseUrl).catch(fail);
+  }, [settings, resume, fail]);
 
   const signInWithLoomcycle = useCallback(
     async (baseUrl: string) => {
@@ -221,7 +249,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       try {
         if (isTauri) {
           const tokens = await tauriSignIn(transportFor(baseUrl), baseUrl, await tauriInvoke());
-          await adoptSignIn(storedFrom(baseUrl, tokens, newSignInId()), true);
+          await adopt(storedFrom(baseUrl, tokens, newSignInId()), true);
           return;
         }
         // Keep the Base URL in the form if the person comes back without
@@ -237,7 +265,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         fail(e);
       }
     },
-    [adoptSignIn, fail],
+    [adopt, fail],
   );
 
   const cancelSignIn = useCallback(() => {
@@ -273,27 +301,20 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         href: window.location.href,
         replaceState: (path) => window.history.replaceState(null, "", path),
       })
-        .then(({ baseUrl, tokens }) => adoptSignIn(storedFrom(baseUrl, tokens, newSignInId()), true))
+        .then(({ baseUrl, tokens }) => adopt(storedFrom(baseUrl, tokens, newSignInId()), true))
         .catch(fail);
       return;
     }
     const persisted = loadSettings();
     if (persisted?.auth === "oauth") {
-      void (async () => {
-        const stored = await (await platformRefreshStore()).load(persisted.baseUrl);
-        // No stored sign-in (a new tab, a restart, a sign-out): show the
-        // sign-in screen with the Base URL filled in.
-        if (!stored) {
-          setStatus("idle");
-          return;
-        }
-        await adoptSignIn(stored, false);
-      })().catch(fail);
+      // No stored sign-in (a new tab, a restart, a sign-out) leaves the
+      // sign-in screen with the Base URL filled in.
+      void resume(persisted.baseUrl).catch(fail);
       return;
     }
     const initial = persisted ?? devConnectSettings(import.meta.env, persisted);
     if (initial) void connect(initial);
-  }, [connect, adoptSignIn, fail]);
+  }, [connect, resume, fail]);
 
   // Cross-origin connect handoff. A first-party page whose origin is allowlisted
   // (VITE_LOOMBOARD_CONNECT_ORIGINS) may postMessage
@@ -342,6 +363,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         signIn,
         connect,
         signInWithLoomcycle,
+        retrySignIn,
         cancelSignIn,
         disconnect,
       }}

@@ -23,6 +23,7 @@ interface Seen {
 
 let seen: Seen[];
 let failMeOn: string | null;
+let failStatus: number;
 let n: number;
 
 function serverOf(input: RequestInfo | URL, init?: RequestInit): { server: string; path: string } {
@@ -57,6 +58,7 @@ class MemoryStorage implements Storage {
 beforeEach(() => {
   seen = [];
   failMeOn = null;
+  failStatus = 403;
   n = 0;
   vi.stubGlobal("localStorage", new MemoryStorage());
   sessionStorage.clear();
@@ -80,7 +82,7 @@ beforeEach(() => {
       }
       if (path === "/v1/_oauth/revoke") return new Response(null, { status: 200 });
       if (path === "/v1/_me") {
-        if (server === failMeOn) return Response.json({ error: "boom" }, { status: 500 });
+        if (server === failMeOn) return Response.json({ error: "boom" }, { status: failStatus });
         return Response.json({ subject: "ada", tenant_id: "", scopes: [] });
       }
       return new Response(null, { status: 404 });
@@ -145,7 +147,7 @@ describe("ConnectionProvider", () => {
     expect(buildConnection(ctx().settings!, ctx().signIn).token).toBe("lc_b");
   });
 
-  it("revokes and forgets a sign-in whose first request fails", async () => {
+  it("revokes and forgets a sign-in whose first request is refused", async () => {
     failMeOn = A;
     returnFromSignInToA();
     const { ctx } = renderProvider();
@@ -153,6 +155,46 @@ describe("ConnectionProvider", () => {
     expect(seen.some((s) => s.server === A && s.path === "/v1/_oauth/revoke" && s.form.token === "rt-a-1")).toBe(true);
     expect(sessionStorage.getItem(SIGNIN_KEY)).toBeNull();
     expect(ctx().signIn).toBeNull();
+  });
+
+  it("keeps a resumed sign-in when loomcycle does not answer, and resumes it on retry", async () => {
+    // A reload while loomcycle restarts: a revoke here would force a new
+    // sign-in (and, in the extension, end every other panel's).
+    failMeOn = A;
+    failStatus = 503;
+    const kept = { baseUrl: A, id: "x1", refreshToken: "rt-a-9", accessToken: "at-a-9", expiresAt: Date.now() + 3_600_000 };
+    sessionStorage.setItem(SIGNIN_KEY, JSON.stringify(kept));
+    localStorage.setItem("loomboard.connection", JSON.stringify({ baseUrl: A, token: "", auth: "oauth" }));
+    const { ctx } = renderProvider();
+    await waitFor(() => expect(ctx().status).toBe("error"));
+    expect(ctx().problem).toBe("unreachable");
+    expect(ctx().error).toMatch(/still signed in/);
+    expect(seen.some((s) => s.path === "/v1/_oauth/revoke")).toBe(false);
+    expect(JSON.parse(sessionStorage.getItem(SIGNIN_KEY)!)).toMatchObject({ refreshToken: "rt-a-9" });
+
+    failMeOn = null;
+    act(() => ctx().retrySignIn());
+    await waitFor(() => expect(ctx().status).toBe("connected"));
+    expect(ctx().signIn).not.toBeNull();
+    expect(seen.filter((s) => s.path === "/v1/_me").every((s) => s.auth === "Bearer at-a-9")).toBe(true);
+  });
+
+  it("keeps a new sign-in when loomcycle cannot be reached right after it", async () => {
+    returnFromSignInToA();
+    const real = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (serverOf(input, init).path === "/v1/_me") throw new TypeError("Failed to fetch");
+        return real(input, init);
+      }),
+    );
+    const { ctx } = renderProvider();
+    await waitFor(() => expect(ctx().status).toBe("error"));
+    expect(ctx().problem).toBe("unreachable");
+    expect(seen.some((s) => s.path === "/v1/_oauth/revoke")).toBe(false);
+    expect(sessionStorage.getItem(SIGNIN_KEY)).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem("loomboard.connection")!)).toMatchObject({ baseUrl: A, auth: "oauth" });
   });
 
   it("clears a stored sign-in when the tab connects with a token", async () => {

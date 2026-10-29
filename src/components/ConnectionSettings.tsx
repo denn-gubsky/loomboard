@@ -8,7 +8,7 @@ import SignInCard, { type Registration } from "./SignInCard";
 // The sign-in screen of the app (web SPA, desktop). Shown whenever we are not
 // in the "connected" state.
 export default function ConnectionSettings() {
-  const { settings, status, error, problem, connect, signInWithLoomcycle, cancelSignIn } =
+  const { settings, status, error, problem, connect, signInWithLoomcycle, retrySignIn, cancelSignIn } =
     useConnection();
   const [baseUrl, setBaseUrl] = useState(settings?.baseUrl ?? "");
 
@@ -41,6 +41,7 @@ export default function ConnectionSettings() {
       waitingLabel={status === "signing-in" ? "Finish signing in in your browser…" : undefined}
       onCancel={isTauri ? cancelSignIn : undefined}
       onSignIn={() => void signInWithLoomcycle(baseUrl.trim())}
+      onRetry={retrySignIn}
       onConnectToken={(token) => void connect({ baseUrl: baseUrl.trim(), token })}
       initialToken={settings?.token ?? ""}
       tokenHint="Stored in this browser only. Leave blank if the runtime has no auth."

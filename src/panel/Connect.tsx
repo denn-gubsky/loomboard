@@ -7,6 +7,8 @@ import SignInCard from "../components/SignInCard";
 interface Props {
   onConnect: (s: ConnectionSettings) => void;
   onSignIn: (baseUrl: string) => void;
+  /** Resume the stored sign-in after loomcycle did not answer. */
+  onRetry: () => void;
   busy: boolean;
   error: string | null;
   problem: SignInProblemKind | null;
@@ -29,7 +31,7 @@ function hostPattern(baseUrl: string): string | null {
 // host access for the loomcycle origin — in this click gesture, which Chrome
 // requires, so the panel's fetch can reach loomcycle — then hands off to
 // PanelApp: "Sign in with loomcycle" by default, a pasted bearer under Advanced.
-export default function Connect({ onConnect, onSignIn, busy, error, problem, initial }: Props) {
+export default function Connect({ onConnect, onSignIn, onRetry, busy, error, problem, initial }: Props) {
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
   const [localError, setLocalError] = useState<string | null>(null);
   // This install's addresses: the ID differs between a store install and an
@@ -69,6 +71,7 @@ export default function Connect({ onConnect, onSignIn, busy, error, problem, ini
       busy={busy}
       waitingLabel={busy ? "Finish signing in in the sign-in window…" : undefined}
       onSignIn={() => void withHostAccess(onSignIn)}
+      onRetry={onRetry}
       onConnectToken={(token) => void withHostAccess((url) => onConnect({ baseUrl: url, token }))}
       initialToken={initial?.token ?? ""}
       tokenHint="Stored in this browser's extension storage only."

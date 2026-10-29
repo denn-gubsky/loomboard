@@ -77,6 +77,15 @@ export class SignInInUseError extends Error {
   }
 }
 
+/** A stored sign-in that could not be used because loomcycle was unreachable
+ *  or failing. It is still stored, so a retry resumes it (signInLifecycle). */
+export class SignInKeptError extends Error {
+  constructor(readonly reason: unknown) {
+    super("loomcycle could not be reached; the sign-in is kept");
+    this.name = "SignInKeptError";
+  }
+}
+
 /** The sign-in helper for the metadata, token, refresh and revoke calls, over
  *  the app's own transport (dev proxy, native HTTP, or direct). */
 export function oauthFor(t: Transport, issuer?: string): LoomcycleOAuth {
@@ -206,6 +215,7 @@ export type SignInProblemKind =
   | "mismatch"
   | "unregistered"
   | "cancelled"
+  | "unreachable"
   | "failed";
 
 /** A sign-in failure as the person should read it. `unsupported` is the cue
@@ -224,6 +234,12 @@ export function describeSignInError(e: unknown): SignInProblem {
     return {
       kind: "failed",
       message: "This tab is a copy of another signed-in loomboard tab. Sign in again to use loomboard here too.",
+    };
+  }
+  if (e instanceof SignInKeptError) {
+    return {
+      kind: "unreachable",
+      message: `You are still signed in, but loomcycle did not answer — try again when it is back. (${describeError(e.reason)})`,
     };
   }
   if (e instanceof SignInAddressRequiredError) {
