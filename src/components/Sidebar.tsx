@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  AppWindow,
   Brain,
   FolderTree,
   LayoutGrid,
@@ -43,6 +44,7 @@ const GATED: { view: GatedView; label: string; title: string; Icon: LucideIcon }
   { view: "workflow", label: "Workflow", title: "Workflow", Icon: Workflow },
   { view: "canvas", label: "Canvas", title: "Canvas — edit a team's workflow graph", Icon: Share2 },
   { view: "users", label: "Approvals", title: "Approvals — people waiting to be let in", Icon: UserCheck },
+  { view: "apps", label: "Apps", title: "Apps — the apps loomcycle signs people in for", Icon: AppWindow },
 ];
 
 const COLLAPSE_KEY = "loomboard.sidebarCollapsed";
