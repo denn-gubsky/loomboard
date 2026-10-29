@@ -27,12 +27,42 @@ export interface KeyValue {
   remove(): Promise<void>;
 }
 
-function parseStored(raw: string | null): StoredSignIn | null {
+/** The bounds a stored sign-in is checked against on the way in and out —
+ *  the desktop keychain command checks the same ones. */
+export const STORED_LIMITS = { baseUrl: 2048, id: 64, token: 4096 } as const;
+
+function bounded(v: unknown, max: number, allowEmpty = false): v is string {
+  return (
+    typeof v === "string" &&
+    (allowEmpty || v.length > 0) &&
+    v.length <= max &&
+    !/[\u0000-\u001f\u007f]/.test(v)
+  );
+}
+
+/** A stored sign-in, or null for anything malformed (an older record
+ *  included: it is simply signed in again). */
+export function parseStored(raw: string | null): StoredSignIn | null {
   if (!raw) return null;
   try {
     const v = JSON.parse(raw) as Partial<StoredSignIn>;
-    if (typeof v.baseUrl !== "string" || typeof v.refreshToken !== "string" || !v.refreshToken) return null;
-    return { baseUrl: v.baseUrl, refreshToken: v.refreshToken };
+    if (
+      !bounded(v.baseUrl, STORED_LIMITS.baseUrl, true) ||
+      !bounded(v.id, STORED_LIMITS.id) ||
+      !bounded(v.refreshToken, STORED_LIMITS.token) ||
+      !bounded(v.accessToken, STORED_LIMITS.token, true) ||
+      typeof v.expiresAt !== "number" ||
+      !Number.isFinite(v.expiresAt)
+    ) {
+      return null;
+    }
+    return {
+      baseUrl: v.baseUrl,
+      id: v.id,
+      refreshToken: v.refreshToken,
+      accessToken: v.accessToken,
+      expiresAt: v.expiresAt,
+    };
   } catch {
     return null;
   }
@@ -43,9 +73,18 @@ export function refreshStoreOver(kv: KeyValue): RefreshTokenStore {
   return {
     async load(baseUrl) {
       const s = parseStored(await kv.get());
-      return s && s.baseUrl === baseUrl ? s.refreshToken : null;
+      return s && s.baseUrl === baseUrl ? s : null;
     },
-    save: (s) => kv.set(JSON.stringify({ baseUrl: s.baseUrl, refreshToken: s.refreshToken })),
+    save: (s) =>
+      kv.set(
+        JSON.stringify({
+          baseUrl: s.baseUrl,
+          id: s.id,
+          refreshToken: s.refreshToken,
+          accessToken: s.accessToken,
+          expiresAt: s.expiresAt,
+        }),
+      ),
     clear: () => kv.remove(),
   };
 }

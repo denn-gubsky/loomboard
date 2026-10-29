@@ -6,20 +6,17 @@ import {
   type ChatConversation,
   type Connection,
 } from "../chat";
-import {
-  LoomcycleClient,
-  type OAuthTokenProvider,
-  type OAuthTokenSet,
-} from "@loomcycle/client";
+import { LoomcycleClient } from "@loomcycle/client";
 import { signInSettings, type ConnectionSettings } from "../state/settings";
 import { chromeSessionRefreshStore } from "../state/signInStore";
 import { buildConnection } from "../lib/buildConnection";
 import {
   describeSignInError,
-  resumeTokens,
-  startTokenProvider,
+  oauthFor,
   type SignInProblemKind,
+  type StoredSignIn,
 } from "../lib/appSignIn";
+import { SignInSession, newSignInId, storedFrom } from "../lib/signInSession";
 import { extSignIn } from "../lib/extSignIn";
 import { saveExtSettings, clearExtSettings } from "../state/extSettings";
 import { persistConversation, newConversation } from "../state/extConversation";
@@ -38,8 +35,11 @@ import BridgeStatusBar from "./BridgeStatusBar";
 /** "signing-in" = the sign-in window is open; the panel keeps its form up. */
 type Status = "idle" | "connecting" | "signing-in" | "connected" | "error";
 
-// A sign-in's refresh token lives in chrome.storage.session: memory-only,
-// gone when the browser quits, and unreadable from content scripts.
+// A sign-in lives in chrome.storage.session: memory-only, gone when the
+// browser quits, unreadable from content scripts — and shared by every panel
+// of this extension, so panels in two windows hold one sign-in. Their
+// refreshes take turns under a Web Lock and pick up each other's rotation
+// from this store (SignInSession), so only one ever spends the refresh token.
 const refreshStore = () => chromeSessionRefreshStore(chrome.storage.session);
 
 const signedOutMessage =
@@ -69,10 +69,21 @@ export default function PanelApp({
   );
   const [error, setError] = useState<string | null>(null);
   const [problem, setProblem] = useState<SignInProblemKind | null>(null);
-  const [signIn, setSignIn] = useState<OAuthTokenProvider | null>(null);
+  const [signIn, setSignIn] = useState<SignInSession | null>(null);
   // The live sign-in, for onSignedOut (is it still the current one?) and a
   // synchronous disconnect.
-  const signInRef = useRef<OAuthTokenProvider | null>(null);
+  const signInRef = useRef<SignInSession | null>(null);
+
+  // End whatever sign-in this panel holds — revoked on its server — and clear
+  // the stored one even when none is live, so a token connection, a
+  // disconnect or a failed sign-in never leaves a refresh token behind.
+  const endSignIn = useCallback(async () => {
+    const session = signInRef.current;
+    signInRef.current = null;
+    setSignIn(null);
+    if (session) await session.signOut();
+    await refreshStore().clear().catch(() => undefined);
+  }, []);
   // The principal (whoami.subject) the client-tool host runs under — display
   // only; the WebSocket derives the routing key from the bearer, not this value.
   const [userId, setUserId] = useState<string | null>(null);
@@ -112,13 +123,16 @@ export default function PanelApp({
       setError(null);
       setProblem(null);
       try {
+        // A pasted token replaces any sign-in: its tokens belong to the
+        // server it was made for.
+        await endSignIn();
         await finishConnect(createLoomcycleClient({ baseUrl: s.baseUrl, token: s.token }), s);
       } catch (e) {
         setError(describeError(e));
         setStatus("error");
       }
     },
-    [finishConnect],
+    [finishConnect, endSignIn],
   );
 
   const fail = useCallback((e: unknown) => {
@@ -128,21 +142,21 @@ export default function PanelApp({
     setStatus("error");
   }, []);
 
-  // Make a sign-in's tokens the panel's connection. `fresh` = straight from a
-  // code exchange, so its refresh token is not stored yet.
+  // Make a sign-in the panel's connection. `fresh` = straight from a code
+  // exchange, so it is not stored yet. Throws if it cannot be used, after
+  // revoking and forgetting it.
   const adoptSignIn = useCallback(
-    async (s: ConnectionSettings, tokens: OAuthTokenSet, fresh: boolean) => {
+    async (stored: StoredSignIn, fresh: boolean) => {
       const store = refreshStore();
-      if (fresh) await store.save({ baseUrl: s.baseUrl, refreshToken: tokens.refresh_token });
-      const provider = startTokenProvider({
-        t: { baseUrl: s.baseUrl },
-        baseUrl: s.baseUrl,
-        tokens,
+      if (fresh) await store.save(stored);
+      const s = signInSettings(stored.baseUrl);
+      const session: SignInSession = new SignInSession({
+        oauth: oauthFor({ baseUrl: stored.baseUrl }),
+        stored,
         store,
         onSignedOut: () => {
-          if (signInRef.current !== provider) return; // signed out on purpose
+          if (signInRef.current !== session) return; // signed out on purpose
           signInRef.current = null;
-          void store.clear();
           setSignIn(null);
           setUserId(null);
           setError(signedOutMessage);
@@ -150,26 +164,23 @@ export default function PanelApp({
           setStatus("error");
         },
       });
-      signInRef.current = provider;
+      signInRef.current = session;
       // Set before "connected" is, so no render ever builds a token-less
       // connection for a signed-in panel.
-      setSignIn(provider);
+      setSignIn(session);
       try {
         const client = new LoomcycleClient({
           baseUrl: s.baseUrl,
-          tokenProvider: provider,
+          tokenProvider: session,
           fetch: (i, init) => fetch(i, init),
         });
         await finishConnect(client, s);
       } catch (e) {
-        if (signInRef.current === provider) {
-          signInRef.current = null;
-          setSignIn(null);
-        }
+        await endSignIn();
         throw e;
       }
     },
-    [finishConnect],
+    [finishConnect, endSignIn],
   );
 
   const signInWithLoomcycle = useCallback(
@@ -179,7 +190,7 @@ export default function PanelApp({
       setProblem(null);
       try {
         const tokens = await extSignIn(baseUrl, chrome.identity);
-        await adoptSignIn(signInSettings(baseUrl), tokens, true);
+        await adoptSignIn(storedFrom(baseUrl, tokens, newSignInId()), true);
       } catch (e) {
         fail(e);
       }
@@ -199,13 +210,13 @@ export default function PanelApp({
       return;
     }
     void (async () => {
-      const refreshToken = await refreshStore().load(initialSettings.baseUrl);
+      const stored = await refreshStore().load(initialSettings.baseUrl);
       // No stored sign-in (the browser restarted, or it was signed out).
-      if (!refreshToken) {
+      if (!stored) {
         setStatus("idle");
         return;
       }
-      await adoptSignIn(initialSettings, resumeTokens(refreshToken), false);
+      await adoptSignIn(stored, false);
     })().catch(fail);
   }, [initialSettings, connect, adoptSignIn, fail]);
 
@@ -264,22 +275,16 @@ export default function PanelApp({
   }, []);
 
   const disconnect = useCallback(async () => {
-    const provider = signInRef.current;
-    signInRef.current = null;
-    if (provider) {
-      // Revoke on the server (RFC 7009) and forget the stored refresh token;
-      // either can fail offline, the tokens are forgotten locally regardless.
-      void provider.signOut();
-      await refreshStore().clear();
-    }
-    setSignIn(null);
+    // Revoke + forget the sign-in; either can fail offline, the tokens are
+    // forgotten locally regardless.
+    await endSignIn();
     setProblem(null);
     await clearExtSettings();
     setSettings(null);
     setUserId(null);
     setError(null);
     setStatus("idle");
-  }, []);
+  }, [endSignIn]);
 
   // Start a fresh conversation (new loomcycle session) — clears the transcript,
   // including stale error turns from a previous run.

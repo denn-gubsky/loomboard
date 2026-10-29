@@ -8,12 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type {
-  LoomcycleClient,
-  OAuthTokenProvider,
-  OAuthTokenSet,
-  WhoamiResponse,
-} from "@loomcycle/client";
+import type { LoomcycleClient, WhoamiResponse } from "@loomcycle/client";
 import { getClient, resetClient } from "../lib/loomcycle";
 import { deriveCapabilities, type Capabilities } from "../lib/capabilities";
 import { describeError } from "../chat/lib/errors";
@@ -21,11 +16,18 @@ import { devConnectSettings } from "../lib/devConnect";
 import { isTauri } from "../lib/proxyMode";
 import { transportFor } from "../lib/buildConnection";
 import {
+  SignInInUseError,
   describeSignInError,
-  resumeTokens,
-  startTokenProvider,
+  oauthFor,
   type SignInProblemKind,
+  type StoredSignIn,
 } from "../lib/appSignIn";
+import {
+  SignInSession,
+  claimSignIn,
+  newSignInId,
+  storedFrom,
+} from "../lib/signInSession";
 import { finishWebSignIn, isWebCallback, startWebSignIn } from "../lib/webSignIn";
 import { platformRefreshStore, tauriInvoke } from "../lib/signInPlatform";
 import { cancelTauriSignIn, tauriSignIn } from "../lib/tauriSignIn";
@@ -53,9 +55,10 @@ interface ConnectionState {
   /** Why the last sign-in failed, when it did; "unsupported" is the cue to
    *  offer the pasted-token path. */
   problem: SignInProblemKind | null;
-  /** The token provider of a "Sign in with loomcycle" connection; null for a
-   *  pasted-token one. Pass it to getClient / buildConnection. */
-  signIn: OAuthTokenProvider | null;
+  /** The live "Sign in with loomcycle" session; null for a pasted-token
+   *  connection. Pass it to getClient / buildConnection, which use it only for
+   *  the settings it belongs to. */
+  signIn: SignInSession | null;
   /** Validate + persist a pasted-token connection. Resolves true on success,
    *  false if the whoami validation failed (surfaced via `error`/`status`). */
   connect: (s: ConnectionSettings) => Promise<boolean>;
@@ -91,11 +94,28 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [principal, setPrincipal] = useState<WhoamiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [problem, setProblem] = useState<SignInProblemKind | null>(null);
-  const [signIn, setSignIn] = useState<OAuthTokenProvider | null>(null);
+  const [signIn, setSignIn] = useState<SignInSession | null>(null);
   // The live sign-in. A ref as well as state: onSignedOut must tell whether it
   // belongs to the CURRENT sign-in (a signed-out-and-replaced one may still
   // report), and disconnect must reach it synchronously.
-  const signInRef = useRef<OAuthTokenProvider | null>(null);
+  const signInRef = useRef<SignInSession | null>(null);
+  // Web: releases this tab's hold on its sign-in (see claimSignIn).
+  const releaseRef = useRef<(() => void) | null>(null);
+
+  // End whatever sign-in this app holds — revoked on its server (RFC 7009) —
+  // and clear the stored one even when none is live: a token connection, a
+  // disconnect or a failed sign-in must never leave a refresh token behind
+  // for the next start to pick up.
+  const endSignIn = useCallback(async () => {
+    const session = signInRef.current;
+    signInRef.current = null;
+    releaseRef.current?.();
+    releaseRef.current = null;
+    setSignIn(null);
+    resetClient();
+    if (session) await session.signOut();
+    await (await platformRefreshStore()).clear().catch(() => undefined);
+  }, []);
 
   const fail = useCallback((e: unknown) => {
     const p = describeSignInError(e);
@@ -105,45 +125,61 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setStatus("error");
   }, []);
 
-  const connect = useCallback(async (s: ConnectionSettings): Promise<boolean> => {
-    setStatus("connecting");
-    setError(null);
-    setProblem(null);
-    try {
-      resetClient();
-      const me = await getClient(s).whoami();
-      saveSettings(s);
-      setSettings(s);
-      setPrincipal(me);
-      setStatus("connected");
-      return true;
-    } catch (e) {
-      // Log the raw error for devtools; the UI shows a token-safe summary.
-      console.error("[connect] whoami failed", e);
-      setPrincipal(null);
-      setError(describeError(e));
-      setStatus("error");
-      return false;
-    }
-  }, []);
+  const connect = useCallback(
+    async (s: ConnectionSettings): Promise<boolean> => {
+      setStatus("connecting");
+      setError(null);
+      setProblem(null);
+      try {
+        // A pasted token replaces any sign-in: its tokens belong to the
+        // server it was made for, and must not ride along to this one.
+        await endSignIn();
+        const me = await getClient(s).whoami();
+        saveSettings(s);
+        setSettings(s);
+        setPrincipal(me);
+        setStatus("connected");
+        return true;
+      } catch (e) {
+        // Log the raw error for devtools; the UI shows a token-safe summary.
+        console.error("[connect] whoami failed", e);
+        setPrincipal(null);
+        setError(describeError(e));
+        setStatus("error");
+        return false;
+      }
+    },
+    [endSignIn],
+  );
 
-  // Make a sign-in's tokens the app's connection. `fresh` = they came from a
-  // code exchange just now (so the refresh token is not stored yet); a resumed
-  // sign-in already is. Throws if the server will not have it.
+  // Make a sign-in the app's connection. `fresh` = it came from a code
+  // exchange just now (so it is not stored yet); a resumed one already is.
+  // Throws if it cannot be used, after revoking and forgetting it.
   const adoptSignIn = useCallback(
-    async (s: ConnectionSettings, tokens: OAuthTokenSet, fresh: boolean) => {
-      const { baseUrl } = s;
+    async (stored: StoredSignIn, fresh: boolean) => {
+      const { baseUrl } = stored;
       const store = await platformRefreshStore();
-      if (fresh) await store.save({ baseUrl, refreshToken: tokens.refresh_token });
-      const provider = startTokenProvider({
-        t: transportFor(baseUrl),
-        baseUrl,
-        tokens,
+      if (fresh) await store.save(stored);
+      if (!isTauri) {
+        // One tab per sign-in: a duplicated tab carries a copy of this one,
+        // and two tabs refreshing it would end it for both.
+        const release = await claimSignIn(stored.id);
+        if (!release) {
+          await store.clear();
+          throw new SignInInUseError();
+        }
+        releaseRef.current = release;
+      }
+      const s = signInSettings(baseUrl);
+      const session: SignInSession = new SignInSession({
+        oauth: oauthFor(transportFor(baseUrl)),
+        stored,
         store,
         onSignedOut: () => {
-          if (signInRef.current !== provider) return; // signed out on purpose
+          if (signInRef.current !== session) return; // signed out on purpose
           signInRef.current = null;
-          void store.clear();
+          releaseRef.current?.();
+          releaseRef.current = null;
           resetClient();
           setSignIn(null);
           setPrincipal(null);
@@ -152,26 +188,26 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           setStatus("error");
         },
       });
-      signInRef.current = provider;
+      signInRef.current = session;
       resetClient();
       let me: WhoamiResponse;
       try {
-        me = await getClient(s, provider).whoami();
+        me = await getClient(s, session).whoami();
       } catch (e) {
-        // Not connected after all; the stored refresh token stays, so a
-        // reload retries a transient failure.
-        if (signInRef.current === provider) signInRef.current = null;
+        // Not connected after all: revoke it and forget it, rather than keep
+        // a refresh token nothing will use or sign out.
+        await endSignIn();
         throw e;
       }
       saveSettings(s);
       setSettings(s);
-      setSignIn(provider);
+      setSignIn(session);
       setPrincipal(me);
       setError(null);
       setProblem(null);
       setStatus("connected");
     },
-    [],
+    [endSignIn],
   );
 
   const signInWithLoomcycle = useCallback(
@@ -185,7 +221,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       try {
         if (isTauri) {
           const tokens = await tauriSignIn(transportFor(baseUrl), baseUrl, await tauriInvoke());
-          await adoptSignIn(s, tokens, true);
+          await adoptSignIn(storedFrom(baseUrl, tokens, newSignInId()), true);
           return;
         }
         // Keep the Base URL in the form if the person comes back without
@@ -209,14 +245,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const disconnect = useCallback(() => {
-    const provider = signInRef.current;
-    signInRef.current = null;
-    if (provider) {
-      // Revoke on the server (RFC 7009) and forget the stored refresh token.
-      // Either can fail offline; the tokens are forgotten locally regardless.
-      void provider.signOut();
-      void platformRefreshStore().then((s) => s.clear());
-    }
+    // Revoke + forget the sign-in; either can fail offline, and the tokens
+    // are forgotten locally regardless.
+    void endSignIn();
     clearSettings();
     resetClient();
     setSettings(null);
@@ -225,7 +256,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setError(null);
     setProblem(null);
     setStatus("idle");
-  }, []);
+  }, [endSignIn]);
 
   // Once on first mount: finish a sign-in this page was redirected back to,
   // resume a stored sign-in, or validate a persisted token connection —
@@ -242,21 +273,21 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         href: window.location.href,
         replaceState: (path) => window.history.replaceState(null, "", path),
       })
-        .then(({ baseUrl, tokens }) => adoptSignIn(signInSettings(baseUrl), tokens, true))
+        .then(({ baseUrl, tokens }) => adoptSignIn(storedFrom(baseUrl, tokens, newSignInId()), true))
         .catch(fail);
       return;
     }
     const persisted = loadSettings();
     if (persisted?.auth === "oauth") {
       void (async () => {
-        const refreshToken = await (await platformRefreshStore()).load(persisted.baseUrl);
+        const stored = await (await platformRefreshStore()).load(persisted.baseUrl);
         // No stored sign-in (a new tab, a restart, a sign-out): show the
         // sign-in screen with the Base URL filled in.
-        if (!refreshToken) {
+        if (!stored) {
           setStatus("idle");
           return;
         }
-        await adoptSignIn(persisted, resumeTokens(refreshToken), false);
+        await adoptSignIn(stored, false);
       })().catch(fail);
       return;
     }

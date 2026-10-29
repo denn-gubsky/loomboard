@@ -3,6 +3,7 @@ import type { PendingSignIn } from "../lib/appSignIn";
 import {
   chromeSessionRefreshStore,
   keychainRefreshStore,
+  parseStored,
   savePendingSignIn,
   takePendingSignIn,
   webRefreshStore,
@@ -36,15 +37,26 @@ class MemoryStorage implements Storage {
 }
 
 const BASE = "https://lc.example";
+const SAVED = { baseUrl: BASE, id: "s1", refreshToken: "rt-1", accessToken: "at-1", expiresAt: 1_900_000_000_000 };
 
 describe("webRefreshStore", () => {
   it("returns the refresh token only for the server it was issued by", async () => {
     const s = webRefreshStore(new MemoryStorage());
-    await s.save({ baseUrl: BASE, refreshToken: "rt-1" });
-    expect(await s.load(BASE)).toBe("rt-1");
+    await s.save(SAVED);
+    expect(await s.load(BASE)).toEqual(SAVED);
     expect(await s.load("https://other.example")).toBeNull();
     await s.clear();
     expect(await s.load(BASE)).toBeNull();
+  });
+});
+
+describe("parseStored", () => {
+  it("drops an older record, an oversize token and control characters", () => {
+    expect(parseStored(JSON.stringify(SAVED))).toEqual(SAVED);
+    expect(parseStored(JSON.stringify({ baseUrl: BASE, refreshToken: "rt-1" }))).toBeNull();
+    expect(parseStored(JSON.stringify({ ...SAVED, refreshToken: "x".repeat(5000) }))).toBeNull();
+    expect(parseStored(JSON.stringify({ ...SAVED, accessToken: "a\nb" }))).toBeNull();
+    expect(parseStored("not json")).toBeNull();
   });
 });
 
@@ -57,8 +69,8 @@ describe("chromeSessionRefreshStore", () => {
       remove: vi.fn(async (k: string) => void delete data[k]),
     } as unknown as chrome.storage.StorageArea;
     const s = chromeSessionRefreshStore(area);
-    await s.save({ baseUrl: BASE, refreshToken: "rt-1" });
-    expect(await s.load(BASE)).toBe("rt-1");
+    await s.save(SAVED);
+    expect(await s.load(BASE)).toEqual(SAVED);
     await s.clear();
     expect(await s.load(BASE)).toBeNull();
   });
@@ -74,8 +86,8 @@ describe("keychainRefreshStore", () => {
       return undefined;
     }) as unknown as Invoke;
     const s = keychainRefreshStore(invoke);
-    await s.save({ baseUrl: BASE, refreshToken: "rt-1" });
-    expect(await s.load(BASE)).toBe("rt-1");
+    await s.save(SAVED);
+    expect(await s.load(BASE)).toEqual(SAVED);
     await s.clear();
     expect(await s.load(BASE)).toBeNull();
     const cmds = (invoke as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);

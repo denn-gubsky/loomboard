@@ -1,6 +1,6 @@
-import { LoomcycleClient, type TokenProvider } from "@loomcycle/client";
+import { LoomcycleClient } from "@loomcycle/client";
 import type { ConnectionSettings } from "../state/settings";
-import { transportFor } from "./buildConnection";
+import { signInFor, transportFor, type SignInFor } from "./buildConnection";
 
 // The APP's client singleton, used to validate a connection (whoami) and by the
 // sidebar (fork cleanup on delete). The embeddable <Chat> builds its own client
@@ -8,27 +8,31 @@ import { transportFor } from "./buildConnection";
 // part of the published component.
 let client: LoomcycleClient | null = null;
 let signature = "";
-let clientSignIn: TokenProvider | null = null;
+let clientSignIn: SignInFor | null = null;
 
 /** The app's client for these settings. `signIn` is the token provider of a
  *  "Sign in with loomcycle" connection, which then refreshes on its own. */
-export function getClient(s: ConnectionSettings, signIn?: TokenProvider | null): LoomcycleClient {
+export function getClient(s: ConnectionSettings, signIn?: SignInFor | null): LoomcycleClient {
+  // Only the sign-in these settings belong to (see signInFor).
+  const session = signInFor(s, signIn);
   // NUL-join so a token containing the baseUrl (or vice versa) can't collide.
   const sig = `${s.baseUrl} ${s.token}`;
-  if (!client || sig !== signature || (signIn ?? null) !== clientSignIn) {
+  if (!client || sig !== signature || session !== clientSignIn) {
     // The transport every client of the app shares (see transportFor): the
     // dev/CLI proxy, Tauri's native HTTP, or the Base URL directly.
     const t = transportFor(s.baseUrl);
     client = new LoomcycleClient({
       baseUrl: t.baseUrl,
-      ...(signIn ? { tokenProvider: signIn } : { authToken: s.token || undefined }),
+      ...(session
+        ? { tokenProvider: session }
+        : { authToken: s.auth === "oauth" ? undefined : s.token || undefined }),
       // Always a plain function: the SDK calls its stored fetch as a method
       // (`ctx.fetchImpl(url)`), and the browser's native fetch rejects a
       // non-global receiver with "Illegal invocation".
       fetch: (input, init) => (t.fetch ? t.fetch(input, init) : fetch(input, init)),
     });
     signature = sig;
-    clientSignIn = signIn ?? null;
+    clientSignIn = session;
   }
   return client;
 }

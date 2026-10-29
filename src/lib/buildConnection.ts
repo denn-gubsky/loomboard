@@ -43,15 +43,26 @@ export function transportFor(baseUrl: string): Transport {
 // every surface that embeds <Chat> (the chat pane, the agent portfolio, the
 // workflow chat dock) builds it identically.
 //
+/** A sign-in session as the connection builders need it. */
+export type SignInFor = TokenProvider & { readonly baseUrl: string };
+
+/** The sign-in that may sign requests for these settings: a sign-in
+ *  connection's own session, for the server it was issued by — never a
+ *  session left over beside a pasted token or another Base URL. */
+export function signInFor<T extends SignInFor>(s: ConnSettings, signIn: T | null | undefined): T | null {
+  return s.auth === "oauth" && signIn && signIn.baseUrl === s.baseUrl ? signIn : null;
+}
+
 // Signed in with loomcycle, there is no static token to hand over: the
 // Connection's fetch asks the sign-in for the current access token on every
 // request to this loomcycle's API (see bearerFetch), so the embedded surfaces
 // stay signed in across refreshes without knowing about sign-in at all.
-export function buildConnection(s: ConnSettings, signIn?: TokenProvider | null): Connection {
+export function buildConnection(s: ConnSettings, signIn?: SignInFor | null): Connection {
   const t = transportFor(s.baseUrl);
-  if (!signIn) return { ...t, token: s.token };
+  const session = signInFor(s, signIn);
+  if (!session) return s.auth === "oauth" ? { ...t } : { ...t, token: s.token };
   const pageHref = typeof location === "undefined" ? undefined : location.href;
   const prefix = apiPrefix(t.baseUrl, pageHref);
   const inner: typeof fetch = t.fetch ?? ((input, init) => fetch(input, init));
-  return { baseUrl: t.baseUrl, fetch: prefix ? bearerFetch(inner, signIn, prefix, pageHref) : inner };
+  return { baseUrl: t.baseUrl, fetch: prefix ? bearerFetch(inner, session, prefix, pageHref) : inner };
 }

@@ -2,7 +2,6 @@ import {
   LoomcycleError,
   LoomcycleOAuth,
   OAuthError,
-  OAuthTokenProvider,
   parseAuthorizeResponse,
   type OAuthTokenSet,
 } from "@loomcycle/client";
@@ -37,18 +36,26 @@ export interface PendingSignIn {
   verifier: string;
 }
 
-/** What survives between app starts: only the refresh token, tagged with the
- *  server it belongs to, so a changed Base URL never replays it elsewhere. */
+/** What survives between app starts, tagged with the server it belongs to so
+ *  a changed Base URL never replays it elsewhere. The access token and its
+ *  expiry are kept beside the refresh token so a start inside the token's
+ *  hour reuses it instead of refreshing (each refresh rotates the refresh
+ *  token, and two holders refreshing at once end the sign-in). */
 export interface StoredSignIn {
   baseUrl: string;
+  /** Names the sign-in's locks (signInSession); not a secret. */
+  id: string;
   refreshToken: string;
+  accessToken: string;
+  /** Milliseconds since the epoch. */
+  expiresAt: number;
 }
 
-/** Where a form factor keeps its refresh token (sessionStorage, the
- *  extension's session storage, the OS keychain). */
+/** Where a form factor keeps a sign-in (sessionStorage, the extension's
+ *  session storage, the OS keychain). */
 export interface RefreshTokenStore {
-  /** The refresh token stored for baseUrl; null for none or another server's. */
-  load(baseUrl: string): Promise<string | null>;
+  /** The sign-in stored for baseUrl; null for none or another server's. */
+  load(baseUrl: string): Promise<StoredSignIn | null>;
   save(s: StoredSignIn): Promise<void>;
   clear(): Promise<void>;
 }
@@ -58,6 +65,15 @@ export class SignInCancelledError extends Error {
   constructor() {
     super("sign-in cancelled");
     this.name = "SignInCancelledError";
+  }
+}
+
+/** A stored sign-in another tab already holds (a duplicated tab carries a
+ *  copy of it). This tab signs in on its own instead. */
+export class SignInInUseError extends Error {
+  constructor() {
+    super("sign-in held by another tab");
+    this.name = "SignInInUseError";
   }
 }
 
@@ -173,38 +189,6 @@ export function completeSignIn(
   });
 }
 
-/** The tokens to resume a stored sign-in with: no access token yet, so the
- *  provider's first getToken() refreshes. */
-export function resumeTokens(refreshToken: string): OAuthTokenSet {
-  return {
-    access_token: "",
-    token_type: "Bearer",
-    expires_in: 0,
-    refresh_token: refreshToken,
-    expires_at: 0,
-  };
-}
-
-/** The token provider for a sign-in. Every rotated refresh token is stored
- *  before it is used (the one it replaced is spent); onSignedOut fires when
- *  the server ends the sign-in or signOut() runs. Call store.save for the
- *  first token set yourself — onTokens fires only on a refresh. */
-export function startTokenProvider(opts: {
-  t: Transport;
-  baseUrl: string;
-  tokens: OAuthTokenSet;
-  store: RefreshTokenStore;
-  onSignedOut: (reason: OAuthError) => void;
-}): OAuthTokenProvider {
-  return new OAuthTokenProvider({
-    oauth: oauthFor(opts.t),
-    clientId: CLIENT_ID,
-    tokens: opts.tokens,
-    onTokens: (next) => opts.store.save({ baseUrl: opts.baseUrl, refreshToken: next.refresh_token }),
-    onSignedOut: opts.onSignedOut,
-  });
-}
-
 export type SignInProblemKind =
   | "pending"
   | "security"
@@ -225,6 +209,12 @@ export interface SignInProblem {
 export function describeSignInError(e: unknown): SignInProblem {
   if (e instanceof SignInCancelledError) {
     return { kind: "cancelled", message: "Sign-in was cancelled before it finished." };
+  }
+  if (e instanceof SignInInUseError) {
+    return {
+      kind: "failed",
+      message: "This tab is a copy of another signed-in loomboard tab. Sign in again to use loomboard here too.",
+    };
   }
   if (e instanceof SignInAddressMismatchError) {
     return {

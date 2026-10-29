@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { LoomcycleClient, OAuthError, pkceChallenge } from "@loomcycle/client";
+import { OAuthError, pkceChallenge } from "@loomcycle/client";
 import {
   CLIENT_ID,
   SignInAddressMismatchError,
@@ -8,10 +8,6 @@ import {
   completeSignIn,
   describeSignInError,
   oauthFor,
-  resumeTokens,
-  startTokenProvider,
-  type RefreshTokenStore,
-  type StoredSignIn,
 } from "./appSignIn";
 
 const ISSUER = "https://lc.example";
@@ -64,20 +60,6 @@ function fakeServer(opts: {
     return new Response("not found", { status: 404 });
   });
   return { seen, fetch: fetchImpl as unknown as typeof fetch };
-}
-
-function memoryStore(): RefreshTokenStore & { saved: StoredSignIn[] } {
-  const saved: StoredSignIn[] = [];
-  return {
-    saved,
-    load: async () => saved.at(-1)?.refreshToken ?? null,
-    save: async (s) => {
-      saved.push(s);
-    },
-    clear: async () => {
-      saved.length = 0;
-    },
-  };
 }
 
 describe("beginSignIn", () => {
@@ -204,61 +186,6 @@ describe("completeSignIn", () => {
     ).catch((e) => e);
     expect(describeSignInError(err)).toMatchObject({ kind: "pending" });
     expect(describeSignInError(err).message).toMatch(/awaiting approval/);
-  });
-});
-
-describe("startTokenProvider", () => {
-  it("stores every rotated refresh token for its server before the new access token is used", async () => {
-    const srv = fakeServer();
-    const store = memoryStore();
-    const provider = startTokenProvider({
-      t: { baseUrl: ISSUER, fetch: srv.fetch },
-      baseUrl: ISSUER,
-      tokens: resumeTokens("rt-stored"),
-      store,
-      onSignedOut: () => undefined,
-    });
-    // A resumed sign-in has no access token: the first request refreshes.
-    expect(await provider.getToken()).toBe("at-1");
-    expect(srv.seen[0].form?.get("grant_type")).toBe("refresh_token");
-    expect(srv.seen[0].form?.get("refresh_token")).toBe("rt-stored");
-    expect(store.saved).toEqual([{ baseUrl: ISSUER, refreshToken: "rt-1" }]);
-  });
-
-  it("gives a client the current token and ends the sign-in when the server refuses the refresh", async () => {
-    const srv = fakeServer({
-      token: () => Response.json({ error: "invalid_grant" }, { status: 400 }),
-    });
-    const onSignedOut = vi.fn();
-    const provider = startTokenProvider({
-      t: { baseUrl: ISSUER, fetch: srv.fetch },
-      baseUrl: ISSUER,
-      tokens: resumeTokens("rt-revoked"),
-      store: memoryStore(),
-      onSignedOut,
-    });
-    const client = new LoomcycleClient({ baseUrl: ISSUER, tokenProvider: provider, fetch: srv.fetch });
-    await expect(client.whoami()).rejects.toBeInstanceOf(OAuthError);
-    expect(onSignedOut).toHaveBeenCalledTimes(1);
-    expect((onSignedOut.mock.calls[0][0] as OAuthError).code).toBe("invalid_grant");
-  });
-
-  it("signs out by revoking the refresh token (RFC 7009) and forgetting the tokens", async () => {
-    const srv = fakeServer();
-    const onSignedOut = vi.fn();
-    const provider = startTokenProvider({
-      t: { baseUrl: ISSUER, fetch: srv.fetch },
-      baseUrl: ISSUER,
-      tokens: { access_token: "at-0", token_type: "Bearer", expires_in: 3600, refresh_token: "rt-0", expires_at: Date.now() + 3_600_000 },
-      store: memoryStore(),
-      onSignedOut,
-    });
-    await provider.signOut();
-    const revoke = srv.seen.find((s) => s.url.endsWith("/v1/_oauth/revoke"));
-    expect(Object.fromEntries(revoke!.form!)).toEqual({ token: "rt-0", client_id: CLIENT_ID });
-    expect(provider.tokens).toBeUndefined();
-    expect(onSignedOut).toHaveBeenCalledTimes(1);
-    await expect(provider.getToken()).rejects.toBeInstanceOf(OAuthError);
   });
 });
 
