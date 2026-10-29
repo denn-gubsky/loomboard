@@ -147,6 +147,20 @@ describe("ConnectionProvider", () => {
     expect(buildConnection(ctx().settings!, ctx().signIn).token).toBe("lc_b");
   });
 
+  it("points a refused pasted token at sign-in, asking without the token", async () => {
+    failMeOn = B;
+    failStatus = 401;
+    const { ctx } = renderProvider();
+    await act(async () => {
+      await ctx().connect({ baseUrl: B, token: "lc_personal" });
+    });
+    expect(ctx().status).toBe("error");
+    expect(ctx().error).toMatch(/Sign in with loomcycle/);
+    const asked = seen.filter((s) => s.server === B && s.path === "/.well-known/oauth-authorization-server");
+    expect(asked).toHaveLength(1);
+    expect(asked[0].auth).toBeNull();
+  });
+
   it("revokes and forgets a sign-in whose first request is refused", async () => {
     failMeOn = A;
     returnFromSignInToA();

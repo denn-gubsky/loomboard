@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { WhoamiResponse } from "@loomcycle/client";
-import { deriveCapabilities, serverCapabilities, tokenKindLabel } from "./capabilities";
+import { accessSummary, deriveCapabilities, serverCapabilities, tokenKindLabel } from "./capabilities";
 
 function who(p: Partial<WhoamiResponse>): WhoamiResponse {
   return {
@@ -13,34 +13,88 @@ function who(p: Partial<WhoamiResponse>): WhoamiResponse {
   };
 }
 
+// Every gated view at once: the scope fallback opens or closes them together.
+const ALL = (v: boolean) => ({ library: v, documents: v, memory: v, boards: v, workflow: v, canvas: v });
+
 describe("deriveCapabilities", () => {
-  it("grants tenant reach to admin / operator / open / legacy", () => {
-    expect(deriveCapabilities(who({ is_admin: true })).canTenant).toBe(true);
-    expect(deriveCapabilities(who({ scopes: ["substrate:tenant"] })).canTenant).toBe(true);
-    expect(deriveCapabilities(who({ open_mode: true })).canTenant).toBe(true);
-    expect(deriveCapabilities(who({ legacy: true })).canTenant).toBe(true);
+  it("opens every view to admin / operator / open / legacy on a server without the surface summary", () => {
+    expect(deriveCapabilities(who({ is_admin: true })).views).toEqual(ALL(true));
+    expect(deriveCapabilities(who({ scopes: ["substrate:tenant"] })).views).toEqual(ALL(true));
+    expect(deriveCapabilities(who({ open_mode: true })).views).toEqual(ALL(true));
+    expect(deriveCapabilities(who({ legacy: true })).views).toEqual(ALL(true));
   });
 
-  it("grants tenant reach to a non-isolated member, confines an isolated user (RFC CB)", () => {
-    // A tenant-mode (member) user token: runs/channels, not isolated → reaches
-    // the tenant plane now that loomcycle admits members on those routes.
+  it("opens every view to a non-isolated member and none to an isolated user without the summary (RFC CB)", () => {
     const member = deriveCapabilities(who({ scopes: ["runs:create", "runs:read", "channel:publish", "channel:read"] }));
-    expect(member.canTenant).toBe(true);
+    expect(member.views).toEqual(ALL(true));
     expect(member.isIsolated).toBe(false);
 
-    // An isolated substrate:user token stays confined.
     const isolated = deriveCapabilities(who({ scopes: ["substrate:user"] }));
-    expect(isolated.canTenant).toBe(false);
+    expect(isolated.views).toEqual(ALL(false));
     expect(isolated.isIsolated).toBe(true);
 
-    // A member who ALSO holds substrate:user (both) is not isolated → reaches it.
+    // A member who ALSO holds substrate:tenant is not isolated.
     const both = deriveCapabilities(who({ scopes: ["substrate:user", "substrate:tenant"] }));
-    expect(both.canTenant).toBe(true);
+    expect(both.views).toEqual(ALL(true));
     expect(both.isIsolated).toBe(false);
   });
 
+  it("shows only the views whose loomcycle pages the access rules let the principal reach", () => {
+    // An operator whose rules deny teams and memory: scopes alone would open
+    // everything.
+    const p = who({
+      scopes: ["substrate:tenant"],
+      effective: { surfaces: { library: true, paths: true, memory: false, teams: false, run: true } },
+    });
+    expect(deriveCapabilities(p).views).toEqual({
+      library: true,
+      documents: true,
+      memory: false,
+      boards: true,
+      workflow: false,
+      canvas: false,
+    });
+  });
+
+  it("opens a view to an isolated user when loomcycle says its pages are reachable", () => {
+    const p = who({ scopes: ["substrate:user"], effective: { surfaces: { library: true, paths: true, memory: true, teams: true } } });
+    expect(deriveCapabilities(p).views).toEqual(ALL(true));
+  });
+
+  it("closes Workflow when either of its pages is refused", () => {
+    const docsOnly = who({ effective: { surfaces: { library: true, paths: true, memory: true, teams: false } } });
+    const teamsOnly = who({ effective: { surfaces: { library: true, paths: false, memory: true, teams: true } } });
+    expect(deriveCapabilities(docsOnly).views.workflow).toBe(false);
+    expect(deriveCapabilities(teamsOnly).views.workflow).toBe(false);
+  });
+
+  it("falls back to the scope rule for a page the server leaves out of the summary", () => {
+    const member = who({ scopes: ["runs:create"], effective: { surfaces: { memory: false } } });
+    expect(deriveCapabilities(member).views).toEqual({ ...ALL(true), memory: false });
+    const isolated = who({ scopes: ["substrate:user"], effective: { surfaces: { library: true } } });
+    expect(deriveCapabilities(isolated).views).toEqual({ ...ALL(false), library: true });
+  });
+
   it("null principal → no capabilities", () => {
-    expect(deriveCapabilities(null)).toEqual({ canTenant: false, isAdmin: false, isIsolated: false });
+    expect(deriveCapabilities(null)).toEqual({ views: ALL(false), isAdmin: false, isIsolated: false });
+  });
+});
+
+describe("accessSummary", () => {
+  it("says how the principal is connected and which access rules apply", () => {
+    const p = who({ acl_mode: "enforce", acl_version: 12, groups: ["eng", "ops"], auth: { mode: "strict", gate: "github" } });
+    expect(accessSummary(p, true).split("\n")).toEqual([
+      "Signed in with loomcycle",
+      "Sign-in option: github",
+      "Access rules: enforce (v12)",
+      "Groups: eng, ops",
+    ]);
+  });
+
+  it("names a pasted token and leaves out what the server did not send", () => {
+    expect(accessSummary(who({}), false)).toBe("Connected with a token");
+    expect(accessSummary(who({ acl_mode: "compat", groups: [] }), false)).toBe("Connected with a token\nAccess rules: compat");
+    expect(accessSummary(null, false)).toBe("");
   });
 });
 

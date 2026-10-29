@@ -12,6 +12,7 @@ import { chromeSessionRefreshStore } from "../state/signInStore";
 import { buildConnection } from "../lib/buildConnection";
 import {
   describeSignInError,
+  describeTokenRefusal,
   oauthFor,
   type SignInProblemKind,
   type StoredSignIn,
@@ -22,7 +23,6 @@ import { extSignIn } from "../lib/extSignIn";
 import { saveExtSettings, clearExtSettings } from "../state/extSettings";
 import { persistConversation, newConversation } from "../state/extConversation";
 import { saveMode, type ActionMode } from "../state/extMode";
-import { describeError } from "../chat/lib/errors";
 import { ASSISTANT_AGENT } from "../bridge/protocol";
 import { ensureChromeAssistant } from "../bridge/ensureAgent";
 import { startClientToolHost } from "../bridge/clientToolHost";
@@ -131,7 +131,7 @@ export default function PanelApp({
         await endSignIn();
         await finishConnect(createLoomcycleClient({ baseUrl: s.baseUrl, token: s.token }), s);
       } catch (e) {
-        setError(describeError(e));
+        setError(await describeTokenRefusal(e, oauthFor({ baseUrl: s.baseUrl })));
         setStatus("error");
       }
     },

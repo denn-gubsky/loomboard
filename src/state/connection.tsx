@@ -12,13 +12,13 @@ import type { LoomcycleClient, WhoamiResponse } from "@loomcycle/client";
 import { SIGNED_OUT_MESSAGE, adoptSignIn } from "../lib/signInLifecycle";
 import { getClient, resetClient } from "../lib/loomcycle";
 import { deriveCapabilities, type Capabilities } from "../lib/capabilities";
-import { describeError } from "../chat/lib/errors";
 import { devConnectSettings } from "../lib/devConnect";
 import { isTauri } from "../lib/proxyMode";
 import { transportFor } from "../lib/buildConnection";
 import {
   SignInInUseError,
   describeSignInError,
+  describeTokenRefusal,
   oauthFor,
   type SignInProblemKind,
   type StoredSignIn,
@@ -148,8 +148,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         // Log the raw error for devtools; the UI shows a token-safe summary.
         console.error("[connect] whoami failed", e);
+        const message = await describeTokenRefusal(e, oauthFor(transportFor(s.baseUrl)));
         setPrincipal(null);
-        setError(describeError(e));
+        setError(message);
         setStatus("error");
         return false;
       }

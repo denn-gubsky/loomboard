@@ -298,6 +298,28 @@ export function describeSignInError(e: unknown): SignInProblem {
   return { kind: "failed", message: describeError(e) };
 }
 
+/** A refused token connect, as the person should read it. Under
+ *  `auth.strict.user_tokens: gate_only` (RFC FA §4) loomcycle refuses a
+ *  personal token no sign-in option issued with the same bare 401 as a wrong
+ *  token, and announces the setting nowhere beforehand. So a 401 from a server
+ *  that offers app sign-in (its metadata answers) points at the sign-in instead
+ *  of reading as a bad token. */
+export async function describeTokenRefusal(e: unknown, oauth: LoomcycleOAuth): Promise<string> {
+  if (e instanceof LoomcycleError && e.status === 401) {
+    const offersSignIn = await oauth.discover().then(
+      () => true,
+      () => false,
+    );
+    if (offersSignIn) {
+      return (
+        "loomcycle refused this token. This server offers sign-in: use “Sign in with loomcycle” above. " +
+        "A server that requires sign-in accepts only an operator or service token here."
+      );
+    }
+  }
+  return describeError(e);
+}
+
 function unsupported(): SignInProblem {
   return {
     kind: "unsupported",

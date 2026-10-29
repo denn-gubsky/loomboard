@@ -217,34 +217,28 @@ function AppShell() {
   const devBoard =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).has("board");
-  // Library, Documents, Memory, Boards and Workflow are all substrate:tenant
-  // surfaces — a user token can't open them (the nav is hidden too), so fall back
+  // A view the principal cannot reach (its nav entry is hidden too) falls back
   // to chat rather than render a wall of 403s.
-  const showLibrary = view === "library" && capabilities.canTenant;
-  const showDocuments = view === "documents" && capabilities.canTenant;
-  const showMemory = view === "memory" && capabilities.canTenant;
-  const showBoards = view === "boards" && capabilities.canTenant;
-  const showWorkflow = view === "workflow" && capabilities.canTenant;
-  const showCanvas = view === "canvas" && capabilities.canTenant;
+  const shown: SidebarView = view !== "chat" && capabilities.views[view] ? view : "chat";
   return (
     <ConversationsProvider>
       <ActiveChatProvider>
         <div className="app-shell">
-          <Sidebar view={view} onViewChange={changeView} />
+          <Sidebar view={shown} onViewChange={changeView} />
           {devBoard ? (
             <BoardArea />
-          ) : showLibrary ? (
+          ) : shown === "library" ? (
             <LibraryArea />
-          ) : showDocuments ? (
+          ) : shown === "documents" ? (
             <DocumentsArea target={docTarget} onClearTarget={() => setDocTarget(undefined)} />
-          ) : showMemory ? (
+          ) : shown === "memory" ? (
             <MemoryArea />
-          ) : showBoards ? (
+          ) : shown === "boards" ? (
             <BoardsArea />
-          ) : showWorkflow ? (
+          ) : shown === "workflow" ? (
             <WorkflowArea />
-          ) : showCanvas ? (
-            <CanvasArea onOpenDocument={openDocument} />
+          ) : shown === "canvas" ? (
+            <CanvasArea onOpenDocument={capabilities.views.documents ? openDocument : undefined} />
           ) : (
             <ChatArea />
           )}
