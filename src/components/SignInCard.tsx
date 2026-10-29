@@ -138,7 +138,10 @@ export default function SignInCard(p: Props) {
                 autoComplete="off"
                 spellCheck={false}
               />
-              <small>{p.tokenHint}</small>
+              <small>
+                {p.tokenHint} On a server that requires sign-in, only an operator or service token works
+                here.
+              </small>
             </label>
             <button type="submit" className="btn-ghost" disabled={p.busy}>
               Connect with token

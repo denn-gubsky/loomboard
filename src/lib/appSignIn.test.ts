@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { OAuthError, pkceChallenge } from "@loomcycle/client";
+import { AuthError, OAuthError, pkceChallenge } from "@loomcycle/client";
 import {
   CLIENT_ID,
   SignInAddressMismatchError,
@@ -8,6 +8,7 @@ import {
   beginSignIn,
   completeSignIn,
   describeSignInError,
+  describeTokenRefusal,
   oauthFor,
 } from "./appSignIn";
 import { LOCAL_BASE_URL as LOCAL } from "./buildConnection";
@@ -232,5 +233,31 @@ describe("describeSignInError", () => {
 
   it("reports an abandoned sign-in as cancelled", () => {
     expect(describeSignInError(new SignInCancelledError()).kind).toBe("cancelled");
+  });
+});
+
+describe("describeTokenRefusal", () => {
+  const refused = () => new AuthError("Unauthorized", { status: 401 });
+
+  it("points a refused token at sign-in on a server that offers it", async () => {
+    // Under auth.strict.user_tokens: gate_only a personal token gets the same
+    // bare 401 as a wrong one.
+    const srv = fakeServer();
+    const msg = await describeTokenRefusal(refused(), oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }));
+    expect(msg).toMatch(/Sign in with loomcycle/);
+    expect(msg).toMatch(/operator or service token/);
+  });
+
+  it("calls a refused token a bad token on a server without app sign-in", async () => {
+    const srv = fakeServer({ metadata: new Response("not found", { status: 404 }) });
+    const msg = await describeTokenRefusal(refused(), oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }));
+    expect(msg).not.toMatch(/Sign in with loomcycle/);
+  });
+
+  it("reads anything but a 401 as before, without asking the server", async () => {
+    const srv = fakeServer();
+    const msg = await describeTokenRefusal(new TypeError("Failed to fetch"), oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }));
+    expect(msg).toMatch(/Could not reach loomcycle/);
+    expect(srv.seen).toHaveLength(0);
   });
 });
