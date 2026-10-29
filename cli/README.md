@@ -21,6 +21,8 @@ loomboard is a browser SPA that talks to a loomcycle runtime over `/v1/*`. loomc
 
 Your **bearer token stays in the browser** (localStorage) and is only forwarded upstream on your requests — this process never reads, stores, or logs it.
 
+**Sign in with loomcycle** works through the same proxy (it also forwards the OAuth metadata, `/.well-known/oauth-authorization-server`). The loomcycle operator adds `http://127.0.0.1:4173` (your `--port`) to `auth.clients.loomboard.allowed_origins`; the `loomboard` preset's loopback redirect already covers the callback. Open the app at `http://127.0.0.1:4173`, not `localhost`: loomcycle accepts plain-http redirects only to a loopback IP. A sign-in keeps its refresh token in the tab's `sessionStorage`, never in localStorage.
+
 ## Options
 
 ```

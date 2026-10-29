@@ -37,6 +37,19 @@ Dev with HMR: `npm run dev:extension` (load the generated `extension/dist`).
    tools (`client__browser_*` / WebFetch / WebSearch / Memory / Skill).
 5. To use skills (e.g. `marketing/*`), **register them in the loomcycle Library**
    (SkillDef); they're granted via the agent's `skills` allowlist.
+6. For **Sign in with loomcycle**: `LOOMCYCLE_PUBLIC_URL`, an interactive gate, and this
+   install registered on the `loomboard` client — the redirect URI
+   `https://<extension-id>.chromiumapp.org/` and the origin `chrome-extension://<extension-id>`
+   (the sign-in screen shows both; the ID differs between a store install and an unpacked
+   one):
+
+   ```yaml
+   auth:
+     clients:
+       loomboard:            # LOOMCYCLE_PRESETS=…,loomboard declares the client
+         redirect_uris: !append [https://<extension-id>.chromiumapp.org/]
+         allowed_origins: !append [chrome-extension://<extension-id>]
+   ```
 
 On first connect the extension idempotently registers the `chrome-assistant` AgentDef
 with `tools: [client__browser_*, WebFetch, WebSearch, Memory, Skill]` + the system prompt.
@@ -86,7 +99,11 @@ line under the toolbar.
 
 ## Usage
 
-Connect (loomcycle URL + bearer). Chat with the assistant about the open page — e.g.
+Enter the loomcycle URL and **Sign in with loomcycle**: loomcycle's sign-in page opens in a
+window of its own (`chrome.identity`, hence the `identity` permission) and closes when you are
+signed in. The refresh token stays in `chrome.storage.session` and is gone when the browser
+quits; **Disconnect** revokes the sign-in. A bearer can still be pasted under **Advanced**.
+Chat with the assistant about the open page — e.g.
 "summarize this page", "collect the product prices into a table and save them", "fill
 this form with … and submit". Actions are gated by an **approval bar** in **Confirm**
 mode (default); switch to **Auto** to run actions immediately (a **Stop** button

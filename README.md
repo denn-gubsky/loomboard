@@ -83,7 +83,45 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-Enter your loomcycle bearer token and leave **Base URL blank** to use the dev proxy (forwards `/v1/*` to `http://127.0.0.1:8787`, or `LOOMBOARD_PROXY_TARGET`). The proxy lets the browser reach any runtime with no CORS.
+Open it at `http://127.0.0.1:5173`, enter the loomcycle **Base URL** and press **Sign in with loomcycle** (see below), or paste a bearer under **Advanced**. Leave the Base URL blank to use the dev proxy's default (forwards `/v1/*` and the OAuth metadata to `http://127.0.0.1:8787`, or `LOOMBOARD_PROXY_TARGET`). The proxy lets the browser reach any runtime with no CORS.
+
+### Sign in with loomcycle
+
+The app, the Chrome extension and the desktop app sign in through loomcycle's own sign-in page (RFC FL — loomcycle is an OAuth 2.0 authorization server for its registered apps): the person enters only the Base URL, signs in with whatever gates the operator configured (password, SSO, a pasted token…), and comes back with a short-lived token for that user. loomboard never sees a password and authorizes nothing itself. Pasting a bearer stays available under **Advanced**, for `auth.mode: token` deployments and automation.
+
+**What the operator sets up** on loomcycle (`auth.clients.loomboard`; full reference in loomcycle's `docs/CONFIGURATION.md`, "App sign-in"):
+
+- `LOOMCYCLE_PUBLIC_URL` — the issuer. Without it the server publishes no metadata and loomboard offers only the token path.
+- an interactive gate in `auth.gates`.
+- `LOOMCYCLE_PRESETS=…,loomboard` — registers the client with the desktop app's addresses (loopback `http://127.0.0.1/auth/callback`, any port; `com.loomboard.app:/auth/callback`; origins `tauri://localhost`, `http://tauri.localhost`).
+- the addresses that differ per install, added with `!append`:
+
+```yaml
+auth:
+  clients:
+    loomboard:
+      redirect_uris: !append
+        - https://board.example.com/auth/callback          # the web app
+        - https://<extension-id>.chromiumapp.org/          # the extension (shown on its sign-in screen)
+      allowed_origins: !append
+        - https://board.example.com
+        - chrome-extension://<extension-id>
+        - http://127.0.0.1:5173                            # `npm run dev` (4173 for the loomboard CLI)
+```
+
+A web app on `127.0.0.1` needs no redirect entry (the preset's loopback one matches any port), only its origin. Over plain http, open loomboard at `127.0.0.1`, not `localhost`: loomcycle accepts http redirects only to a loopback IP. A static host must answer `/auth/callback` with `index.html`.
+
+**Per form factor:**
+
+| | How the person signs in | Where the tokens live |
+|---|---|---|
+| web | full-page redirect, back to `/auth/callback` (code and state are wiped from the address bar first) | access token in memory; refresh token in the tab's `sessionStorage` (survives a reload, gone with the tab) |
+| extension | `chrome.identity.launchWebAuthFlow`, back to `https://<id>.chromiumapp.org/` | access token in memory; refresh token in `chrome.storage.session` (cleared when the browser quits) |
+| desktop | the system browser, back to a one-shot listener on a random `127.0.0.1` port | access token in memory; refresh token in the OS keychain (`com.loomboard.app`) |
+
+No token is ever written to `localStorage` or a URL. Sign-out revokes the sign-in on loomcycle (RFC 7009); a sign-in loomcycle ends (revoked, user disabled, expired) returns to the sign-in screen with a message. One sign-in per tab: duplicating a tab copies its `sessionStorage`, and the two then refresh the same token, which loomcycle treats as a replay and ends the sign-in.
+
+**The sign-in address check.** loomboard signs in only if the server's issuer is on the origin of the Base URL you entered, and its token and revocation endpoints are too; the button shows the host you will be sent to. This stops a server — or a proxy in front of one — from naming another server's sign-in to catch its code. When loomcycle's public address legitimately differs from the Base URL (a LAN address, a proxy), enter the public address under **Advanced → Sign-in server address**.
 
 | Script | What |
 |---|---|
