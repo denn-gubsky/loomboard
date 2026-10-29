@@ -647,6 +647,95 @@ button {
   text-align: center;
   color: var(--text-dim);
 }
+/* ---- approvals (the users awaiting a tenant operator) ---- */
+.users-pane {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+}
+.users-pane__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+.users-pane__bar h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.users-pane__note,
+.users-pane__empty,
+.users-ids__empty {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+.users-pane__empty {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.users-pane__error {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+.users-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.users-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+}
+.users-row__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.users-row__who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+.users-row__who code {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.users-row .btn-primary {
+  padding: 0.4em 0.8em;
+  font-size: 0.85rem;
+}
+.users-ids {
+  margin-top: 0.6rem;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.users-ids th,
+.users-ids td {
+  text-align: left;
+  padding: 0.3rem 0.5rem;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.users-ids th {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.users-ids__issuer,
+.users-ids__unverified {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
 .explorer-pane__bar {
   padding: 0.4rem 0.7rem;
   border-bottom: 1px solid var(--border);
