@@ -10,11 +10,13 @@ import type { ServerCapabilities } from "@loomcycle/library";
 // A server older than the summary (or one that leaves a page out) falls back
 // to the scope rule (RFC BX / RFC CB): the tenant plane is reachable by every
 // NON-isolated principal — an operator, an admin, open/legacy, or a member —
-// and only an isolated `substrate:user` token is confined.
+// and only an isolated `substrate:user` token is confined. A page that
+// administers the tenant (Users) needs an operator, as loomcycle's own summary
+// requires.
 
 /** The views a principal may or may not reach. Chat is not among them: it is
  *  the view the app falls back to. */
-export type GatedView = "library" | "documents" | "memory" | "boards" | "workflow" | "canvas";
+export type GatedView = "library" | "documents" | "memory" | "boards" | "workflow" | "canvas" | "users";
 
 // Each view's loomcycle pages, keyed as internal/api/http/nav_capabilities.go
 // keys them: the pages whose primary route is the view's own first call.
@@ -28,7 +30,11 @@ const VIEW_SURFACES: Record<GatedView, readonly string[]> = {
   boards: ["paths"],
   workflow: ["paths", "teams"],
   canvas: ["teams"],
+  users: ["users"],
 };
+
+// The pages loomcycle marks Operator in nav_capabilities.go.
+const OPERATOR_PAGES: ReadonlySet<string> = new Set(["users"]);
 
 export interface Capabilities {
   /** Per view, whether the principal may reach it. */
@@ -50,8 +56,11 @@ export function deriveCapabilities(p: WhoamiResponse | null): Capabilities {
     !scopes.includes("substrate:tenant") &&
     !isAdmin;
   const canTenant = Boolean(p) && !isIsolated;
+  const isOperator =
+    Boolean(p?.open_mode || p?.legacy) || isAdmin || scopes.includes("substrate:tenant");
   const surfaces = p?.effective?.surfaces;
-  const reach = (page: string) => Boolean(p) && (surfaces?.[page] ?? canTenant);
+  const reach = (page: string) =>
+    Boolean(p) && (surfaces?.[page] ?? (OPERATOR_PAGES.has(page) ? isOperator : canTenant));
   const views = Object.fromEntries(
     Object.entries(VIEW_SURFACES).map(([v, pages]) => [v, pages.every(reach)]),
   ) as Record<GatedView, boolean>;
