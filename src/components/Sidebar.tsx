@@ -12,9 +12,10 @@ import {
   Sun,
   Share2,
   Workflow,
+  type LucideIcon,
 } from "lucide-react";
 import { useConnection } from "../state/connection";
-import { tokenKindLabel } from "../lib/capabilities";
+import { accessSummary, tokenKindLabel, type GatedView } from "../lib/capabilities";
 import { useTheme } from "../hooks/useTheme";
 import NewChatButton from "./NewChatButton";
 import ConversationList from "./ConversationList";
@@ -24,19 +25,21 @@ import logoWhite from "../assets/loomboard-logo-white.svg";
 import logoBlack from "../assets/loomboard-logo-black.svg";
 import brandMark from "../assets/loomboard-favicon.svg";
 
-export type SidebarView =
-  | "chat"
-  | "library"
-  | "documents"
-  | "memory"
-  | "boards"
-  | "workflow"
-  | "canvas";
+export type SidebarView = "chat" | GatedView;
 
 interface Props {
   view: SidebarView;
   onViewChange: (view: SidebarView) => void;
 }
+
+const GATED: { view: GatedView; label: string; title: string; Icon: LucideIcon }[] = [
+  { view: "library", label: "Library", title: "Library", Icon: LibraryIcon },
+  { view: "documents", label: "Documents", title: "Documents", Icon: FolderTree },
+  { view: "memory", label: "Memory", title: "Memory", Icon: Brain },
+  { view: "boards", label: "Boards", title: "Boards", Icon: LayoutGrid },
+  { view: "workflow", label: "Workflow", title: "Workflow", Icon: Workflow },
+  { view: "canvas", label: "Canvas", title: "Canvas — edit a team's workflow graph", Icon: Share2 },
+];
 
 const COLLAPSE_KEY = "loomboard.sidebarCollapsed";
 
@@ -111,56 +114,18 @@ export default function Sidebar({ view, onViewChange }: Props) {
         >
           <MessageSquare size={16} /> <span className="label">Chats</span>
         </button>
-        {/* Library, Documents and Memory are all substrate:tenant surfaces —
-            hide them for a delegated user token, which would only get 403s. */}
-        {capabilities.canTenant && (
-          <>
-            <button
-              className={view === "library" ? "side-nav-btn active" : "side-nav-btn"}
-              onClick={() => onViewChange("library")}
-              title="Library"
-            >
-              <LibraryIcon size={16} /> <span className="label">Library</span>
-            </button>
-            <button
-              className={
-                view === "documents" ? "side-nav-btn active" : "side-nav-btn"
-              }
-              onClick={() => onViewChange("documents")}
-              title="Documents"
-            >
-              <FolderTree size={16} /> <span className="label">Documents</span>
-            </button>
-            <button
-              className={view === "memory" ? "side-nav-btn active" : "side-nav-btn"}
-              onClick={() => onViewChange("memory")}
-              title="Memory"
-            >
-              <Brain size={16} /> <span className="label">Memory</span>
-            </button>
-            <button
-              className={view === "boards" ? "side-nav-btn active" : "side-nav-btn"}
-              onClick={() => onViewChange("boards")}
-              title="Boards"
-            >
-              <LayoutGrid size={16} /> <span className="label">Boards</span>
-            </button>
-            <button
-              className={view === "workflow" ? "side-nav-btn active" : "side-nav-btn"}
-              onClick={() => onViewChange("workflow")}
-              title="Workflow"
-            >
-              <Workflow size={16} /> <span className="label">Workflow</span>
-            </button>
-            <button
-              className={view === "canvas" ? "side-nav-btn active" : "side-nav-btn"}
-              onClick={() => onViewChange("canvas")}
-              title="Canvas — edit a team's workflow graph"
-            >
-              <Share2 size={16} /> <span className="label">Canvas</span>
-            </button>
-          </>
-        )}
+        {/* Only the views loomcycle says this principal can reach: the rest
+            would only get 403s. */}
+        {GATED.filter((g) => capabilities.views[g.view]).map(({ view: v, label, title, Icon }) => (
+          <button
+            key={v}
+            className={view === v ? "side-nav-btn active" : "side-nav-btn"}
+            onClick={() => onViewChange(v)}
+            title={title}
+          >
+            <Icon size={16} /> <span className="label">{label}</span>
+          </button>
+        ))}
       </nav>
 
       {view === "chat" ? (
@@ -174,7 +139,7 @@ export default function Sidebar({ view, onViewChange }: Props) {
 
       <div className="sidebar-foot">
         {!collapsed && (
-          <div className="who">
+          <div className="who" title={accessSummary(principal, signIn !== null)}>
             <strong>
               {principal?.subject ?? "—"}
               {tokenKindLabel(principal) && (

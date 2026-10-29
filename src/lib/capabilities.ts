@@ -1,20 +1,38 @@
 import type { WhoamiResponse } from "@loomcycle/client";
 import type { ServerCapabilities } from "@loomcycle/library";
 
-// What the connected bearer can actually reach, derived from the whoami
-// principal's scopes (RFC BX / RFC L / RFC CB). The tenant plane — the agent
-// Library, the History tool, Documents, Memory — is reachable by every
-// NON-isolated principal: an operator (`substrate:tenant`), an admin, open/legacy,
-// OR a non-isolated member (a runs/channels user token, access_mode "tenant" —
-// RFC CB opened the member-accessible tenant routes to it). Only an isolated
-// `substrate:user` token (access_mode "isolated") is confined server-side, so the
-// UI gates those surfaces on `canTenant` (= not isolated) to stay usable for it.
+// What the connected principal can reach. loomcycle answers that itself
+// (RFC EZ §4): GET /v1/_me `effective.surfaces` says, per Web UI page, whether
+// a request to the route the page loads first would pass the route's scope
+// gate AND its access-control rules. That is the only source that sees the
+// rules, so a view is shown when its pages are reachable.
+//
+// A server older than the summary (or one that leaves a page out) falls back
+// to the scope rule (RFC BX / RFC CB): the tenant plane is reachable by every
+// NON-isolated principal — an operator, an admin, open/legacy, or a member —
+// and only an isolated `substrate:user` token is confined.
+
+/** The views a principal may or may not reach. Chat is not among them: it is
+ *  the view the app falls back to. */
+export type GatedView = "library" | "documents" | "memory" | "boards" | "workflow" | "canvas";
+
+// Each view's loomcycle pages, keyed as internal/api/http/nav_capabilities.go
+// keys them: the pages whose primary route is the view's own first call.
+// Documents and Boards read Documents, which loomcycle gates as "read
+// document", the paths page's question. Workflow loads its boards and the team
+// list together and shows nothing if either is refused, so it needs both.
+const VIEW_SURFACES: Record<GatedView, readonly string[]> = {
+  library: ["library"],
+  documents: ["paths"],
+  memory: ["memory"],
+  boards: ["paths"],
+  workflow: ["paths", "teams"],
+  canvas: ["teams"],
+};
 
 export interface Capabilities {
-  /** Reach tenant-scoped surfaces (Library, Documents, Memory, History): true for
-   *  every NON-isolated principal — operator, admin, open/legacy, OR a
-   *  non-isolated member (RFC CB). Only an isolated substrate:user is confined. */
-  canTenant: boolean;
+  /** Per view, whether the principal may reach it. */
+  views: Record<GatedView, boolean>;
   /** Full admin — all tenants. */
   isAdmin: boolean;
   /** A substrate:user token, confined to its own user scope server-side. */
@@ -31,14 +49,27 @@ export function deriveCapabilities(p: WhoamiResponse | null): Capabilities {
     scopes.includes("substrate:user") &&
     !scopes.includes("substrate:tenant") &&
     !isAdmin;
-  // RFC CB: the tenant plane (Library / Documents / Memory — browse + author) is
-  // reachable by every NON-isolated principal — open_mode/legacy, an admin, a
-  // substrate:tenant operator, OR a non-isolated member (a runs:*/channel:* user
-  // token, access_mode "tenant"). loomcycle now admits members on the
-  // member-accessible tenant routes; only an isolated substrate:user is confined.
-  // So canTenant is "authenticated and not isolated".
   const canTenant = Boolean(p) && !isIsolated;
-  return { canTenant, isAdmin, isIsolated };
+  const surfaces = p?.effective?.surfaces;
+  const reach = (page: string) => Boolean(p) && (surfaces?.[page] ?? canTenant);
+  const views = Object.fromEntries(
+    Object.entries(VIEW_SURFACES).map(([v, pages]) => [v, pages.every(reach)]),
+  ) as Record<GatedView, boolean>;
+  return { views, isAdmin, isIsolated };
+}
+
+/** How the principal is connected and which access rules apply, one line
+ *  each — the sidebar badge's tooltip. `signedIn` is whether loomboard holds a
+ *  "Sign in with loomcycle" session rather than a pasted token. */
+export function accessSummary(p: WhoamiResponse | null, signedIn: boolean): string {
+  if (!p) return "";
+  const lines = [signedIn ? "Signed in with loomcycle" : "Connected with a token"];
+  if (p.auth?.gate) lines.push(`Sign-in option: ${p.auth.gate}`);
+  if (p.acl_mode) {
+    lines.push(`Access rules: ${p.acl_mode}${p.acl_version !== undefined ? ` (v${p.acl_version})` : ""}`);
+  }
+  if (p.groups?.length) lines.push(`Groups: ${p.groups.join(", ")}`);
+  return lines.join("\n");
 }
 
 /** Short label for the connected identity's kind — for the sidebar badge. */

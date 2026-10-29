@@ -54,7 +54,7 @@ const listLibraryAgents = vi.fn(async () => ({ entries: [{ name: "a" }] }));
 // when not connected, and what is under test is the canvas, not the login.
 vi.mock("../../state/connection", () => ({
   useLoomcycle: () => ({ listTeams, getTeamDef, listLibraryAgents, createTeam: vi.fn(), forkTeam: vi.fn(), runTeam: vi.fn() }),
-  useConnection: () => ({ status: "connected", capabilities: { canTenant: true } }),
+  useConnection: () => ({ status: "connected" }),
 }));
 
 afterEach(cleanup);
