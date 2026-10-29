@@ -1,6 +1,6 @@
 import type { OAuthTokenSet } from "@loomcycle/client";
 import { savePendingSignIn, takePendingSignIn } from "../state/signInStore";
-import { CALLBACK_PATH, beginSignIn, completeSignIn, oauthFor } from "./appSignIn";
+import { CALLBACK_PATH, beginSignIn, completeSignIn, oauthFor, signInAddress } from "./appSignIn";
 import { transportFor } from "./buildConnection";
 
 // The web SPA's sign-in: a full-page redirect to loomcycle's authorize page and
@@ -32,14 +32,20 @@ export function isWebCallback(loc: Pick<Location, "pathname">): boolean {
   return loc.pathname === CALLBACK_PATH;
 }
 
-/** Start a sign-in and send this page to loomcycle's authorize URL. */
+/** Start a sign-in and send this page to loomcycle's authorize URL — only
+ *  if the server's sign-in is on signInAddress(baseUrl, override). */
 export async function startWebSignIn(
   baseUrl: string,
-  deps: { storage: Storage; assign: (url: string) => void; loc: Loc },
+  deps: { storage: Storage; assign: (url: string) => void; loc: Loc; override?: string },
 ): Promise<void> {
   const r = webRedirectUri(deps.loc);
   if ("problem" in r) throw new Error(r.problem);
-  const { url, pending } = await beginSignIn(oauthFor(transportFor(baseUrl)), baseUrl, r.uri);
+  const { url, pending } = await beginSignIn(
+    oauthFor(transportFor(baseUrl)),
+    baseUrl,
+    r.uri,
+    signInAddress(baseUrl, deps.override),
+  );
   savePendingSignIn(deps.storage, pending);
   deps.assign(url);
 }

@@ -70,10 +70,14 @@ pub async fn oauth_loopback_wait(state: State<'_, Loopback>) -> Result<Option<St
     .map_err(|e| e.to_string())?
 }
 
-/// Stop a sign-in waiting for the browser.
+/// Stop a sign-in: a wait in progress returns None, and a listener nobody is
+/// waiting on yet is closed.
 #[tauri::command]
 pub fn oauth_loopback_cancel(state: State<'_, Loopback>) {
     state.generation.fetch_add(1, Ordering::SeqCst);
+    if let Ok(mut l) = state.listener.lock() {
+        *l = None;
+    }
 }
 
 /// Open the authorize page in the system browser. Only a web address: the URL

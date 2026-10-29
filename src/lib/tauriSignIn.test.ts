@@ -1,15 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Invoke } from "../state/signInStore";
-import { SignInCancelledError } from "./appSignIn";
+import { SignInAddressMismatchError, SignInCancelledError } from "./appSignIn";
 import { tauriSignIn } from "./tauriSignIn";
 
 const ISSUER = "https://lc.example";
+// What the Base URL's metadata answers; a test swaps it for another server's.
+let issuer = ISSUER;
+const metadata = () =>
+  Response.json({
+    issuer,
+    authorization_endpoint: `${issuer}/v1/_oauth/authorize`,
+    token_endpoint: `${issuer}/v1/_oauth/token`,
+    revocation_endpoint: `${issuer}/v1/_oauth/revoke`,
+  });
 
 function fakeServer() {
   const forms: URLSearchParams[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url.endsWith("/.well-known/oauth-authorization-server")) return Response.json({ issuer: ISSUER });
+    if (url.endsWith("/.well-known/oauth-authorization-server")) return metadata();
     forms.push(new URLSearchParams(String(init?.body)));
     return Response.json({ access_token: "at-1", token_type: "Bearer", expires_in: 3600, refresh_token: "rt-1" });
   });
@@ -45,6 +54,18 @@ describe("tauriSignIn", () => {
     expect(opened.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:53817/auth/callback");
     expect(srv.forms[0].get("redirect_uri")).toBe("http://127.0.0.1:53817/auth/callback");
     expect(srv.forms[0].get("code")).toBe("c1");
+  });
+
+  it("refuses another server's sign-in before opening the browser, and releases the listener", async () => {
+    issuer = "https://victim.example";
+    try {
+      const srv = fakeServer();
+      const native = fakeNative(() => null);
+      await expect(tauriSignIn(srv.t, ISSUER, native.invoke)).rejects.toBeInstanceOf(SignInAddressMismatchError);
+      expect(native.calls).toEqual(["oauth_loopback_start", "oauth_loopback_cancel"]);
+    } finally {
+      issuer = ISSUER;
+    }
   });
 
   it("ends as cancelled when the listener gives up", async () => {

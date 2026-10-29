@@ -33,7 +33,8 @@ export default function ConnectionSettings() {
       busy={status === "connecting" || status === "signing-in"}
       waitingLabel={status === "signing-in" ? "Finish signing in in your browser…" : undefined}
       onCancel={isTauri ? cancelSignIn : undefined}
-      onSignIn={() => void signInWithLoomcycle(baseUrl.trim())}
+      onSignIn={(address) => void signInWithLoomcycle(baseUrl.trim(), address || undefined)}
+      initialSignInAddress={settings?.signInAddress}
       onConnectToken={(token) => void connect({ baseUrl: baseUrl.trim(), token })}
       initialToken={settings?.token ?? ""}
       tokenHint="Stored in this browser only. Leave blank if the runtime has no auth."

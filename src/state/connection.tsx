@@ -61,7 +61,7 @@ interface ConnectionState {
   connect: (s: ConnectionSettings) => Promise<boolean>;
   /** "Sign in with loomcycle": on the web this navigates away and comes back
    *  to the callback; on the desktop it waits for the system browser. */
-  signInWithLoomcycle: (baseUrl: string) => Promise<void>;
+  signInWithLoomcycle: (baseUrl: string, signInAddress?: string) => Promise<void>;
   /** Stop a desktop sign-in that is waiting for the browser. */
   cancelSignIn: () => void;
   /** Sign out (revokes a sign-in on the server) and forget the connection. */
@@ -131,7 +131,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   // code exchange just now (so the refresh token is not stored yet); a resumed
   // sign-in already is. Throws if the server will not have it.
   const adoptSignIn = useCallback(
-    async (baseUrl: string, tokens: OAuthTokenSet, fresh: boolean) => {
+    async (s: ConnectionSettings, tokens: OAuthTokenSet, fresh: boolean) => {
+      const { baseUrl } = s;
       const store = await platformRefreshStore();
       if (fresh) await store.save({ baseUrl, refreshToken: tokens.refresh_token });
       const provider = startTokenProvider({
@@ -152,7 +153,6 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         },
       });
       signInRef.current = provider;
-      const s = signInSettings(baseUrl);
       resetClient();
       let me: WhoamiResponse;
       try {
@@ -175,23 +175,25 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   );
 
   const signInWithLoomcycle = useCallback(
-    async (baseUrl: string) => {
+    async (baseUrl: string, override?: string) => {
+      const s = signInSettings(baseUrl, override);
       setStatus(isTauri ? "signing-in" : "connecting");
       setError(null);
       setProblem(null);
       try {
         if (isTauri) {
-          const tokens = await tauriSignIn(transportFor(baseUrl), baseUrl, await tauriInvoke());
-          await adoptSignIn(baseUrl, tokens, true);
+          const tokens = await tauriSignIn(transportFor(baseUrl), baseUrl, await tauriInvoke(), override);
+          await adoptSignIn(s, tokens, true);
           return;
         }
         // Keep the Base URL in the form if the person comes back without
         // finishing; no token is stored until the callback succeeds.
-        saveSettings(signInSettings(baseUrl));
+        saveSettings(s);
         await startWebSignIn(baseUrl, {
           storage: sessionStorage,
           assign: (url) => window.location.assign(url),
           loc: window.location,
+          override,
         });
         // The page is navigating to loomcycle; stay "connecting".
       } catch (e) {
@@ -239,7 +241,12 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         href: window.location.href,
         replaceState: (path) => window.history.replaceState(null, "", path),
       })
-        .then(({ baseUrl, tokens }) => adoptSignIn(baseUrl, tokens, true))
+        .then(({ baseUrl, tokens }) => {
+          // The sign-in server address saved before the redirect, if any.
+          const saved = loadSettings();
+          const override = saved?.baseUrl === baseUrl ? saved.signInAddress : undefined;
+          return adoptSignIn(signInSettings(baseUrl, override), tokens, true);
+        })
         .catch(fail);
       return;
     }
@@ -253,7 +260,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           setStatus("idle");
           return;
         }
-        await adoptSignIn(persisted.baseUrl, resumeTokens(refreshToken), false);
+        await adoptSignIn(persisted, resumeTokens(refreshToken), false);
       })().catch(fail);
       return;
     }

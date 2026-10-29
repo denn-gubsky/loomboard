@@ -1,7 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SignInAddressMismatchError } from "./appSignIn";
 import { finishWebSignIn, isWebCallback, startWebSignIn, webRedirectUri } from "./webSignIn";
 
 const ISSUER = "https://lc.example";
+// What the Base URL's metadata answers; a test swaps it for another server's.
+let issuer = ISSUER;
+const metadata = () =>
+  Response.json({
+    issuer,
+    authorization_endpoint: `${issuer}/v1/_oauth/authorize`,
+    token_endpoint: `${issuer}/v1/_oauth/token`,
+    revocation_endpoint: `${issuer}/v1/_oauth/revoke`,
+  });
 
 class MemoryStorage implements Storage {
   private m = new Map<string, string>();
@@ -40,7 +50,7 @@ beforeEach(() => {
   fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     events.push(new URL(url, "http://page.invalid").pathname);
-    if (url.endsWith("/.well-known/oauth-authorization-server")) return Response.json({ issuer: ISSUER });
+    if (url.endsWith("/.well-known/oauth-authorization-server")) return metadata();
     if (url.endsWith("/v1/_oauth/token")) {
       return Response.json({ access_token: "at-1", token_type: "Bearer", expires_in: 3600, refresh_token: "rt-1" });
     }
@@ -79,6 +89,38 @@ describe("startWebSignIn", () => {
     expect(url.href).not.toContain(pending.verifier);
   });
 
+  it("refuses a Base URL whose metadata names another server's sign-in, without redirecting", async () => {
+    issuer = "https://victim.example";
+    try {
+      const storage = new MemoryStorage();
+      const assign = vi.fn();
+      await expect(
+        startWebSignIn(ISSUER, { storage, assign, loc: loc("https://board.example/") }),
+      ).rejects.toBeInstanceOf(SignInAddressMismatchError);
+      expect(assign).not.toHaveBeenCalled();
+      expect(storage.length).toBe(0);
+    } finally {
+      issuer = ISSUER;
+    }
+  });
+
+  it("follows a different sign-in server only when the person set it", async () => {
+    issuer = "https://public.example";
+    try {
+      const storage = new MemoryStorage();
+      const assign = vi.fn();
+      await startWebSignIn("http://192.168.0.77:8787", {
+        storage,
+        assign,
+        loc: loc("https://board.example/"),
+        override: "https://public.example",
+      });
+      expect(new URL(assign.mock.calls[0][0] as string).origin).toBe("https://public.example");
+    } finally {
+      issuer = ISSUER;
+    }
+  });
+
   it("starts nothing from a page at http://localhost", async () => {
     const storage = new MemoryStorage();
     const assign = vi.fn();
@@ -112,6 +154,13 @@ describe("finishWebSignIn", () => {
     const { storage } = await started();
     const href = `https://board.example/auth/callback?code=c1&state=forged&iss=${encodeURIComponent(ISSUER)}`;
     await expect(finishWebSignIn({ storage, href, replaceState })).rejects.toMatchObject({ code: "state_mismatch" });
+    expect(events).toEqual(["replace:/"]);
+  });
+
+  it("refuses a redirect whose iss names another server, before spending the code", async () => {
+    const { storage, state } = await started();
+    const href = `https://board.example/auth/callback?code=c1&state=${state}&iss=https%3A%2F%2Fvictim.example`;
+    await expect(finishWebSignIn({ storage, href, replaceState })).rejects.toMatchObject({ code: "issuer_mismatch" });
     expect(events).toEqual(["replace:/"]);
   });
 

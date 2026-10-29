@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Loader2, AlertCircle, Clock } from "lucide-react";
-import type { SignInProblemKind } from "../lib/appSignIn";
+import { signInAddress, type SignInProblemKind } from "../lib/appSignIn";
 import brandMark from "../assets/loomboard-favicon.svg";
 
 /** What the operator must register for this build, shown when loomcycle
@@ -20,7 +20,10 @@ interface Props {
   /** Shown while busy with a sign-in that waits on another window. */
   waitingLabel?: string;
   onCancel?: () => void;
-  onSignIn: () => void;
+  /** Start a sign-in; `signInAddress` is Advanced → "Sign-in server
+   *  address", empty unless the person set one. */
+  onSignIn: (signInAddress: string) => void;
+  initialSignInAddress?: string;
   /** The pasted-token path (RFC FL D7), kept under "Advanced". */
   onConnectToken: (token: string) => void;
   initialToken: string;
@@ -28,6 +31,8 @@ interface Props {
   error: string | null;
   problem: SignInProblemKind | null;
   registration: Registration;
+  /** Always-visible notes under the sign-in button. */
+  footer?: ReactNode;
 }
 
 // The sign-in screen shared by the app (web, desktop) and the extension's side
@@ -36,15 +41,20 @@ interface Props {
 // available under Advanced, for token-only deployments and automation.
 export default function SignInCard(p: Props) {
   const [token, setToken] = useState(p.initialToken);
-  const [advanced, setAdvanced] = useState(p.initialToken !== "");
-  // A server that offers no app sign-in leaves only the token path.
+  const [override, setOverride] = useState(p.initialSignInAddress ?? "");
+  const [advanced, setAdvanced] = useState(p.initialToken !== "" || override !== "");
+  // A server that offers no app sign-in leaves only the token path; one whose
+  // sign-in is elsewhere needs the person to accept that address explicitly.
   useEffect(() => {
-    if (p.problem === "unsupported") setAdvanced(true);
+    if (p.problem === "unsupported" || p.problem === "mismatch") setAdvanced(true);
   }, [p.problem]);
+  // Where the sign-in will send the person — the issuer must be on it, so this
+  // is shown before anything leaves the app.
+  const host = hostOf(signInAddress(p.baseUrl, override));
 
   function onSignIn(e: FormEvent) {
     e.preventDefault();
-    if (!p.busy) p.onSignIn();
+    if (!p.busy) p.onSignIn(override.trim());
   }
   function onToken(e: FormEvent) {
     e.preventDefault();
@@ -92,11 +102,14 @@ export default function SignInCard(p: Props) {
                 <>
                   <Loader2 size={16} className="spin" /> Signing in…
                 </>
+              ) : host ? (
+                <>Sign in with loomcycle at {host}</>
               ) : (
                 "Sign in with loomcycle"
               )}
             </button>
           )}
+          {p.footer}
         </form>
 
         <details
@@ -104,7 +117,23 @@ export default function SignInCard(p: Props) {
           open={advanced}
           onToggle={(e) => setAdvanced((e.currentTarget as HTMLDetailsElement).open)}
         >
-          <summary>Advanced: connect with a token</summary>
+          <summary>Advanced</summary>
+          <label className="field connect-advanced-field">
+            <span>Sign-in server address</span>
+            <input
+              type="text"
+              inputMode="url"
+              placeholder="blank = the Base URL"
+              value={override}
+              onChange={(e) => setOverride(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <small>
+              Only when loomcycle&apos;s public address differs from the Base URL — a dev proxy or
+              a LAN alias. Sign-in is refused if the server names any other address.
+            </small>
+          </label>
           <form className="connect-form" onSubmit={onToken}>
             <label className="field">
               <span>Bearer token</span>
@@ -126,6 +155,14 @@ export default function SignInCard(p: Props) {
       </div>
     </div>
   );
+}
+
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).host || null;
+  } catch {
+    return null;
+  }
 }
 
 function Problem({
