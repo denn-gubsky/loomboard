@@ -14,7 +14,7 @@ function who(p: Partial<WhoamiResponse>): WhoamiResponse {
 }
 
 // Every gated view at once: the scope fallback opens or closes them together.
-const ALL = (v: boolean) => ({ library: v, documents: v, memory: v, boards: v, workflow: v, canvas: v, users: v });
+const ALL = (v: boolean) => ({ library: v, documents: v, memory: v, boards: v, workflow: v, canvas: v, users: v, apps: v });
 
 describe("deriveCapabilities", () => {
   it("opens every view to admin / operator / open / legacy on a server without the surface summary", () => {
@@ -26,7 +26,7 @@ describe("deriveCapabilities", () => {
 
   it("opens every view to a non-isolated member and none to an isolated user without the summary (RFC CB)", () => {
     const member = deriveCapabilities(who({ scopes: ["runs:create", "runs:read", "channel:publish", "channel:read"] }));
-    expect(member.views).toEqual({ ...ALL(true), users: false });
+    expect(member.views).toEqual({ ...ALL(true), users: false, apps: false });
     expect(member.isIsolated).toBe(false);
 
     const isolated = deriveCapabilities(who({ scopes: ["substrate:user"] }));
@@ -54,12 +54,13 @@ describe("deriveCapabilities", () => {
       workflow: false,
       canvas: false,
       users: true,
+      apps: true,
     });
   });
 
   it("opens a view to an isolated user when loomcycle says its pages are reachable", () => {
     const p = who({ scopes: ["substrate:user"], effective: { surfaces: { library: true, paths: true, memory: true, teams: true } } });
-    expect(deriveCapabilities(p).views).toEqual({ ...ALL(true), users: false });
+    expect(deriveCapabilities(p).views).toEqual({ ...ALL(true), users: false, apps: false });
   });
 
   it("closes Workflow when either of its pages is refused", () => {
@@ -71,7 +72,7 @@ describe("deriveCapabilities", () => {
 
   it("falls back to the scope rule for a page the server leaves out of the summary", () => {
     const member = who({ scopes: ["runs:create"], effective: { surfaces: { memory: false } } });
-    expect(deriveCapabilities(member).views).toEqual({ ...ALL(true), memory: false, users: false });
+    expect(deriveCapabilities(member).views).toEqual({ ...ALL(true), memory: false, users: false, apps: false });
     const isolated = who({ scopes: ["substrate:user"], effective: { surfaces: { library: true } } });
     expect(deriveCapabilities(isolated).views).toEqual({ ...ALL(false), library: true });
   });
@@ -82,6 +83,13 @@ describe("deriveCapabilities", () => {
     // An operator the access rules keep off the users list.
     const denied = who({ scopes: ["substrate:tenant"], effective: { surfaces: { users: false } } });
     expect(deriveCapabilities(denied).views.users).toBe(false);
+  });
+
+  it("opens Apps to an operator whatever the summary holds, since loomcycle has no page for it", () => {
+    const surfaces = { library: true, paths: true, memory: true, teams: true, users: true };
+    expect(deriveCapabilities(who({ scopes: ["substrate:tenant"], effective: { surfaces } })).views.apps).toBe(true);
+    expect(deriveCapabilities(who({ scopes: ["runs:create"], effective: { surfaces } })).views.apps).toBe(false);
+    expect(deriveCapabilities(who({ is_admin: true })).views.apps).toBe(true);
   });
 
   it("null principal → no capabilities", () => {
