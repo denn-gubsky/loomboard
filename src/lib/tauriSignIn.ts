@@ -6,6 +6,7 @@ import {
   beginSignIn,
   completeSignIn,
   oauthFor,
+  signInAddress,
 } from "./appSignIn";
 import type { Transport } from "./buildConnection";
 
@@ -13,8 +14,10 @@ import type { Transport } from "./buildConnection";
 // 127.0.0.1 port (src-tauri's oauth_loopback_* commands), the authorize page
 // in the system browser — never an embedded webview, which would let the app
 // see the person's password — and the code read off the redirect the browser
-// sends to that listener. The listener answers only CALLBACK_PATH and gives up
-// after a few minutes, or when the person cancels.
+// sends to that listener. The listener is bound to the Base URL (the browser
+// may open only that loomcycle's authorize page), answers only CALLBACK_PATH
+// with this sign-in's state, and gives up after a few minutes, or when the
+// person cancels.
 
 /** Run a desktop sign-in to the end. Resolves with the tokens; rejects with
  *  SignInCancelledError if the person cancelled or never came back. */
@@ -23,7 +26,7 @@ export async function tauriSignIn(
   baseUrl: string,
   invoke: Invoke,
 ): Promise<OAuthTokenSet> {
-  const port = await invoke<number>("oauth_loopback_start");
+  const port = await invoke<number>("oauth_loopback_start", { baseUrl: signInAddress(baseUrl) });
   const origin = `http://127.0.0.1:${port}`;
   let begun: Awaited<ReturnType<typeof beginSignIn>>;
   try {
@@ -35,7 +38,7 @@ export async function tauriSignIn(
   }
   const { url, pending } = begun;
   await invoke<void>("oauth_open_browser", { url });
-  const target = await invoke<string | null>("oauth_loopback_wait");
+  const target = await invoke<string | null>("oauth_loopback_wait", { expectedState: pending.state });
   if (!target) throw new SignInCancelledError();
   return completeSignIn(t, pending, `${origin}${target}`);
 }

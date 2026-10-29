@@ -56,6 +56,23 @@ describe("tauriSignIn", () => {
     expect(srv.forms[0].get("code")).toBe("c1");
   });
 
+  it("binds the listener to the Base URL and hands it the state the callback must carry", async () => {
+    const srv = fakeServer();
+    const args: Record<string, unknown> = {};
+    let state = "";
+    const invoke = vi.fn(async (cmd: string, a?: Record<string, unknown>) => {
+      args[cmd] = a;
+      if (cmd === "oauth_loopback_start") return 53817;
+      if (cmd === "oauth_open_browser") state = new URL(a?.url as string).searchParams.get("state")!;
+      if (cmd === "oauth_loopback_wait") return `/auth/callback?code=c1&state=${state}&iss=${encodeURIComponent(ISSUER)}`;
+      return undefined;
+    }) as unknown as Invoke;
+    await tauriSignIn(srv.t, ISSUER, invoke);
+    expect(args.oauth_loopback_start).toEqual({ baseUrl: ISSUER });
+    expect(args.oauth_loopback_wait).toEqual({ expectedState: state });
+    expect(state).not.toBe("");
+  });
+
   it("refuses another server's sign-in before opening the browser, and releases the listener", async () => {
     issuer = "https://victim.example";
     try {

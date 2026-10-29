@@ -1,13 +1,20 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Core permissions plus native HTTP to the user's loomcycle. The loomcycle URL is user-entered (local/LAN/remote, arbitrary port), so the scope must be broad. The port MUST be an explicit wildcard (*:*): the plugin does not auto-wildcard the port, so http(s)://** matches only the default port and rejects e.g. :8787/:8788. `*` also matches an empty port, so portless URLs still match.",
+  "description": "Core permissions, native HTTP to the user's loomcycle, and the app's own sign-in commands. The loomcycle URL is user-entered (local/LAN/remote, arbitrary port), so the HTTP scope must be broad. The port MUST be an explicit wildcard (*:*): the plugin does not auto-wildcard the port, so http(s)://** matches only the default port and rejects e.g. :8787/:8788. `*` also matches an empty port, so portless URLs still match. The sign-in commands are granted to the main window only (build.rs declares them, so no other webview may call them).",
   "windows": ["main"],
   "permissions": [
     "core:default",
     {
       "identifier": "http:default",
       "allow": [{ "url": "http://*:*" }, { "url": "https://*:*" }]
-    }
+    },
+    "allow-oauth-loopback-start",
+    "allow-oauth-loopback-wait",
+    "allow-oauth-loopback-cancel",
+    "allow-oauth-open-browser",
+    "allow-sign-in-secret-get",
+    "allow-sign-in-secret-set",
+    "allow-sign-in-secret-delete"
   ]
 }
