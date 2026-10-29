@@ -1,10 +1,12 @@
 import type { PendingSignIn, RefreshTokenStore, StoredSignIn } from "../lib/appSignIn";
 
-// Where each form factor keeps a sign-in between starts. Only the refresh
-// token is ever stored — the access token lives in memory — and never in
-// localStorage (CLAUDE.md rule 4: a token in localStorage outlives the tab and
-// is readable by every page script for as long as the origin is). Per form
-// factor:
+// Where each form factor keeps a sign-in between starts. What is stored is
+// the refresh token, the current access token and its expiry (StoredSignIn),
+// so a start inside the token's hour reuses it instead of refreshing. A
+// stolen store therefore yields a working access token until it expires, and
+// the refresh token until it is spent or revoked. Never in localStorage
+// (CLAUDE.md rule 4: a token in localStorage outlives the tab and is readable
+// by every page script for as long as the origin is). Per form factor:
 //
 // - web: sessionStorage. Scoped to the tab and gone when it closes; survives a
 //   reload, so a reload refreshes silently instead of bouncing through the

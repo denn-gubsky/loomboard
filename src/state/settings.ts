@@ -12,9 +12,10 @@ export interface ConnectionSettings {
   /** Bearer token. Empty is valid when loomcycle runs in open mode, and is
    *  always empty for a sign-in. */
   token: string;
-  /** "oauth" = signed in with loomcycle (RFC FL). The tokens are NOT here: the
-   *  access token lives in memory and the refresh token in the form factor's
-   *  own store (state/signInStore). Absent = the pasted-token connection. */
+  /** "oauth" = signed in with loomcycle (RFC FL). The tokens are NOT here:
+   *  the refresh token, the current access token and its expiry are in the
+   *  form factor's own store (state/signInStore). Absent = the pasted-token
+   *  connection. */
   auth?: "oauth";
 }
 
