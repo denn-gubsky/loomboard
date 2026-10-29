@@ -36,6 +36,8 @@ export function friendlyFromBody(bodyText?: string): string | null {
  *  SDK's generic class message. */
 export function describeError(e: unknown): string {
   if (e instanceof LoomcycleError) {
+    const refusal = describeAccessRefusal(e);
+    if (refusal) return refusal;
     // The SDK does not put secrets in these; the body message is the operator's
     // intended text (falls back to the SDK message / class name).
     return friendlyFromBody(e.bodyText) ?? e.message ?? e.name;
@@ -57,4 +59,67 @@ export function describeError(e: unknown): string {
     if (typeof msg === "string" && msg.trim()) return msg;
   }
   return "Unknown error";
+}
+
+interface DenyReason {
+  acl: string;
+  version?: number;
+  rule: number;
+  effect: string;
+}
+
+/** An access-rule refusal (loomcycle 1.122+, RFC EY/EZ), worded the way
+ *  loomcycle's Web UI words it; null for any other error. Pure.
+ *
+ *  Matched on the body's `code`, not `instanceof AclDeniedError`: that class
+ *  is in @loomcycle/client 1.122+, and this package's peer range starts at
+ *  1.84, where importing it would not link. The fields come from the error
+ *  when the client parsed them, else from the body. */
+export function describeAccessRefusal(e: LoomcycleError): string | null {
+  const body = parseBody(e.bodyText);
+  const code = e.code ?? str(body?.code);
+  if (code === "acl_denied") {
+    const d = e as LoomcycleError & { action?: string | null; resource?: string | null; reasons?: unknown };
+    const action = d.action ?? str(body?.action) ?? "?";
+    const resource = d.resource ?? str(body?.resource) ?? "?";
+    const denies = reasonsOf(d.reasons ?? body?.reasons).filter((r) => r.effect === "deny");
+    const head = `Access denied: you may not ${action} ${resource}`;
+    if (denies.length === 0) return `${head} — no access rule allows it.`;
+    const rules = denies
+      .map((r) => `list "${r.acl}"${r.version !== undefined ? ` v${r.version}` : ""} rule ${r.rule}`)
+      .join("; ");
+    return `${head} — denied by ${rules}.`;
+  }
+  if (code === "acl_unavailable") {
+    return "Access rules could not be read right now — try again in a moment.";
+  }
+  if (code === "acl_self_elevation") {
+    const why = (str(body?.error) ?? "the change would widen your own access").replace(/^refused:\s*/, "");
+    return `Refused — ${why}`;
+  }
+  return null;
+}
+
+function parseBody(bodyText?: string): Record<string, unknown> | null {
+  if (!bodyText) return null;
+  try {
+    const b: unknown = JSON.parse(bodyText);
+    return b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function str(v: unknown): string | undefined {
+  return typeof v === "string" && v ? v : undefined;
+}
+
+function reasonsOf(v: unknown): DenyReason[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((r): DenyReason[] => {
+    if (!r || typeof r !== "object") return [];
+    const o = r as Record<string, unknown>;
+    if (typeof o.acl !== "string" || typeof o.rule !== "number" || typeof o.effect !== "string") return [];
+    return [{ acl: o.acl, rule: o.rule, effect: o.effect, ...(typeof o.version === "number" ? { version: o.version } : {}) }];
+  });
 }
