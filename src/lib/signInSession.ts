@@ -185,9 +185,17 @@ export class SignInSession implements TokenProvider {
     }
     if (this.current !== cur) throw this.ended ?? new OAuthError("signed_out");
     const stored = storedFrom(this.baseUrl, next, this.id);
-    // Stored before it is used: the refresh token it replaced is spent.
-    await this.opts.store.save(stored);
+    // The refresh token it replaced is spent, so the new set is the only one
+    // that works from here on: held in memory first, whatever the store does.
     this.current = stored;
+    try {
+      await this.opts.store.save(stored);
+    } catch (err) {
+      // A locked keychain or a failed storage write. This holder carries on;
+      // only a restart loses the sign-in (it then finds the spent token, is
+      // refused, and signs in again). The error names no token.
+      console.warn("[sign-in] could not store the refreshed sign-in", err);
+    }
     return stored;
   }
 

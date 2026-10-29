@@ -84,6 +84,24 @@ describe("SignInSession", () => {
     expect(store.value()).toMatchObject({ id: "s1", refreshToken: "rt-1", accessToken: "at-1" });
   });
 
+  it("keeps the rotated set when storing it fails, so the next refresh presents the live token", async () => {
+    // A locked keychain or a failed chrome.storage write: the refresh token
+    // just presented is spent, and presenting it again would end the sign-in.
+    const srv = fakeServer();
+    const store = sharedStore(null);
+    store.save = async () => {
+      throw new Error("keychain locked");
+    };
+    let now = Date.now();
+    const s = session(srv, store, stored({ accessToken: "", expiresAt: 0 }), { now: () => now });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(await s.getToken()).toBe("at-1");
+    now += 2 * HOUR; // at-1 has expired
+    expect(await s.getToken()).toBe("at-2");
+    expect(srv.refreshes().map((c) => c.form.refresh_token)).toEqual(["rt-0", "rt-1"]);
+    expect(s.active).toBe(true);
+  });
+
   it("refreshes once for two holders of one sign-in, which both carry on with the rotated set", async () => {
     // Two extension panels resuming the same stored sign-in at once: with a
     // refresh each, the second presents a spent token and loomcycle ends the
