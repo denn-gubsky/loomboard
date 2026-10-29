@@ -49,7 +49,7 @@ function loadCollapsed(): boolean {
 }
 
 export default function Sidebar({ view, onViewChange }: Props) {
-  const { principal, capabilities, disconnect } = useConnection();
+  const { principal, capabilities, disconnect, signIn } = useConnection();
   const { theme, toggle } = useTheme();
   // Read synchronously on first render so there's no expand→collapse flash.
   const [collapsed, setCollapsed] = useState(loadCollapsed);
@@ -206,8 +206,9 @@ export default function Sidebar({ view, onViewChange }: Props) {
           <div className="logout-confirm" role="dialog" aria-label="Confirm log out">
             <p className="logout-confirm-title">Log out?</p>
             <p className="logout-confirm-note">
-              This clears the saved connection — you'll need your loomcycle token
-              to sign back in.
+              {signIn
+                ? "This ends loomboard's sign-in on loomcycle — your loomcycle web session is not affected."
+                : "This clears the saved connection — you'll need your loomcycle token to sign back in."}
             </p>
             <div className="logout-confirm-actions">
               {/* Cancel takes focus: on a destructive prompt, a stray Enter should

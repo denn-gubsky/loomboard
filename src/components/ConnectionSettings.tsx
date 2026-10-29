@@ -1,84 +1,53 @@
-import { useState, type FormEvent } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { useState } from "react";
 import { useConnection } from "../state/connection";
-import brandMark from "../assets/loomboard-favicon.svg";
+import { isTauri } from "../lib/proxyMode";
+import { CALLBACK_PATH } from "../lib/appSignIn";
+import { blankBaseUrlMeans } from "../lib/buildConnection";
+import SignInCard, { type Registration } from "./SignInCard";
 
-// The connection / login screen. Collects the loomcycle base URL + bearer
-// token, validates them with whoami(), and gates the rest of the app. Shown
-// whenever we are not in the "connected" state.
+// The sign-in screen of the app (web SPA, desktop). Shown whenever we are not
+// in the "connected" state.
 export default function ConnectionSettings() {
-  const { settings, status, error, connect } = useConnection();
+  const { settings, status, error, problem, connect, signInWithLoomcycle, retrySignIn, cancelSignIn } =
+    useConnection();
   const [baseUrl, setBaseUrl] = useState(settings?.baseUrl ?? "");
-  const [token, setToken] = useState(settings?.token ?? "");
 
-  const connecting = status === "connecting";
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (connecting) return;
-    void connect({ baseUrl: baseUrl.trim(), token: token.trim() });
-  }
+  // What the operator registers for this build. The desktop app's addresses
+  // ship in loomcycle's `loomboard` preset; in `tauri dev` its webview is the
+  // Vite dev server, an origin the preset does not list.
+  const registration: Registration = isTauri
+    ? { preset: true, origin: import.meta.env.DEV ? window.location.origin : undefined }
+    : { redirectUri: `${window.location.origin}${CALLBACK_PATH}`, origin: window.location.origin };
+  const blank = blankBaseUrlMeans(window.location.origin);
 
   return (
-    <div className="connect-screen">
-      <form className="connect-card" onSubmit={onSubmit}>
-        <div className="connect-head">
-          <img className="connect-logo" src={brandMark} alt="loomboard" />
-          <h1>Connect to loomcycle</h1>
-        </div>
-        <p className="connect-sub">
-          loomboard is a thin client over a loomcycle runtime. Point it at your
-          runtime and authenticate with its bearer token.
-        </p>
-
-        <label className="field">
-          <span>Base URL</span>
-          <input
-            type="text"
-            inputMode="url"
-            placeholder="http://truenas.local:8787 — blank = local default"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <small>
-            Any reachable loomcycle (local, a LAN box like TrueNAS, or remote).
-            In dev it's reached through the proxy — no CORS needed. Blank ={" "}
-            <code>http://127.0.0.1:8787</code>.
-          </small>
-        </label>
-
-        <label className="field">
-          <span>Bearer token</span>
-          <input
-            type="password"
-            placeholder="LOOMCYCLE_AUTH_TOKEN (blank if open mode)"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <small>Stored in this browser only. Leave blank if the runtime has no auth.</small>
-        </label>
-
-        {status === "error" && error && (
-          <div className="connect-error" role="alert">
-            <AlertCircle size={16} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <button type="submit" className="btn-primary" disabled={connecting}>
-          {connecting ? (
+    <SignInCard
+      intro="loomboard is a thin client over a loomcycle runtime. Enter its address, then sign in on loomcycle's own page."
+      baseUrl={baseUrl}
+      onBaseUrlChange={setBaseUrl}
+      baseUrlPlaceholder="https://loomcycle.example.com — blank = local default"
+      baseUrlHint={
+        <>
+          Any reachable loomcycle (local, a LAN box like TrueNAS, or remote).
+          {blank && (
             <>
-              <Loader2 size={16} className="spin" /> Connecting…
+              {" "}Blank = <code>{blank}</code>.
             </>
-          ) : (
-            "Connect"
           )}
-        </button>
-      </form>
-    </div>
+        </>
+      }
+      blankBaseUrl={blank}
+      busy={status === "connecting" || status === "signing-in"}
+      waitingLabel={status === "signing-in" ? "Finish signing in in your browser…" : undefined}
+      onCancel={isTauri ? cancelSignIn : undefined}
+      onSignIn={() => void signInWithLoomcycle(baseUrl.trim())}
+      onRetry={retrySignIn}
+      onConnectToken={(token) => void connect({ baseUrl: baseUrl.trim(), token })}
+      initialToken={settings?.token ?? ""}
+      tokenHint="Stored in this browser only. Leave blank if the runtime has no auth."
+      error={status === "error" ? error : null}
+      problem={problem}
+      registration={registration}
+    />
   );
 }

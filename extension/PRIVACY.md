@@ -13,8 +13,12 @@ analytics, and shows no ads.
 
 ## What the extension accesses
 
-- **Your connection settings** — the loomcycle server URL and the bearer token
-  you enter on the Connect screen.
+- **Your connection settings** — the loomcycle server URL and, if you paste
+  one, the bearer token you enter on the Connect screen.
+- **Your loomcycle sign-in** — when you use "Sign in with loomcycle", the
+  short-lived access token and refresh token loomcycle issues. You sign in on
+  your loomcycle server's own page (opened through Chrome's `identity` API); the
+  extension never sees your password.
 - **Web page content** — when you ask the assistant about a page, the extension
   reads that page (visible text, form fields, links, your current selection, and
   the tab's URL/title) so the assistant can summarize it, extract data, or act on
@@ -26,6 +30,9 @@ analytics, and shows no ads.
 - **Connection settings are stored locally**, in `chrome.storage.local` on your
   own device. They are never transmitted anywhere except as described next, and
   are removed when you disconnect or uninstall the extension.
+- **Sign-in tokens are kept in memory**: in `chrome.storage.session`, which
+  Chrome clears when the browser quits and which page scripts cannot read. Disconnecting revokes the
+  sign-in on your loomcycle server.
 - **Your bearer token** is sent **only to the loomcycle server you configured**,
   to authenticate your requests (over the `Authorization` header for HTTP and the
   `Sec-WebSocket-Protocol` subprotocol for the client-tool WebSocket). It is never

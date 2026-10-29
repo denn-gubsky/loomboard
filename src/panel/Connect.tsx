@@ -1,11 +1,17 @@
-import { useState, type FormEvent } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { useState } from "react";
 import type { ConnectionSettings } from "../state/settings";
-import brandMark from "../assets/loomboard-favicon.svg";
+import type { SignInProblemKind } from "../lib/appSignIn";
+import { extRedirectUri } from "../lib/extSignIn";
+import SignInCard from "../components/SignInCard";
 
 interface Props {
   onConnect: (s: ConnectionSettings) => void;
+  onSignIn: (baseUrl: string) => void;
+  /** Resume the stored sign-in after loomcycle did not answer. */
+  onRetry: () => void;
+  busy: boolean;
   error: string | null;
+  problem: SignInProblemKind | null;
   initial: ConnectionSettings | null;
 }
 
@@ -21,18 +27,19 @@ function hostPattern(baseUrl: string): string | null {
   }
 }
 
-// Connection / login screen for the side panel. Collects the loomcycle base URL +
-// bearer, requests host access for that origin (in this click gesture, required
-// so the panel's fetch can reach loomcycle), then hands validation to PanelApp.
-export default function Connect({ onConnect, error, initial }: Props) {
+// Connection / sign-in screen for the side panel. Either path first requests
+// host access for the loomcycle origin — in this click gesture, which Chrome
+// requires, so the panel's fetch can reach loomcycle — then hands off to
+// PanelApp: "Sign in with loomcycle" by default, a pasted bearer under Advanced.
+export default function Connect({ onConnect, onSignIn, onRetry, busy, error, problem, initial }: Props) {
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
-  const [token, setToken] = useState(initial?.token ?? "");
-  const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  // This install's addresses: the ID differs between a store install and an
+  // unpacked one, so the operator registers them per install.
+  const redirectUri = extRedirectUri(chrome.identity);
+  const origin = window.location.origin;
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (busy) return;
+  async function withHostAccess(then: (url: string) => void) {
     setLocalError(null);
     const url = baseUrl.trim();
     const pattern = hostPattern(url);
@@ -40,83 +47,43 @@ export default function Connect({ onConnect, error, initial }: Props) {
       setLocalError("Enter a valid http(s) URL, e.g. https://host:8788");
       return;
     }
-    setBusy(true);
     try {
       const granted = await chrome.permissions.request({ origins: [pattern] });
       if (!granted) {
         setLocalError("Host permission is required to reach loomcycle.");
-        setBusy(false);
         return;
       }
     } catch {
       setLocalError("Could not request host permission.");
-      setBusy(false);
       return;
     }
-    onConnect({ baseUrl: url, token: token.trim() });
+    then(url);
   }
 
-  const shown = localError ?? error;
-
   return (
-    <div className="connect-screen">
-      <form className="connect-card" onSubmit={onSubmit}>
-        <div className="connect-head">
-          <img className="connect-logo" src={brandMark} alt="loomboard" />
-          <h1>Connect to loomcycle</h1>
-        </div>
-        <p className="connect-sub">
-          The loomboard assistant runs on your loomcycle runtime. Point it at your
-          runtime and authenticate with its bearer token.
-        </p>
-
-        <label className="field">
-          <span>Base URL</span>
-          <input
-            type="text"
-            inputMode="url"
-            placeholder="https://host:8788"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <small>
-            The extension connects directly; host access is requested when you
-            connect.
-          </small>
-        </label>
-
-        <label className="field">
-          <span>Bearer token</span>
-          <input
-            type="password"
-            placeholder="LOOMCYCLE_AUTH_TOKEN (blank if open mode)"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <small>Stored in this browser's extension storage only.</small>
-        </label>
-
-        {shown && (
-          <div className="connect-error" role="alert">
-            <AlertCircle size={16} />
-            <span>{shown}</span>
-          </div>
-        )}
-
-        <button type="submit" className="btn-primary" disabled={busy}>
-          {busy ? (
-            <>
-              <Loader2 size={16} className="spin" /> Connecting…
-            </>
-          ) : (
-            "Connect"
-          )}
-        </button>
-      </form>
-    </div>
+    <SignInCard
+      intro="The loomboard assistant runs on your loomcycle runtime. Enter its address, then sign in on loomcycle's own page."
+      baseUrl={baseUrl}
+      onBaseUrlChange={setBaseUrl}
+      baseUrlPlaceholder="https://host:8788"
+      baseUrlHint="The extension connects directly; host access is requested when you sign in."
+      blankBaseUrl={null}
+      busy={busy}
+      waitingLabel={busy ? "Finish signing in in the sign-in window…" : undefined}
+      onSignIn={() => void withHostAccess(onSignIn)}
+      onRetry={onRetry}
+      onConnectToken={(token) => void withHostAccess((url) => onConnect({ baseUrl: url, token }))}
+      initialToken={initial?.token ?? ""}
+      tokenHint="Stored in this browser's extension storage only."
+      error={localError ?? error}
+      problem={localError ? null : problem}
+      registration={{ redirectUri, origin }}
+      footer={
+        <small className="connect-register">
+          For the operator — register this install in <code>auth.clients.loomboard</code>: redirect
+          URI <code>{redirectUri}</code>, allowed origin <code>{origin}</code>.
+        </small>
+      }
+    />
   );
 }

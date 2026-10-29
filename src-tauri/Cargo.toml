@@ -6,7 +6,7 @@ authors = ["Dennis Gubsky"]
 license = "Apache-2.0"
 repository = "https://github.com/denn-gubsky/loomboard"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.88"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -24,3 +24,9 @@ tauri = { version = "2.11.3", features = [] }
 # Native HTTP from the webview, routed through Rust — bypasses the webview's CORS
 # enforcement so the SPA can reach a loomcycle that sends no CORS headers.
 tauri-plugin-http = "2"
+# Opens the "Sign in with loomcycle" page in the system browser (RFC 8252: an
+# external user agent, never an embedded webview). Called from Rust only.
+tauri-plugin-opener = "2"
+# The sign-in's refresh token in the OS keychain (Keychain / Credential Manager
+# / Secret Service over zbus, so no libdbus at build time). MIT OR Apache-2.0.
+keyring = "4"

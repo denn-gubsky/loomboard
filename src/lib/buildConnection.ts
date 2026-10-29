@@ -1,30 +1,64 @@
+import type { TokenProvider } from "@loomcycle/client";
 import type { Connection } from "../chat/lib/createClient";
+import { apiPrefix, bearerFetch } from "./bearerFetch";
 import type { ConnectionSettings as ConnSettings } from "../state/settings";
-import { isTauri, proxyMode } from "./proxyMode";
+import { isExtension, isTauri, proxyMode } from "./proxyMode";
 import { getNativeFetch } from "./nativeTransport";
 
-// Build the <Chat>-facing Connection from the persisted settings. The transport
-// detail (native HTTP on desktop, the dev proxy in the browser, or a direct URL)
-// is the APP's concern — chat components just take a Connection. Shared so every
-// surface that embeds <Chat> (the chat pane, the agent portfolio, the workflow
-// chat dock) builds it identically.
-export function buildConnection(s: ConnSettings): Connection {
+/** How the app reaches a loomcycle: the address to call and the fetch to call
+ *  it with. `fetch` undefined = the browser's own. */
+export interface Transport {
+  baseUrl: string;
+  fetch?: typeof fetch;
+}
+
+/** The local loomcycle the desktop app and the dev/CLI proxy reach when the
+ *  Base URL is blank. */
+export const LOCAL_BASE_URL = "http://127.0.0.1:8787";
+
+/** Which build is running, as blankBaseUrlMeans needs it. */
+export interface Platform {
+  tauri: boolean;
+  extension: boolean;
+  proxy: boolean;
+}
+
+/** The loomcycle a blank Base URL reaches, the same answer transportFor
+ *  gives. A sign-in's issuer must be on this address, so it must not guess.
+ *  - The desktop app calls LOCAL_BASE_URL.
+ *  - The dev/CLI proxy calls its own default target, which is LOCAL_BASE_URL
+ *    unless LOOMBOARD_PROXY_TARGET says otherwise. The browser can't see that
+ *    variable; if it was changed, the issuer check fails and its message asks
+ *    for the address.
+ *  - A plain production build calls same-origin, so blank is the page's own
+ *    origin (loomboard hosted together with loomcycle).
+ *  - The extension has no origin of loomcycle's, so blank means nothing: null. */
+export function blankBaseUrlMeans(
+  pageOrigin: string | undefined,
+  platform: Platform = { tauri: isTauri, extension: isExtension, proxy: proxyMode },
+): string | null {
+  if (platform.tauri || platform.proxy) return LOCAL_BASE_URL;
+  if (platform.extension) return null;
+  return pageOrigin ?? null;
+}
+
+// The transport for a base URL. The transport detail (native HTTP on desktop,
+// the dev proxy in the browser, or a direct URL) is the APP's concern — every
+// client the app builds goes through here, so they all reach loomcycle the
+// same way.
+export function transportFor(baseUrl: string): Transport {
   if (isTauri) {
     // Desktop: hit the absolute loomcycle URL directly via native HTTP (Rust),
     // which bypasses webview CORS. getNativeFetch() is a stable singleton so
     // <Chat>'s client memo (keyed on connection.fetch) doesn't churn. Blank URL
     // → the same local default the CLI uses.
-    return {
-      baseUrl: s.baseUrl || "http://127.0.0.1:8787",
-      token: s.token,
-      fetch: getNativeFetch(),
-    };
+    return { baseUrl: baseUrl || LOCAL_BASE_URL, fetch: getNativeFetch() };
   }
   if (proxyMode) {
-    const target = s.baseUrl;
+    // Same-origin /v1 through the dev/CLI proxy, which routes on this header.
+    const target = baseUrl;
     return {
       baseUrl: "",
-      token: s.token,
       fetch: (input, init) => {
         const headers = new Headers(init?.headers);
         if (target) headers.set("x-loomcycle-target", target);
@@ -32,5 +66,33 @@ export function buildConnection(s: ConnSettings): Connection {
       },
     };
   }
-  return { baseUrl: s.baseUrl, token: s.token };
+  return { baseUrl };
+}
+
+// Build the <Chat>-facing Connection from the persisted settings. Shared so
+// every surface that embeds <Chat> (the chat pane, the agent portfolio, the
+// workflow chat dock) builds it identically.
+//
+/** A sign-in session as the connection builders need it. */
+export type SignInFor = TokenProvider & { readonly baseUrl: string };
+
+/** The sign-in that may sign requests for these settings: a sign-in
+ *  connection's own session, for the server it was issued by — never a
+ *  session left over beside a pasted token or another Base URL. */
+export function signInFor<T extends SignInFor>(s: ConnSettings, signIn: T | null | undefined): T | null {
+  return s.auth === "oauth" && signIn && signIn.baseUrl === s.baseUrl ? signIn : null;
+}
+
+// Signed in with loomcycle, there is no static token to hand over: the
+// Connection's fetch asks the sign-in for the current access token on every
+// request to this loomcycle's API (see bearerFetch), so the embedded surfaces
+// stay signed in across refreshes without knowing about sign-in at all.
+export function buildConnection(s: ConnSettings, signIn?: SignInFor | null): Connection {
+  const t = transportFor(s.baseUrl);
+  const session = signInFor(s, signIn);
+  if (!session) return s.auth === "oauth" ? { ...t } : { ...t, token: s.token };
+  const pageHref = typeof location === "undefined" ? undefined : location.href;
+  const prefix = apiPrefix(t.baseUrl, pageHref);
+  const inner: typeof fetch = t.fetch ?? ((input, init) => fetch(input, init));
+  return { baseUrl: t.baseUrl, fetch: prefix ? bearerFetch(inner, session, prefix, pageHref) : inner };
 }

@@ -46,7 +46,10 @@ export default defineManifest({
       run_at: "document_idle",
     },
   ],
-  permissions: ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
+  // identity: chrome.identity.launchWebAuthFlow for "Sign in with loomcycle"
+  // (the sign-in page in a window of its own, redirected back to this
+  // extension's https://<id>.chromiumapp.org/). It adds no install warning.
+  permissions: ["sidePanel", "storage", "scripting", "activeTab", "tabs", "identity"],
   host_permissions: [],
   // optional_host_permissions is a valid MV3 key but is missing from @crxjs's
   // ManifestV3 type; spread it via an opaque `object` so it lands at runtime

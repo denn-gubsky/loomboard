@@ -74,7 +74,7 @@ export default function WorkflowArea() {
   // runs; group the runs by the board chunk they carry (loomcycle ≥1.54 stamps
   // parent_context.board_chunk_id on board-bound handler runs) → miniatures.
   const client = useLoomcycle();
-  const { principal, settings } = useConnection();
+  const { principal, settings, signIn } = useConnection();
   const userId = principal?.subject ?? "";
   const { tiles } = useUserRunStates(client, userId);
   const interrupts = useUserInterrupts(client, userId);
@@ -85,7 +85,7 @@ export default function WorkflowArea() {
   // the cap drops the oldest; reselecting an open run just refocuses it. M5 adds
   // an orchestrator pane (a team/orchestrator run you start to drive the board).
   // `focusedId` owns the Escape key (only that pane's turn-cancel fires).
-  const connection = useMemo(() => (settings ? buildConnection(settings) : null), [settings]);
+  const connection = useMemo(() => (settings ? buildConnection(settings, signIn) : null), [settings, signIn]);
   const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [orchestratorOn, setOrchestratorOn] = useState(false);
