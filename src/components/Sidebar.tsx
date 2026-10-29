@@ -11,6 +11,7 @@ import {
   PanelLeftOpen,
   Sun,
   Share2,
+  UserCheck,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -39,6 +40,7 @@ const GATED: { view: GatedView; label: string; title: string; Icon: LucideIcon }
   { view: "boards", label: "Boards", title: "Boards", Icon: LayoutGrid },
   { view: "workflow", label: "Workflow", title: "Workflow", Icon: Workflow },
   { view: "canvas", label: "Canvas", title: "Canvas — edit a team's workflow graph", Icon: Share2 },
+  { view: "users", label: "Approvals", title: "Approvals — people waiting to be let in", Icon: UserCheck },
 ];
 
 const COLLAPSE_KEY = "loomboard.sidebarCollapsed";

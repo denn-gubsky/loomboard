@@ -22,6 +22,7 @@ import Chat from "./chat/Chat";
 import AgentPortfolioGrid from "./components/agentchat/AgentPortfolioGrid";
 import WorkflowArea from "./components/workflow/WorkflowArea";
 import CanvasArea from "./components/workflow/CanvasArea";
+import PendingApprovals from "./components/PendingApprovals";
 
 function ChatArea() {
   const { settings, signIn } = useConnection();
@@ -239,6 +240,8 @@ function AppShell() {
             <WorkflowArea />
           ) : shown === "canvas" ? (
             <CanvasArea onOpenDocument={capabilities.views.documents ? openDocument : undefined} />
+          ) : shown === "users" ? (
+            <PendingApprovals />
           ) : (
             <ChatArea />
           )}
