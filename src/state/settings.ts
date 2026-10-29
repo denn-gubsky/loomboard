@@ -9,8 +9,25 @@ export interface ConnectionSettings {
    *  in dev, or a co-hosted deployment in prod). An absolute URL talks to
    *  loomcycle directly and requires CORS to be enabled there. */
   baseUrl: string;
-  /** Bearer token. Empty is valid when loomcycle runs in open mode. */
+  /** Bearer token. Empty is valid when loomcycle runs in open mode, and is
+   *  always empty for a sign-in. */
   token: string;
+  /** "oauth" = signed in with loomcycle (RFC FL). The tokens are NOT here: the
+   *  access token lives in memory and the refresh token in the form factor's
+   *  own store (state/signInStore). Absent = the pasted-token connection. */
+  auth?: "oauth";
+}
+
+/** The persisted record of a sign-in: the server, and that it was one. */
+export function signInSettings(baseUrl: string): ConnectionSettings {
+  return { baseUrl, token: "", auth: "oauth" };
+}
+
+/** Read a persisted record, dropping anything malformed. */
+export function parseConnectionSettings(v: unknown): ConnectionSettings | null {
+  const p = v as Partial<ConnectionSettings> | null;
+  if (!p || typeof p.baseUrl !== "string" || typeof p.token !== "string") return null;
+  return p.auth === "oauth" ? signInSettings(p.baseUrl) : { baseUrl: p.baseUrl, token: p.token };
 }
 
 const KEY = "loomboard.connection";
@@ -19,11 +36,7 @@ export function loadSettings(): ConnectionSettings | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<ConnectionSettings>;
-    if (typeof parsed.baseUrl !== "string" || typeof parsed.token !== "string") {
-      return null;
-    }
-    return { baseUrl: parsed.baseUrl, token: parsed.token };
+    return parseConnectionSettings(JSON.parse(raw));
   } catch {
     return null;
   }
