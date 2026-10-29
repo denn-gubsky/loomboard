@@ -1,7 +1,7 @@
 import type { OAuthTokenSet } from "@loomcycle/client";
 import { savePendingSignIn, takePendingSignIn } from "../state/signInStore";
 import { CALLBACK_PATH, beginSignIn, completeSignIn, oauthFor } from "./appSignIn";
-import { transportFor } from "./buildConnection";
+import { blankBaseUrlMeans, transportFor } from "./buildConnection";
 
 // The web SPA's sign-in: a full-page redirect to loomcycle's authorize page and
 // back to CALLBACK_PATH on this origin. The verifier and state wait in this
@@ -40,7 +40,12 @@ export async function startWebSignIn(
 ): Promise<void> {
   const r = webRedirectUri(deps.loc);
   if ("problem" in r) throw new Error(r.problem);
-  const { url, pending } = await beginSignIn(oauthFor(transportFor(baseUrl)), baseUrl, r.uri);
+  const { url, pending } = await beginSignIn(
+    oauthFor(transportFor(baseUrl)),
+    baseUrl,
+    r.uri,
+    blankBaseUrlMeans(deps.loc.origin),
+  );
   savePendingSignIn(deps.storage, pending);
   deps.assign(url);
 }

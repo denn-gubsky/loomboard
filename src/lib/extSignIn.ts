@@ -30,7 +30,8 @@ export async function extSignIn(
   identity: ChromeIdentity,
 ): Promise<OAuthTokenSet> {
   const t = { baseUrl };
-  const { url, pending } = await beginSignIn(oauthFor(t), baseUrl, extRedirectUri(identity));
+  // A blank Base URL reaches no loomcycle from the extension.
+  const { url, pending } = await beginSignIn(oauthFor(t), baseUrl, extRedirectUri(identity), null);
   let landed: string | undefined;
   try {
     landed = await identity.launchWebAuthFlow({ url, interactive: true });

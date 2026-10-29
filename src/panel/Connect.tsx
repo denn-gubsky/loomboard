@@ -65,6 +65,7 @@ export default function Connect({ onConnect, onSignIn, busy, error, problem, ini
       onBaseUrlChange={setBaseUrl}
       baseUrlPlaceholder="https://host:8788"
       baseUrlHint="The extension connects directly; host access is requested when you sign in."
+      blankBaseUrl={null}
       busy={busy}
       waitingLabel={busy ? "Finish signing in in the sign-in window…" : undefined}
       onSignIn={() => void withHostAccess(onSignIn)}

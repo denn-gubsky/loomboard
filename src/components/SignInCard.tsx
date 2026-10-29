@@ -15,6 +15,9 @@ interface Props {
   onBaseUrlChange: (v: string) => void;
   baseUrlPlaceholder: string;
   baseUrlHint: ReactNode;
+  /** What a blank Base URL reaches on this platform (blankBaseUrlMeans);
+   *  null when it reaches nothing. */
+  blankBaseUrl: string | null;
   /** A sign-in or a token connect is under way. */
   busy: boolean;
   /** Shown while busy with a sign-in that waits on another window. */
@@ -45,7 +48,8 @@ export default function SignInCard(p: Props) {
   }, [p.problem]);
   // Where the sign-in will send the person — the issuer must be on it, so this
   // is shown before anything leaves the app.
-  const host = hostOf(signInAddress(p.baseUrl));
+  const address = signInAddress(p.baseUrl, p.blankBaseUrl);
+  const host = address ? hostOf(address) : null;
 
   function onSignIn(e: FormEvent) {
     e.preventDefault();

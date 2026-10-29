@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useConnection } from "../state/connection";
 import { isTauri } from "../lib/proxyMode";
 import { CALLBACK_PATH } from "../lib/appSignIn";
+import { blankBaseUrlMeans } from "../lib/buildConnection";
 import SignInCard, { type Registration } from "./SignInCard";
 
 // The sign-in screen of the app (web SPA, desktop). Shown whenever we are not
@@ -17,6 +18,7 @@ export default function ConnectionSettings() {
   const registration: Registration = isTauri
     ? { preset: true, origin: import.meta.env.DEV ? window.location.origin : undefined }
     : { redirectUri: `${window.location.origin}${CALLBACK_PATH}`, origin: window.location.origin };
+  const blank = blankBaseUrlMeans(window.location.origin);
 
   return (
     <SignInCard
@@ -26,10 +28,15 @@ export default function ConnectionSettings() {
       baseUrlPlaceholder="https://loomcycle.example.com — blank = local default"
       baseUrlHint={
         <>
-          Any reachable loomcycle (local, a LAN box like TrueNAS, or remote). Blank ={" "}
-          <code>http://127.0.0.1:8787</code>.
+          Any reachable loomcycle (local, a LAN box like TrueNAS, or remote).
+          {blank && (
+            <>
+              {" "}Blank = <code>{blank}</code>.
+            </>
+          )}
         </>
       }
+      blankBaseUrl={blank}
       busy={status === "connecting" || status === "signing-in"}
       waitingLabel={status === "signing-in" ? "Finish signing in in your browser…" : undefined}
       onCancel={isTauri ? cancelSignIn : undefined}

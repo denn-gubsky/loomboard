@@ -3,12 +3,14 @@ import { OAuthError, pkceChallenge } from "@loomcycle/client";
 import {
   CLIENT_ID,
   SignInAddressMismatchError,
+  SignInAddressRequiredError,
   SignInCancelledError,
   beginSignIn,
   completeSignIn,
   describeSignInError,
   oauthFor,
 } from "./appSignIn";
+import { LOCAL_BASE_URL as LOCAL } from "./buildConnection";
 
 const ISSUER = "https://lc.example";
 const REDIRECT = "http://127.0.0.1:5173/auth/callback";
@@ -70,6 +72,7 @@ describe("beginSignIn", () => {
       oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }),
       `${ISSUER}/`,
       REDIRECT,
+      LOCAL,
     );
     const u = new URL(url);
     expect(u.origin + u.pathname).toBe(`${ISSUER}/v1/_oauth/authorize`);
@@ -90,7 +93,7 @@ describe("beginSignIn", () => {
     // exchange always goes to the Base URL, so the only safe answer is to
     // sign in at that other server directly.
     const srv = fakeServer({ metadata: metadata("https://victim.example") });
-    const err = await beginSignIn(oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }), ISSUER, REDIRECT).catch((e) => e);
+    const err = await beginSignIn(oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }), ISSUER, REDIRECT, LOCAL).catch((e) => e);
     expect(err).toBeInstanceOf(SignInAddressMismatchError);
     const p = describeSignInError(err);
     expect(p.kind).toBe("mismatch");
@@ -100,20 +103,41 @@ describe("beginSignIn", () => {
     expect(srv.seen.map((s) => s.url)).toEqual([`${ISSUER}/.well-known/oauth-authorization-server`]);
   });
 
-  it("holds a blank Base URL to the local default", async () => {
+  it("holds a blank Base URL to what blank reaches on the platform", async () => {
     // The dev proxy calls same-origin "", which means http://127.0.0.1:8787.
     const srv = fakeServer();
-    await expect(beginSignIn(oauthFor({ baseUrl: "", fetch: srv.fetch }), "", REDIRECT)).rejects.toBeInstanceOf(
+    await expect(beginSignIn(oauthFor({ baseUrl: "", fetch: srv.fetch }), "", REDIRECT, LOCAL)).rejects.toBeInstanceOf(
       SignInAddressMismatchError,
     );
     const local = fakeServer({ metadata: metadata("http://127.0.0.1:8787") });
-    const { pending } = await beginSignIn(oauthFor({ baseUrl: "", fetch: local.fetch }), "", REDIRECT);
+    const { pending } = await beginSignIn(oauthFor({ baseUrl: "", fetch: local.fetch }), "", REDIRECT, LOCAL);
     expect(pending.issuer).toBe("http://127.0.0.1:8787");
+  });
+
+  it("accepts a blank Base URL on a build hosted together with loomcycle", async () => {
+    // A production build calls same-origin "", so the page's origin is the
+    // loomcycle the issuer must be on.
+    const cohosted = fakeServer({ metadata: metadata("https://board.example") });
+    const { pending } = await beginSignIn(
+      oauthFor({ baseUrl: "", fetch: cohosted.fetch }),
+      "",
+      REDIRECT,
+      "https://board.example",
+    );
+    expect(pending.issuer).toBe("https://board.example");
+  });
+
+  it("asks for an address when a blank Base URL reaches nothing, before any request", async () => {
+    const srv = fakeServer();
+    const err = await beginSignIn(oauthFor({ baseUrl: "", fetch: srv.fetch }), " ", REDIRECT, null).catch((e) => e);
+    expect(err).toBeInstanceOf(SignInAddressRequiredError);
+    expect(describeSignInError(err).message).toMatch(/Base URL/);
+    expect(srv.seen).toEqual([]);
   });
 
   it("refuses an issuer that is not an http(s) address, so metadata cannot run script in the app", async () => {
     const srv = fakeServer({ metadata: Response.json({ issuer: "javascript:alert(1)//" }) });
-    await expect(beginSignIn(oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }), ISSUER, REDIRECT)).rejects.toMatchObject({
+    await expect(beginSignIn(oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }), ISSUER, REDIRECT, LOCAL)).rejects.toMatchObject({
       code: "invalid_response",
     });
   });
@@ -122,7 +146,7 @@ describe("beginSignIn", () => {
     const srv = fakeServer({
       metadata: Response.json({ code: "oauth_issuer_unset", error: "set LOOMCYCLE_PUBLIC_URL" }, { status: 404 }),
     });
-    const err = await beginSignIn(oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }), ISSUER, REDIRECT).catch((e) => e);
+    const err = await beginSignIn(oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }), ISSUER, REDIRECT, LOCAL).catch((e) => e);
     expect(describeSignInError(err).kind).toBe("unsupported");
   });
 });
@@ -131,7 +155,7 @@ describe("completeSignIn", () => {
   async function started() {
     const srv = fakeServer();
     const t = { baseUrl: ISSUER, fetch: srv.fetch };
-    const { pending } = await beginSignIn(oauthFor(t), ISSUER, REDIRECT);
+    const { pending } = await beginSignIn(oauthFor(t), ISSUER, REDIRECT, LOCAL);
     srv.seen.length = 0;
     return { srv, t, pending };
   }

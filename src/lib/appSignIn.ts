@@ -99,14 +99,21 @@ function checkIssuer(issuer: string): string {
   return issuer;
 }
 
-/** The loomcycle a blank Base URL means (the same default as transportFor). */
-export const DEFAULT_BASE_URL = "http://127.0.0.1:8787";
+/** The address a sign-in is bound to: the Base URL as entered, or, when it
+ *  is blank, `blank` (what a blank Base URL reaches on this platform, from
+ *  blankBaseUrlMeans). Null when a blank one reaches nothing here. Shown on
+ *  the sign-in button, so the person sees where they are about to be sent. */
+export function signInAddress(baseUrl: string, blank: string | null): string | null {
+  return baseUrl.trim() || blank;
+}
 
-/** The address a sign-in is bound to: the Base URL, blank = the local
- *  default. Shown on the sign-in button, so the person sees where they are
- *  about to be sent. */
-export function signInAddress(baseUrl: string): string {
-  return baseUrl.trim() || DEFAULT_BASE_URL;
+/** A sign-in started with a blank Base URL where a blank one reaches no
+ *  loomcycle (the extension). */
+export class SignInAddressRequiredError extends Error {
+  constructor() {
+    super("sign-in needs a Base URL");
+    this.name = "SignInAddressRequiredError";
+  }
 }
 
 /** scheme://host[:port] of an http(s) URL; null for anything else. Trailing
@@ -140,16 +147,19 @@ export class SignInAddressMismatchError extends Error {
  *  issuer elsewhere, the Base URL would receive that server's code and
  *  verifier and could redeem them itself (an OAuth mix-up). There is no
  *  override: to sign in to the issuer, enter it as the Base URL. A 404 means
- *  the server has no LOOMCYCLE_PUBLIC_URL and offers no app sign-in. */
+ *  the server has no LOOMCYCLE_PUBLIC_URL and offers no app sign-in. `blank`
+ *  is what a blank Base URL reaches (see signInAddress). */
 export async function beginSignIn(
   oauth: LoomcycleOAuth,
   baseUrl: string,
   redirectUri: string,
+  blank: string | null,
 ): Promise<{ url: string; pending: PendingSignIn }> {
+  const expected = signInAddress(baseUrl, blank);
+  if (expected === null) throw new SignInAddressRequiredError();
   const md = await oauth.discover();
   const issuer = checkIssuer(md.issuer);
   const issuerOrigin = webOrigin(issuer);
-  const expected = signInAddress(baseUrl);
   const expectedOrigin = webOrigin(expected);
   if (!expectedOrigin || issuerOrigin !== expectedOrigin) {
     throw new SignInAddressMismatchError(expectedOrigin ?? expected, issuerOrigin ?? issuer);
@@ -215,6 +225,9 @@ export function describeSignInError(e: unknown): SignInProblem {
       kind: "failed",
       message: "This tab is a copy of another signed-in loomboard tab. Sign in again to use loomboard here too.",
     };
+  }
+  if (e instanceof SignInAddressRequiredError) {
+    return { kind: "failed", message: "Enter the loomcycle address as the Base URL to sign in." };
   }
   if (e instanceof SignInAddressMismatchError) {
     return {

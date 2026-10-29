@@ -2,7 +2,7 @@ import type { TokenProvider } from "@loomcycle/client";
 import type { Connection } from "../chat/lib/createClient";
 import { apiPrefix, bearerFetch } from "./bearerFetch";
 import type { ConnectionSettings as ConnSettings } from "../state/settings";
-import { isTauri, proxyMode } from "./proxyMode";
+import { isExtension, isTauri, proxyMode } from "./proxyMode";
 import { getNativeFetch } from "./nativeTransport";
 
 /** How the app reaches a loomcycle: the address to call and the fetch to call
@@ -10,6 +10,36 @@ import { getNativeFetch } from "./nativeTransport";
 export interface Transport {
   baseUrl: string;
   fetch?: typeof fetch;
+}
+
+/** The local loomcycle the desktop app and the dev/CLI proxy reach when the
+ *  Base URL is blank. */
+export const LOCAL_BASE_URL = "http://127.0.0.1:8787";
+
+/** Which build is running, as blankBaseUrlMeans needs it. */
+export interface Platform {
+  tauri: boolean;
+  extension: boolean;
+  proxy: boolean;
+}
+
+/** The loomcycle a blank Base URL reaches, the same answer transportFor
+ *  gives. A sign-in's issuer must be on this address, so it must not guess.
+ *  - The desktop app calls LOCAL_BASE_URL.
+ *  - The dev/CLI proxy calls its own default target, which is LOCAL_BASE_URL
+ *    unless LOOMBOARD_PROXY_TARGET says otherwise. The browser can't see that
+ *    variable; if it was changed, the issuer check fails and its message asks
+ *    for the address.
+ *  - A plain production build calls same-origin, so blank is the page's own
+ *    origin (loomboard hosted together with loomcycle).
+ *  - The extension has no origin of loomcycle's, so blank means nothing: null. */
+export function blankBaseUrlMeans(
+  pageOrigin: string | undefined,
+  platform: Platform = { tauri: isTauri, extension: isExtension, proxy: proxyMode },
+): string | null {
+  if (platform.tauri || platform.proxy) return LOCAL_BASE_URL;
+  if (platform.extension) return null;
+  return pageOrigin ?? null;
 }
 
 // The transport for a base URL. The transport detail (native HTTP on desktop,
@@ -22,7 +52,7 @@ export function transportFor(baseUrl: string): Transport {
     // which bypasses webview CORS. getNativeFetch() is a stable singleton so
     // <Chat>'s client memo (keyed on connection.fetch) doesn't churn. Blank URL
     // → the same local default the CLI uses.
-    return { baseUrl: baseUrl || "http://127.0.0.1:8787", fetch: getNativeFetch() };
+    return { baseUrl: baseUrl || LOCAL_BASE_URL, fetch: getNativeFetch() };
   }
   if (proxyMode) {
     // Same-origin /v1 through the dev/CLI proxy, which routes on this header.

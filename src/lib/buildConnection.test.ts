@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TokenProvider } from "@loomcycle/client";
-import { buildConnection } from "./buildConnection";
+import { LOCAL_BASE_URL, blankBaseUrlMeans, buildConnection } from "./buildConnection";
 import { createLoomcycleClient } from "../chat/lib/createClient";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -51,5 +51,19 @@ describe("buildConnection", () => {
 
   it("keeps the pasted token for a token connection", () => {
     expect(buildConnection({ baseUrl: "https://lc.example", token: "lc_x" }).token).toBe("lc_x");
+  });
+});
+
+describe("blankBaseUrlMeans", () => {
+  const page = "https://board.example";
+  it("is the page's own origin on a production web build, which calls same-origin", () => {
+    expect(blankBaseUrlMeans(page, { tauri: false, extension: false, proxy: false })).toBe(page);
+  });
+  it("is the local default on the desktop and behind the dev/CLI proxy", () => {
+    expect(blankBaseUrlMeans(page, { tauri: true, extension: false, proxy: false })).toBe(LOCAL_BASE_URL);
+    expect(blankBaseUrlMeans(page, { tauri: false, extension: false, proxy: true })).toBe(LOCAL_BASE_URL);
+  });
+  it("is nothing in the extension, whose page is not loomcycle's", () => {
+    expect(blankBaseUrlMeans("chrome-extension://abc", { tauri: false, extension: true, proxy: false })).toBeNull();
   });
 });
