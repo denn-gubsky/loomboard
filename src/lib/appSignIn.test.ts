@@ -138,11 +138,12 @@ describe("beginSignIn", () => {
   });
 
   it("refuses metadata whose token or revocation endpoint is on another origin", async () => {
-    for (const over of [
+    const cases: Record<string, string>[] = [
       { token_endpoint: "https://evil.example/v1/_oauth/token" },
       { revocation_endpoint: "https://evil.example/v1/_oauth/revoke" },
       { authorization_endpoint: "https://evil.example/v1/_oauth/authorize" },
-    ]) {
+    ];
+    for (const over of cases) {
       const srv = fakeServer({ metadata: metadata(ISSUER, over) });
       await expect(
         beginSignIn(oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }), ISSUER, REDIRECT, ISSUER),
