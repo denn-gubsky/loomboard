@@ -609,3 +609,36 @@ describe("chatReducer — context_exhausted (loomcycle 1.85.0)", () => {
     expect(answer.parts.some((p) => p.type === "notice")).toBe(false);
   });
 });
+
+describe("chatReducer — capability_inert", () => {
+  // As loomcycle 1.122+ emits it at run start for a tool the caller's access
+  // rules remove (internal/api/http/acl_gate.go emitACLRemovedTools).
+  const acl = {
+    tool: "Bash",
+    gate: "acl",
+    message:
+      "tool Bash is granted by the agent definition but the caller's access-control rules do not allow invoking it; it is withheld from this run",
+  };
+
+  it("says a tool is withheld by the access rules", () => {
+    const s = run([ev("capability_inert", { capability_inert: acl })]);
+    expect(assistant(s, 0).parts.find((p) => p.type === "notice")).toEqual({
+      type: "notice",
+      level: "warn",
+      text: "Bash is withheld from this run by your access rules.",
+    });
+  });
+
+  it("keeps the server's line for another gate, which names the key to set", () => {
+    const msg = "tool Memory is granted but memory_scopes grants nothing";
+    const s = run([ev("capability_inert", { capability_inert: { tool: "Memory", gate: "memory_scopes", message: msg } })]);
+    const notice = assistant(s, 0).parts.find((p) => p.type === "notice");
+    expect(notice && notice.type === "notice" && notice.text).toBe(msg);
+  });
+
+  it("joins the open turn when the rules take a tool away mid-run", () => {
+    const s = run([ev("text", { text: "working" }), ev("capability_inert", { capability_inert: acl })]);
+    expect(s.messages).toHaveLength(1);
+    expect(assistant(s, 0).parts.map((p) => p.type)).toEqual(["text", "notice"]);
+  });
+});
