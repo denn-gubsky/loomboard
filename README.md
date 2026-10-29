@@ -121,7 +121,7 @@ A web app on `127.0.0.1` needs no redirect entry (the preset's loopback one matc
 
 No token is ever written to `localStorage` or a URL. Sign-out revokes the sign-in on loomcycle (RFC 7009); a sign-in loomcycle ends (revoked, user disabled, expired) returns to the sign-in screen with a message. One sign-in per tab: duplicating a tab copies its `sessionStorage`, and the two then refresh the same token, which loomcycle treats as a replay and ends the sign-in.
 
-**The sign-in address check.** loomboard signs in only if the server's issuer is on the origin of the Base URL you entered, and its token and revocation endpoints are too; the button shows the host you will be sent to. This stops a server — or a proxy in front of one — from naming another server's sign-in to catch its code. When loomcycle's public address legitimately differs from the Base URL (a LAN address, a proxy), enter the public address under **Advanced → Sign-in server address**.
+**The sign-in address check.** loomboard signs in only if the server's issuer (`LOOMCYCLE_PUBLIC_URL`) is on the origin of the Base URL you entered; the button shows the host you will be sent to. The code exchange always goes to the Base URL, so a server — or a proxy in front of one — that named another server's sign-in would receive that server's code. There is no override: if the check fails, enter loomcycle's public address as the Base URL.
 
 | Script | What |
 |---|---|

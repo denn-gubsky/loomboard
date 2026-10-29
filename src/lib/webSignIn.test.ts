@@ -104,18 +104,14 @@ describe("startWebSignIn", () => {
     }
   });
 
-  it("follows a different sign-in server only when the person set it", async () => {
+  it("refuses a LAN address whose server names its public address: there is no override", async () => {
     issuer = "https://public.example";
     try {
       const storage = new MemoryStorage();
       const assign = vi.fn();
-      await startWebSignIn("http://192.168.0.77:8787", {
-        storage,
-        assign,
-        loc: loc("https://board.example/"),
-        override: "https://public.example",
-      });
-      expect(new URL(assign.mock.calls[0][0] as string).origin).toBe("https://public.example");
+      const deps = { storage, assign, loc: loc("https://board.example/") };
+      await expect(startWebSignIn("http://192.168.0.77:8787", deps)).rejects.toBeInstanceOf(SignInAddressMismatchError);
+      expect(assign).not.toHaveBeenCalled();
     } finally {
       issuer = ISSUER;
     }

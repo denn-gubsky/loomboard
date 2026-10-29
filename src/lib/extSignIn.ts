@@ -1,5 +1,5 @@
 import type { OAuthTokenSet } from "@loomcycle/client";
-import { SignInCancelledError, beginSignIn, completeSignIn, oauthFor, signInAddress } from "./appSignIn";
+import { SignInCancelledError, beginSignIn, completeSignIn, oauthFor } from "./appSignIn";
 
 // The Chrome extension's sign-in: chrome.identity.launchWebAuthFlow shows
 // loomcycle's authorize page in a browser window of its own and hands back the
@@ -28,15 +28,9 @@ export function extRedirectUri(identity: Pick<ChromeIdentity, "getRedirectURL">)
 export async function extSignIn(
   baseUrl: string,
   identity: ChromeIdentity,
-  override?: string,
 ): Promise<OAuthTokenSet> {
   const t = { baseUrl };
-  const { url, pending } = await beginSignIn(
-    oauthFor(t),
-    baseUrl,
-    extRedirectUri(identity),
-    signInAddress(baseUrl, override),
-  );
+  const { url, pending } = await beginSignIn(oauthFor(t), baseUrl, extRedirectUri(identity));
   let landed: string | undefined;
   try {
     landed = await identity.launchWebAuthFlow({ url, interactive: true });

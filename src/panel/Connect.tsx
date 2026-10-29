@@ -6,7 +6,7 @@ import SignInCard from "../components/SignInCard";
 
 interface Props {
   onConnect: (s: ConnectionSettings) => void;
-  onSignIn: (baseUrl: string, signInAddress?: string) => void;
+  onSignIn: (baseUrl: string) => void;
   busy: boolean;
   error: string | null;
   problem: SignInProblemKind | null;
@@ -67,8 +67,7 @@ export default function Connect({ onConnect, onSignIn, busy, error, problem, ini
       baseUrlHint="The extension connects directly; host access is requested when you sign in."
       busy={busy}
       waitingLabel={busy ? "Finish signing in in the sign-in window…" : undefined}
-      onSignIn={(address) => void withHostAccess((url) => onSignIn(url, address || undefined))}
-      initialSignInAddress={initial?.signInAddress}
+      onSignIn={() => void withHostAccess(onSignIn)}
       onConnectToken={(token) => void withHostAccess((url) => onConnect({ baseUrl: url, token }))}
       initialToken={initial?.token ?? ""}
       tokenHint="Stored in this browser's extension storage only."

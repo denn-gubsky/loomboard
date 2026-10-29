@@ -6,7 +6,6 @@ import {
   beginSignIn,
   completeSignIn,
   oauthFor,
-  signInAddress,
 } from "./appSignIn";
 import type { Transport } from "./buildConnection";
 
@@ -23,13 +22,12 @@ export async function tauriSignIn(
   t: Transport,
   baseUrl: string,
   invoke: Invoke,
-  override?: string,
 ): Promise<OAuthTokenSet> {
   const port = await invoke<number>("oauth_loopback_start");
   const origin = `http://127.0.0.1:${port}`;
   let begun: Awaited<ReturnType<typeof beginSignIn>>;
   try {
-    begun = await beginSignIn(oauthFor(t), baseUrl, `${origin}${CALLBACK_PATH}`, signInAddress(baseUrl, override));
+    begun = await beginSignIn(oauthFor(t), baseUrl, `${origin}${CALLBACK_PATH}`);
   } catch (e) {
     // Nothing will be redirected to the listener: release it now.
     await invoke<void>("oauth_loopback_cancel").catch(() => undefined);

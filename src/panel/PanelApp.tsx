@@ -173,13 +173,13 @@ export default function PanelApp({
   );
 
   const signInWithLoomcycle = useCallback(
-    async (baseUrl: string, override?: string) => {
+    async (baseUrl: string) => {
       setStatus("signing-in");
       setError(null);
       setProblem(null);
       try {
-        const tokens = await extSignIn(baseUrl, chrome.identity, override);
-        await adoptSignIn(signInSettings(baseUrl, override), tokens, true);
+        const tokens = await extSignIn(baseUrl, chrome.identity);
+        await adoptSignIn(signInSettings(baseUrl), tokens, true);
       } catch (e) {
         fail(e);
       }

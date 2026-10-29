@@ -61,7 +61,7 @@ interface ConnectionState {
   connect: (s: ConnectionSettings) => Promise<boolean>;
   /** "Sign in with loomcycle": on the web this navigates away and comes back
    *  to the callback; on the desktop it waits for the system browser. */
-  signInWithLoomcycle: (baseUrl: string, signInAddress?: string) => Promise<void>;
+  signInWithLoomcycle: (baseUrl: string) => Promise<void>;
   /** Stop a desktop sign-in that is waiting for the browser. */
   cancelSignIn: () => void;
   /** Sign out (revokes a sign-in on the server) and forget the connection. */
@@ -175,8 +175,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   );
 
   const signInWithLoomcycle = useCallback(
-    async (baseUrl: string, override?: string) => {
-      const s = signInSettings(baseUrl, override);
+    async (baseUrl: string) => {
+      const s = signInSettings(baseUrl);
       // The form remounts after the splash: keep what the person entered.
       setSettings(s);
       setStatus(isTauri ? "signing-in" : "connecting");
@@ -184,7 +184,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       setProblem(null);
       try {
         if (isTauri) {
-          const tokens = await tauriSignIn(transportFor(baseUrl), baseUrl, await tauriInvoke(), override);
+          const tokens = await tauriSignIn(transportFor(baseUrl), baseUrl, await tauriInvoke());
           await adoptSignIn(s, tokens, true);
           return;
         }
@@ -195,7 +195,6 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           storage: sessionStorage,
           assign: (url) => window.location.assign(url),
           loc: window.location,
-          override,
         });
         // The page is navigating to loomcycle; stay "connecting".
       } catch (e) {
@@ -243,12 +242,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         href: window.location.href,
         replaceState: (path) => window.history.replaceState(null, "", path),
       })
-        .then(({ baseUrl, tokens }) => {
-          // The sign-in server address saved before the redirect, if any.
-          const saved = loadSettings();
-          const override = saved?.baseUrl === baseUrl ? saved.signInAddress : undefined;
-          return adoptSignIn(signInSettings(baseUrl, override), tokens, true);
-        })
+        .then(({ baseUrl, tokens }) => adoptSignIn(signInSettings(baseUrl), tokens, true))
         .catch(fail);
       return;
     }

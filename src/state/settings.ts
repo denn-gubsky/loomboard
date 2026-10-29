@@ -16,18 +16,11 @@ export interface ConnectionSettings {
    *  access token lives in memory and the refresh token in the form factor's
    *  own store (state/signInStore). Absent = the pasted-token connection. */
   auth?: "oauth";
-  /** Advanced → "Sign-in server address": the issuer the person accepted
-   *  when loomcycle's public address differs from the Base URL (a dev proxy,
-   *  a LAN alias). Unset = the issuer must be on the Base URL's origin. */
-  signInAddress?: string;
 }
 
-/** The persisted record of a sign-in: the server, that it was one, and the
- *  sign-in server address the person set, if any. */
-export function signInSettings(baseUrl: string, signInAddress?: string): ConnectionSettings {
-  const s: ConnectionSettings = { baseUrl, token: "", auth: "oauth" };
-  if (signInAddress?.trim()) s.signInAddress = signInAddress.trim();
-  return s;
+/** The persisted record of a sign-in: the server, and that it was one. */
+export function signInSettings(baseUrl: string): ConnectionSettings {
+  return { baseUrl, token: "", auth: "oauth" };
 }
 
 /** Read a persisted record, dropping anything malformed. */
@@ -35,7 +28,7 @@ export function parseConnectionSettings(v: unknown): ConnectionSettings | null {
   const p = v as Partial<ConnectionSettings> | null;
   if (!p || typeof p.baseUrl !== "string" || typeof p.token !== "string") return null;
   if (p.auth !== "oauth") return { baseUrl: p.baseUrl, token: p.token };
-  return signInSettings(p.baseUrl, typeof p.signInAddress === "string" ? p.signInAddress : undefined);
+  return signInSettings(p.baseUrl);
 }
 
 const KEY = "loomboard.connection";

@@ -86,12 +86,11 @@ function checkIssuer(issuer: string): string {
 /** The loomcycle a blank Base URL means (the same default as transportFor). */
 export const DEFAULT_BASE_URL = "http://127.0.0.1:8787";
 
-/** The address a sign-in must be served from: the Base URL (blank = the local
- *  default), or the person's explicit Advanced → "Sign-in server address" when
- *  loomcycle's public address differs (a dev proxy, a LAN alias). Shown on the
- *  sign-in button, so the person sees where they are about to be sent. */
-export function signInAddress(baseUrl: string, override?: string): string {
-  return override?.trim() || baseUrl.trim() || DEFAULT_BASE_URL;
+/** The address a sign-in is bound to: the Base URL, blank = the local
+ *  default. Shown on the sign-in button, so the person sees where they are
+ *  about to be sent. */
+export function signInAddress(baseUrl: string): string {
+  return baseUrl.trim() || DEFAULT_BASE_URL;
 }
 
 /** scheme://host[:port] of an http(s) URL; null for anything else. Trailing
@@ -106,8 +105,8 @@ export function webOrigin(url: string | undefined): string | null {
   }
 }
 
-/** The server's metadata named a sign-in address other than the one the
- *  person chose. Raised before anything is sent to that address. */
+/** The server's metadata named an issuer on another origin than the Base
+ *  URL's. Raised before anything is sent to that issuer. */
 export class SignInAddressMismatchError extends Error {
   constructor(
     readonly expected: string,
@@ -118,30 +117,26 @@ export class SignInAddressMismatchError extends Error {
   }
 }
 
-/** Start a sign-in. The metadata comes from the server the app calls; its
- *  issuer must be on `expected` (signInAddress), and its authorize, token and
- *  revocation endpoints on the issuer's own origin. Otherwise a server — or a
- *  proxy in front of it — could name another server's sign-in and receive a
- *  code meant for that one (an OAuth mix-up), so the sign-in stops here,
- *  before the person is sent anywhere. A 404 means the server has no
- *  LOOMCYCLE_PUBLIC_URL and offers no app sign-in. */
+/** Start a sign-in. The metadata comes from the Base URL, and its issuer must
+ *  be on the Base URL's own origin. The code exchange, refresh and revoke
+ *  always go to the Base URL (the SDK posts to baseUrl + /v1/_oauth/token and
+ *  never reads the metadata's endpoints), so if the person were sent to an
+ *  issuer elsewhere, the Base URL would receive that server's code and
+ *  verifier and could redeem them itself (an OAuth mix-up). There is no
+ *  override: to sign in to the issuer, enter it as the Base URL. A 404 means
+ *  the server has no LOOMCYCLE_PUBLIC_URL and offers no app sign-in. */
 export async function beginSignIn(
   oauth: LoomcycleOAuth,
   baseUrl: string,
   redirectUri: string,
-  expected: string,
 ): Promise<{ url: string; pending: PendingSignIn }> {
   const md = await oauth.discover();
   const issuer = checkIssuer(md.issuer);
   const issuerOrigin = webOrigin(issuer);
+  const expected = signInAddress(baseUrl);
   const expectedOrigin = webOrigin(expected);
   if (!expectedOrigin || issuerOrigin !== expectedOrigin) {
     throw new SignInAddressMismatchError(expectedOrigin ?? expected, issuerOrigin ?? issuer);
-  }
-  for (const ep of [md.authorization_endpoint, md.token_endpoint, md.revocation_endpoint]) {
-    if (webOrigin(ep) !== issuerOrigin) {
-      throw new SignInAddressMismatchError(issuerOrigin, webOrigin(ep) ?? String(ep ?? "(missing)"));
-    }
   }
   const req = await new LoomcycleOAuth({ baseUrl: issuer }).beginAuthorize({
     clientId: CLIENT_ID,
@@ -219,9 +214,8 @@ export type SignInProblemKind =
   | "cancelled"
   | "failed";
 
-/** A sign-in failure as the person should read it. `unsupported` and
- *  `mismatch` are the cue to open Advanced (the token path, the sign-in
- *  server address). Never carries a token: the texts are ours,
+/** A sign-in failure as the person should read it. `unsupported` is the cue
+ *  to open Advanced (the token path). Never carries a token: the texts are ours,
  *  plus the server's own error_description where it explains a refusal. */
 export interface SignInProblem {
   kind: SignInProblemKind;
@@ -236,8 +230,8 @@ export function describeSignInError(e: unknown): SignInProblem {
     return {
       kind: "mismatch",
       message:
-        `This server's sign-in address doesn't match: you chose ${e.expected}, but it names ${e.found}. ` +
-        "Nothing was sent there. If that address is expected (a dev proxy or a LAN alias), enter it under Advanced → Sign-in server address.",
+        `This address's sign-in belongs to another server: ${e.expected} names ${e.found}. ` +
+        "Nothing was sent there. Enter that server's address as the Base URL instead.",
     };
   }
   if (e instanceof OAuthError) {

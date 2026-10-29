@@ -20,10 +20,7 @@ interface Props {
   /** Shown while busy with a sign-in that waits on another window. */
   waitingLabel?: string;
   onCancel?: () => void;
-  /** Start a sign-in; `signInAddress` is Advanced → "Sign-in server
-   *  address", empty unless the person set one. */
-  onSignIn: (signInAddress: string) => void;
-  initialSignInAddress?: string;
+  onSignIn: () => void;
   /** The pasted-token path (RFC FL D7), kept under "Advanced". */
   onConnectToken: (token: string) => void;
   initialToken: string;
@@ -41,20 +38,18 @@ interface Props {
 // available under Advanced, for token-only deployments and automation.
 export default function SignInCard(p: Props) {
   const [token, setToken] = useState(p.initialToken);
-  const [override, setOverride] = useState(p.initialSignInAddress ?? "");
-  const [advanced, setAdvanced] = useState(p.initialToken !== "" || override !== "");
-  // A server that offers no app sign-in leaves only the token path; one whose
-  // sign-in is elsewhere needs the person to accept that address explicitly.
+  const [advanced, setAdvanced] = useState(p.initialToken !== "");
+  // A server that offers no app sign-in leaves only the token path.
   useEffect(() => {
-    if (p.problem === "unsupported" || p.problem === "mismatch") setAdvanced(true);
+    if (p.problem === "unsupported") setAdvanced(true);
   }, [p.problem]);
   // Where the sign-in will send the person — the issuer must be on it, so this
   // is shown before anything leaves the app.
-  const host = hostOf(signInAddress(p.baseUrl, override));
+  const host = hostOf(signInAddress(p.baseUrl));
 
   function onSignIn(e: FormEvent) {
     e.preventDefault();
-    if (!p.busy) p.onSignIn(override.trim());
+    if (!p.busy) p.onSignIn();
   }
   function onToken(e: FormEvent) {
     e.preventDefault();
@@ -118,22 +113,6 @@ export default function SignInCard(p: Props) {
           onToggle={(e) => setAdvanced((e.currentTarget as HTMLDetailsElement).open)}
         >
           <summary>Advanced</summary>
-          <label className="field connect-advanced-field">
-            <span>Sign-in server address</span>
-            <input
-              type="text"
-              inputMode="url"
-              placeholder="blank = the Base URL"
-              value={override}
-              onChange={(e) => setOverride(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <small>
-              Only when loomcycle&apos;s public address differs from the Base URL — a dev proxy or
-              a LAN alias. Sign-in is refused if the server names any other address.
-            </small>
-          </label>
           <form className="connect-form" onSubmit={onToken}>
             <label className="field">
               <span>Bearer token</span>

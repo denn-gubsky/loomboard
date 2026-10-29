@@ -116,4 +116,9 @@ describe("signInSettings", () => {
     expect(parseConnectionSettings({ baseUrl: BASE, token: "lc_leaked", auth: "oauth" })).toEqual(s);
     expect(parseConnectionSettings({ baseUrl: BASE, token: "lc_pasted" })).toEqual({ baseUrl: BASE, token: "lc_pasted" });
   });
+
+  it("drops a persisted sign-in server address, which could point the sign-in elsewhere", () => {
+    const s = parseConnectionSettings({ baseUrl: BASE, token: "", auth: "oauth", signInAddress: "https://other.example" });
+    expect(s).toEqual({ baseUrl: BASE, token: "", auth: "oauth" });
+  });
 });
