@@ -31,8 +31,8 @@ export default function CanvasArea({ onOpenDocument }: { onOpenDocument?: (targe
   const dataLayer = useMemo(() => workflowDataLayer(client), [client]);
   // Run mode's chat for a member run: the app's own <Chat>, which the package
   // does not carry (it renders whatever the host gives it).
-  const { settings } = useConnection();
-  const connection = useMemo(() => (settings ? buildConnection(settings) : null), [settings]);
+  const { settings, signIn } = useConnection();
+  const connection = useMemo(() => (settings ? buildConnection(settings, signIn) : null), [settings, signIn]);
   const renderRunChat = useCallback(
     (target: RunChatTarget) => (connection ? <RunChatPane connection={connection} client={client} target={target} /> : null),
     [connection, client],

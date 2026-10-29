@@ -24,7 +24,7 @@ import WorkflowArea from "./components/workflow/WorkflowArea";
 import CanvasArea from "./components/workflow/CanvasArea";
 
 function ChatArea() {
-  const { settings } = useConnection();
+  const { settings, signIn } = useConnection();
   const { conversations, active, update } = useConversations();
   const { setStatus, recap } = useActiveChat();
   // Agents the user has run before — suggestions for the picker's free-text
@@ -34,8 +34,8 @@ function ChatArea() {
     [conversations],
   );
   const connection = useMemo<Connection | null>(
-    () => (settings ? buildConnection(settings) : null),
-    [settings],
+    () => (settings ? buildConnection(settings, signIn) : null),
+    [settings, signIn],
   );
   const activeId = active?.id;
   const onConversationChange = useCallback(
@@ -79,10 +79,10 @@ function ChatArea() {
 // connection (dev-proxy fetch included) and principal; theme is inherited from
 // <html> data-theme.
 function LibraryArea() {
-  const { settings, principal } = useConnection();
+  const { settings, principal, signIn } = useConnection();
   const connection = useMemo<Connection | null>(
-    () => (settings ? buildConnection(settings) : null),
-    [settings],
+    () => (settings ? buildConnection(settings, signIn) : null),
+    [settings, signIn],
   );
   if (!connection) return null;
   return (
@@ -110,10 +110,10 @@ function LibraryArea() {
 // id does not say where it sits in the Path tree, so the explorer cannot be
 // pointed at it.
 function DocumentsArea({ target, onClearTarget }: { target?: DocumentTarget; onClearTarget: () => void }) {
-  const { settings, principal } = useConnection();
+  const { settings, principal, signIn } = useConnection();
   const connection = useMemo<Connection | null>(
-    () => (settings ? buildConnection(settings) : null),
-    [settings],
+    () => (settings ? buildConnection(settings, signIn) : null),
+    [settings, signIn],
   );
   if (!connection) return null;
   if (target) {
@@ -148,10 +148,10 @@ function DocumentsArea({ target, onClearTarget }: { target?: DocumentTarget; onC
 // The off-run Memory console (@loomcycle/memory-view): k/v entries, bi-temporal
 // facts, and semantic search. Same connection seam; its own scoped styles.
 function MemoryArea() {
-  const { settings } = useConnection();
+  const { settings, signIn } = useConnection();
   const connection = useMemo<Connection | null>(
-    () => (settings ? buildConnection(settings) : null),
-    [settings],
+    () => (settings ? buildConnection(settings, signIn) : null),
+    [settings, signIn],
   );
   if (!connection) return null;
   return (
@@ -165,10 +165,10 @@ function MemoryArea() {
 // list views over loomcycle Documents. Same connection seam; its own scoped
 // styles. Boards persist as `type=view` Documents in the user/tenant scope.
 function BoardsArea() {
-  const { settings } = useConnection();
+  const { settings, signIn } = useConnection();
   const connection = useMemo<Connection | null>(
-    () => (settings ? buildConnection(settings) : null),
-    [settings],
+    () => (settings ? buildConnection(settings, signIn) : null),
+    [settings, signIn],
   );
   if (!connection) return null;
   return (
@@ -182,15 +182,15 @@ function BoardsArea() {
 // verification harness for the agent-chat-tile component — NOT product nav; the
 // RFC AC board will place these tiles. Mount with `?board` in a dev build.
 function BoardArea() {
-  const { settings, principal } = useConnection();
+  const { settings, principal, signIn } = useConnection();
   const connection = useMemo<Connection | null>(
-    () => (settings ? buildConnection(settings) : null),
-    [settings],
+    () => (settings ? buildConnection(settings, signIn) : null),
+    [settings, signIn],
   );
   if (!connection || !settings || !principal) return null;
   return (
     <AgentPortfolioGrid
-      client={getClient(settings)}
+      client={getClient(settings, signIn)}
       connection={connection}
       userId={principal.subject}
     />

@@ -1,4 +1,6 @@
+import type { TokenProvider } from "@loomcycle/client";
 import type { Connection } from "../chat/lib/createClient";
+import { apiPrefix, bearerFetch } from "./bearerFetch";
 import type { ConnectionSettings as ConnSettings } from "../state/settings";
 import { isTauri, proxyMode } from "./proxyMode";
 import { getNativeFetch } from "./nativeTransport";
@@ -40,6 +42,16 @@ export function transportFor(baseUrl: string): Transport {
 // Build the <Chat>-facing Connection from the persisted settings. Shared so
 // every surface that embeds <Chat> (the chat pane, the agent portfolio, the
 // workflow chat dock) builds it identically.
-export function buildConnection(s: ConnSettings): Connection {
-  return { ...transportFor(s.baseUrl), token: s.token };
+//
+// Signed in with loomcycle, there is no static token to hand over: the
+// Connection's fetch asks the sign-in for the current access token on every
+// request to this loomcycle's API (see bearerFetch), so the embedded surfaces
+// stay signed in across refreshes without knowing about sign-in at all.
+export function buildConnection(s: ConnSettings, signIn?: TokenProvider | null): Connection {
+  const t = transportFor(s.baseUrl);
+  if (!signIn) return { ...t, token: s.token };
+  const pageHref = typeof location === "undefined" ? undefined : location.href;
+  const prefix = apiPrefix(t.baseUrl, pageHref);
+  const inner: typeof fetch = t.fetch ?? ((input, init) => fetch(input, init));
+  return { baseUrl: t.baseUrl, fetch: prefix ? bearerFetch(inner, signIn, prefix, pageHref) : inner };
 }
