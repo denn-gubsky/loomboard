@@ -22,6 +22,7 @@ export type LimitInfo = Payload<"limit">;
 export type OverrideInfo = Payload<"override">;
 export type DistillDeclinedInfo = Payload<"context_distill">;
 export type ContextExhaustedInfo = Payload<"context_exhausted">;
+export type CapabilityInertInfo = Payload<"capability_inert">;
 export type ContextTierVerdict = NonNullable<ContextExhaustedInfo["verdicts"]>[number];
 
 /** A completed distillation. The two events differ only in what they call the
@@ -77,6 +78,18 @@ export function describeFallback(f: Partial<FallbackInfo>): string {
   // explaining nothing, so prefer the cause and keep the class as the fallback.
   const why = f.cause_error || f.reason;
   return why ? `${head}${attempt} — ${why}` : `${head}${attempt}`;
+}
+
+/** Note for a tool the agent holds and this run cannot use. A tool the
+ *  caller's access rules withhold (gate `acl`, loomcycle 1.122+) gets a short
+ *  line of ours: the server's sentence is written for an operator reading the
+ *  agent definition. Every other gate names a config key the reader needs, so
+ *  the server's message is kept. */
+export function describeInert(info: Partial<CapabilityInertInfo>): string {
+  const tool = info.tool || "A tool";
+  if (info.gate === "acl") return `${tool} is withheld from this run by your access rules.`;
+  if (info.message) return info.message;
+  return info.gate ? `${tool} cannot be used in this run (${info.gate}).` : `${tool} cannot be used in this run.`;
 }
 
 /** Banner for a token-budget crossing. Prefer the server's ready-made message;

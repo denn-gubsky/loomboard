@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TranscriptResponse } from "@loomcycle/client";
-import { describeContextExhausted, describeDistill, describeDistillDeclined, describeFallback, shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
+import { describeContextExhausted, describeDistill, describeDistillDeclined, describeFallback, describeInert, shouldPostOverride, describeOverride, lastSeqForRun, optionsToArray, transcriptToEvents } from "./events";
 
 describe("optionsToArray", () => {
   it("passes through a string array", () => {
@@ -370,5 +370,13 @@ describe("describeContextExhausted", () => {
 
   it("says something useful with no numbers at all", () => {
     expect(describeContextExhausted({})).toContain("Context not reclaimed");
+  });
+});
+
+describe("describeInert", () => {
+  it("degrades to a shorter line when the server sends less", () => {
+    expect(describeInert({ tool: "Bash", gate: "acl" })).toBe("Bash is withheld from this run by your access rules.");
+    expect(describeInert({ tool: "Bash", gate: "tool_choice" })).toBe("Bash cannot be used in this run (tool_choice).");
+    expect(describeInert({})).toBe("A tool cannot be used in this run.");
   });
 });

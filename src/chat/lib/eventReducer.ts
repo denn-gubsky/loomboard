@@ -10,6 +10,7 @@ import {
   describeDistill,
   describeContextExhausted,
   describeDistillDeclined,
+  describeInert,
   describeLimit,
   describeOverride,
   shouldPostOverride,
@@ -374,6 +375,18 @@ function applyEvent(state: ChatState, ev: ChatEvent): ChatState {
         messages: updateOpenAssistant(state.messages, (m) =>
           addNotice(m, ev.limit!.severity === "hard" ? "error" : "warn", describeLimit(ev.limit!)),
         ),
+      };
+
+    case "capability_inert":
+      // A tool the agent holds and this run cannot use. Emitted once at run
+      // start, and again mid-run when loomcycle re-reads the caller's access
+      // rules (LOOMCYCLE_ACL_LIVE) and they take a tool away. Without a line
+      // here, "the agent did not use the tool" and "the agent was not allowed
+      // to" read the same.
+      if (!ev.capability_inert) return state;
+      return {
+        ...state,
+        messages: postNotice(state.messages, "warn", describeInert(ev.capability_inert)),
       };
 
     case "context_compaction":

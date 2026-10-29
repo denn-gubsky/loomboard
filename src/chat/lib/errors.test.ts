@@ -73,3 +73,66 @@ describe("describeError", () => {
     expect(describeError("")).toBe("Unknown error");
   });
 });
+
+describe("describeError — access-rule refusals (loomcycle 1.122+)", () => {
+  // The 403 body loomcycle writes (internal/api/http/acl_gate.go aclDeniedReply).
+  const denied = (reasons: unknown[]) =>
+    JSON.stringify({
+      code: "acl_denied",
+      error: "run agent:researcher is denied by ops rule 2",
+      action: "run",
+      resource: "agent:researcher",
+      reasons,
+    });
+
+  it("names the action, the resource and the deny rules that decided", () => {
+    const e = new LoomcycleError("Forbidden", {
+      status: 403,
+      bodyText: denied([
+        { acl: "ops", version: 3, rule: 2, effect: "deny" },
+        { acl: "builtin:tenant-member", rule: 0, effect: "allow" },
+      ]),
+    });
+    expect(describeError(e)).toBe(
+      'Access denied: you may not run agent:researcher — denied by list "ops" v3 rule 2.',
+    );
+  });
+
+  it("reads the fields an AclDeniedError carries, before the body", () => {
+    const e = Object.assign(new LoomcycleError("Forbidden", { status: 403, code: "acl_denied" }), {
+      action: "read",
+      resource: "document:/plans/x",
+      reasons: [{ acl: "readers", rule: 0, effect: "deny" }],
+    });
+    expect(describeError(e)).toBe('Access denied: you may not read document:/plans/x — denied by list "readers" rule 0.');
+  });
+
+  it("says no rule allows it when no rule denied", () => {
+    const e = new LoomcycleError("Forbidden", { status: 403, bodyText: denied([]) });
+    expect(describeError(e)).toBe("Access denied: you may not run agent:researcher — no access rule allows it.");
+  });
+
+  it("asks for a retry when the rules could not be read", () => {
+    const e = new LoomcycleError("Service Unavailable", {
+      status: 503,
+      bodyText: JSON.stringify({ code: "acl_unavailable", error: "access control is unavailable" }),
+    });
+    expect(describeError(e)).toBe("Access rules could not be read right now — try again in a moment.");
+  });
+
+  it("keeps the server's reason for a refused self-elevation", () => {
+    const e = new LoomcycleError("Forbidden", {
+      status: 403,
+      bodyText: JSON.stringify({ code: "acl_self_elevation", error: "refused: the list is bound to you" }),
+    });
+    expect(describeError(e)).toBe("Refused — the list is bound to you");
+  });
+
+  it("leaves every other error to the server's own message", () => {
+    const e = new LoomcycleError("Forbidden", {
+      status: 403,
+      bodyText: JSON.stringify({ code: "insufficient_scope", error: "needs substrate:tenant" }),
+    });
+    expect(describeError(e)).toBe("needs substrate:tenant");
+  });
+});
