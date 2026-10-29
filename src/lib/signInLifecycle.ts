@@ -37,8 +37,11 @@ export interface AdoptSignInOptions<T> {
   use: (session: SignInSession) => Promise<T>;
   /** Revoke and forget the sign-in everywhere. */
   end: () => Promise<void>;
-  /** Forget this holder's copy only, leaving the stored sign-in. */
-  drop: () => void;
+  /** Stop using the session but keep the stored sign-in. The caller must keep
+   *  `session` until a retry replaces it, and sign it out on a disconnect, a
+   *  token connect or a new sign-in, so a kept refresh token is never cleared
+   *  without being revoked. */
+  drop: (session: SignInSession) => void;
 }
 
 /** Make a sign-in the connection. On a transient failure the stored sign-in
@@ -58,7 +61,7 @@ export async function adoptSignIn<T>(o: AdoptSignInOptions<T>): Promise<T> {
     return await o.use(session);
   } catch (e) {
     if (session.active && transientFailure(e)) {
-      o.drop();
+      o.drop(session);
       throw new SignInKeptError(e);
     }
     await o.end();

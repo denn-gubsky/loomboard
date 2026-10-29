@@ -100,16 +100,20 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   // belongs to the CURRENT sign-in (a signed-out-and-replaced one may still
   // report), and disconnect must reach it synchronously.
   const signInRef = useRef<SignInSession | null>(null);
+  // A sign-in kept after loomcycle did not answer: not live, still stored,
+  // and still to be revoked if the person disconnects instead of retrying.
+  const keptRef = useRef<SignInSession | null>(null);
   // Web: releases this tab's hold on its sign-in (see claimSignIn).
   const releaseRef = useRef<(() => void) | null>(null);
 
-  // End whatever sign-in this app holds — revoked on its server (RFC 7009) —
-  // and clear the stored one even when none is live: a token connection, a
-  // disconnect or a failed sign-in must never leave a refresh token behind
-  // for the next start to pick up.
+  // End whatever sign-in this app holds, live or kept — revoked on its server
+  // (RFC 7009) — and clear the stored one even when none is held: a token
+  // connection, a disconnect or a failed sign-in must never leave a refresh
+  // token behind for the next start to pick up.
   const endSignIn = useCallback(async () => {
-    const session = signInRef.current;
+    const session = signInRef.current ?? keptRef.current;
     signInRef.current = null;
+    keptRef.current = null;
     releaseRef.current?.();
     releaseRef.current = null;
     setSignIn(null);
@@ -189,6 +193,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           setStatus("error");
         },
         use: async (session) => {
+          // A retry: the same sign-in, now held by this session.
+          keptRef.current = null;
           signInRef.current = session;
           resetClient();
           const me = await getClient(s, session).whoami();
@@ -201,9 +207,10 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           setStatus("connected");
         },
         end: endSignIn,
-        drop: () => {
+        drop: (session) => {
           // Kept for a retry: remember which server it belongs to, so a
           // reload or a restart resumes it too.
+          keptRef.current = session;
           signInRef.current = null;
           releaseRef.current?.();
           releaseRef.current = null;
@@ -247,6 +254,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       setError(null);
       setProblem(null);
       try {
+        // A new sign-in replaces a kept one, which must not be left valid.
+        if (keptRef.current) await endSignIn();
         if (isTauri) {
           const tokens = await tauriSignIn(transportFor(baseUrl), baseUrl, await tauriInvoke());
           await adopt(storedFrom(baseUrl, tokens, newSignInId()), true);
@@ -265,7 +274,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         fail(e);
       }
     },
-    [adopt, fail],
+    [adopt, fail, endSignIn],
   );
 
   const cancelSignIn = useCallback(() => {

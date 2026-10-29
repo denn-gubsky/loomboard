@@ -71,13 +71,18 @@ export default function PanelApp({
   // The live sign-in, for onSignedOut (is it still the current one?) and a
   // synchronous disconnect.
   const signInRef = useRef<SignInSession | null>(null);
+  // A sign-in kept after loomcycle did not answer: not live, still stored,
+  // and still to be revoked if the person disconnects instead of retrying.
+  const keptRef = useRef<SignInSession | null>(null);
 
-  // End whatever sign-in this panel holds — revoked on its server — and clear
-  // the stored one even when none is live, so a token connection, a
-  // disconnect or a failed sign-in never leaves a refresh token behind.
+  // End whatever sign-in this panel holds, live or kept — revoked on its
+  // server — and clear the stored one even when none is held, so a token
+  // connection, a disconnect or a failed sign-in never leaves a refresh token
+  // behind.
   const endSignIn = useCallback(async () => {
-    const session = signInRef.current;
+    const session = signInRef.current ?? keptRef.current;
     signInRef.current = null;
+    keptRef.current = null;
     setSignIn(null);
     if (session) await session.signOut();
     await refreshStore().clear().catch(() => undefined);
@@ -162,6 +167,8 @@ export default function PanelApp({
           setStatus("error");
         },
         use: async (session) => {
+          // A retry: the same sign-in, now held by this session.
+          keptRef.current = null;
           signInRef.current = session;
           // Set before "connected" is, so no render ever builds a token-less
           // connection for a signed-in panel.
@@ -174,8 +181,9 @@ export default function PanelApp({
           await finishConnect(client, s);
         },
         end: endSignIn,
-        drop: () => {
+        drop: (session) => {
           // Kept for a retry: remember which server it belongs to.
+          keptRef.current = session;
           signInRef.current = null;
           setSignIn(null);
           setSettings(s);
@@ -206,13 +214,15 @@ export default function PanelApp({
       setError(null);
       setProblem(null);
       try {
+        // A new sign-in replaces a kept one, which must not be left valid.
+        if (keptRef.current) await endSignIn();
         const tokens = await extSignIn(baseUrl, chrome.identity);
         await adopt(storedFrom(baseUrl, tokens, newSignInId()), true);
       } catch (e) {
         fail(e);
       }
     },
-    [adopt, fail],
+    [adopt, fail, endSignIn],
   );
 
   const retrySignIn = useCallback(() => {

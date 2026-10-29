@@ -179,6 +179,23 @@ describe("ConnectionProvider", () => {
     expect(seen.filter((s) => s.path === "/v1/_me").every((s) => s.auth === "Bearer at-a-9")).toBe(true);
   });
 
+  it("revokes a kept sign-in when the person disconnects instead of retrying", async () => {
+    failMeOn = A;
+    failStatus = 503;
+    sessionStorage.setItem(
+      SIGNIN_KEY,
+      JSON.stringify({ baseUrl: A, id: "x1", refreshToken: "rt-a-9", accessToken: "at-a-9", expiresAt: Date.now() + 3_600_000 }),
+    );
+    localStorage.setItem("loomboard.connection", JSON.stringify({ baseUrl: A, token: "", auth: "oauth" }));
+    const { ctx } = renderProvider();
+    await waitFor(() => expect(ctx().problem).toBe("unreachable"));
+    act(() => ctx().disconnect());
+    await waitFor(() =>
+      expect(seen.some((s) => s.server === A && s.path === "/v1/_oauth/revoke" && s.form.token === "rt-a-9")).toBe(true),
+    );
+    expect(sessionStorage.getItem(SIGNIN_KEY)).toBeNull();
+  });
+
   it("keeps a new sign-in when loomcycle cannot be reached right after it", async () => {
     returnFromSignInToA();
     const real = globalThis.fetch;
