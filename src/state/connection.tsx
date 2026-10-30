@@ -39,7 +39,7 @@ import {
   signInSettings,
   type ConnectionSettings,
 } from "./settings";
-import { parseConnectMessage, parseConnectOrigins } from "./connectHandoff";
+import { parseConnectMessage, readConnectOrigins } from "./connectHandoff";
 
 /** "signing-in" = waiting on the person in another window (the desktop app's
  *  system browser), so the sign-in screen stays up with a Cancel button. */
@@ -327,16 +327,14 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [connect, resume, fail]);
 
   // Cross-origin connect handoff. A first-party page whose origin is allowlisted
-  // (VITE_LOOMBOARD_CONNECT_ORIGINS) may postMessage
+  // (connectOrigins in /runtime-config.js) may postMessage
   // {type:'loomboard.connect', baseUrl, token} to auto-connect a HOSTED loomboard
   // without the user re-pasting their bearer — the same pattern as loomcycle's
   // /ui login. Empty allowlist ⇒ disabled (the default published builds), so no
   // page can hand this app a token unless a deployment opted in. The validation
   // (origin pin + payload shape) lives in parseConnectMessage (unit-tested).
   useEffect(() => {
-    const allowed = parseConnectOrigins(
-      import.meta.env.VITE_LOOMBOARD_CONNECT_ORIGINS,
-    );
+    const allowed = readConnectOrigins(window.__LOOMBOARD_CONFIG__);
     if (allowed.length === 0) return;
     const onMessage = (e: MessageEvent) => {
       const handoff = parseConnectMessage(allowed, e.origin, e.data);

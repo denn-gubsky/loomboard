@@ -8,11 +8,23 @@ import { describe, expect, it } from "vitest";
 // served from, which need not be loomcycle. no-referrer must be in force
 // before the first of them.
 describe("index.html", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+
   it("sets no-referrer before any subresource is requested", () => {
-    const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
     const meta = html.search(/<meta\s+name="referrer"\s+content="no-referrer"\s*\/?>/);
     const firstSubresource = html.search(/<(link|script|img|style)\b/);
     expect(meta).toBeGreaterThan(-1);
     expect(meta).toBeLessThan(firstSubresource);
+  });
+
+  // The connect handoff reads window.__LOOMBOARD_CONFIG__ once, when the app
+  // mounts. A deferred or async load could land after that and leave a hosted
+  // deployment's allowlist unread, so it must be a plain blocking script ahead
+  // of the bundle.
+  it("runs runtime-config.js to completion before the app bundle", () => {
+    const config = html.match(/<script\b[^>]*src="\/runtime-config\.js"[^>]*>/);
+    expect(config).not.toBeNull();
+    expect(config![0]).not.toMatch(/\b(defer|async|type=)/);
+    expect(html.indexOf(config![0])).toBeLessThan(html.indexOf('src="/src/main.tsx"'));
   });
 });
