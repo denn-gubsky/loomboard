@@ -7,7 +7,7 @@
 // The two guards here are the whole security story, so they live in a pure,
 // unit-tested function rather than inline in the effect:
 //   1. the sender's origin must be in the operator-configured allowlist
-//      (VITE_LOOMBOARD_CONNECT_ORIGINS) — the login-CSRF guard; and
+//      (connectOrigins in /runtime-config.js) — the login-CSRF guard; and
 //   2. the payload must be a well-formed { type:'loomboard.connect', token }.
 
 export interface ConnectHandoff {
@@ -15,12 +15,19 @@ export interface ConnectHandoff {
   token: string;
 }
 
-/** Parse the comma-separated origin allowlist. Empty / unset ⇒ [] ⇒ the
- *  receiver stays disabled, so a build that didn't opt in accepts nothing. */
-export function parseConnectOrigins(raw: string | undefined): string[] {
-  return (raw ?? "")
-    .split(",")
-    .map((s) => s.trim())
+/** The origin allowlist from the settings /runtime-config.js puts on window.
+ *  The file is read when the page loads rather than built in, so one build (the
+ *  Docker image) serves any deployment: its server writes the file from the
+ *  environment, and every other build ships it empty. Anything but an array of
+ *  strings ⇒ [] ⇒ the receiver stays disabled, so a page that didn't opt in
+ *  accepts nothing. */
+export function readConnectOrigins(config: unknown): string[] {
+  const origins = (config as { connectOrigins?: unknown } | null | undefined)
+    ?.connectOrigins;
+  if (!Array.isArray(origins)) return [];
+  return origins
+    .filter((o): o is string => typeof o === "string")
+    .map((o) => o.trim())
     .filter(Boolean);
 }
 

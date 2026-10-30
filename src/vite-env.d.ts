@@ -11,13 +11,6 @@ interface ImportMetaEnv {
    *  the side panel fetches the loomcycle base URL directly (host_permissions
    *  bypass page CORS). */
   readonly VITE_LOOMBOARD_EXTENSION?: string;
-  /** Comma-separated origin allowlist for the cross-origin connect handoff: a
-   *  first-party page (e.g. a loomcycle landing that already holds the user's
-   *  bearer) may postMessage {baseUrl, token} to auto-connect this app. Empty /
-   *  unset ⇒ the receiver is disabled, so a build that doesn't opt in can't be
-   *  handed a token by any page. Set only for a HOSTED loomboard behind a trusted
-   *  landing — NOT baked into the published CLI/desktop/extension builds. */
-  readonly VITE_LOOMBOARD_CONNECT_ORIGINS?: string;
   /** DEV ONLY — bearer to auto-connect with, so `VITE_DEV_TOKEN=… npm run dev`
    *  skips the Connect screen. Read behind `import.meta.env.DEV`, which is the
    *  literal `false` in any `vite build`, so neither the branch nor the inlined
@@ -27,4 +20,12 @@ interface ImportMetaEnv {
    *  http://192.168.0.77:8787. Blank/unset ⇒ the dev proxy's own default target
    *  (LOOMBOARD_PROXY_TARGET, else http://127.0.0.1:8787). */
   readonly VITE_DEV_BASE_URL?: string;
+}
+
+interface Window {
+  /** Set by /runtime-config.js, a classic script index.html loads before the
+   *  app. A hosting server writes its own copy from the environment (the Docker
+   *  image does); every build ships public/runtime-config.js, which sets
+   *  nothing. Unvalidated: read it through readConnectOrigins. */
+  readonly __LOOMBOARD_CONFIG__?: unknown;
 }
