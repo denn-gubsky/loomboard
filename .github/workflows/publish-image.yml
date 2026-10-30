@@ -1,0 +1,138 @@
+name: Publish image
+
+# Builds the hosted loomboard image (docker/Dockerfile) and pushes it on a
+# release tag:
+#   v<x.y.z>  ->  denngubsky/loomboard:<x.y.z> and :latest
+#                 ghcr.io/denn-gubsky/loomboard:<x.y.z> and :latest
+# for linux/amd64 and linux/arm64. Deployments such as loomcycle.cloud pull it
+# instead of building the app themselves; it is configured at start from the
+# environment (docker/serve.mjs).
+#
+# Every run first builds the image for the runner and smoke-tests it; a pull
+# request that touches the image runs that much and pushes nothing.
+#
+# Gate + credentials, as in loomcycle's image workflows: the push runs only when
+# the repo variable DOCKER_PUBLISH_ENABLED is 'true', and logs in with the
+# DOCKER_USERNAME / DOCKER_PASSWORD secrets; GHCR uses the built-in
+# GITHUB_TOKEN. A new GHCR package is created PRIVATE: make it public once in
+# the UI after its first push, or anonymous pulls get 401.
+#
+# workflow_dispatch builds the image for a tag that already exists, e.g. after
+# a failed run. A tag older than docker/ has no Dockerfile and fails the build.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "docker/**"
+      - ".dockerignore"
+      - ".github/workflows/publish-image.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "An existing release tag, e.g. v0.4.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # the GHCR push, with the built-in GITHUB_TOKEN
+    steps:
+      # The tag (a pushed ref, or the dispatch input) reaches the shell only
+      # through env and is matched against a strict pattern before any use.
+      - name: Resolve the version
+        id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG_REF: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            echo "· pull request: build and test only"
+            exit 0
+          fi
+          if [[ ! "$TAG_REF" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::tag $TAG_REF is not v<x.y.z>"
+            exit 1
+          fi
+          {
+            echo "version=${BASH_REMATCH[1]}"
+            echo "ref=refs/tags/$TAG_REF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.v.outputs.ref }}
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build for the smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          load: true
+          tags: loomboard:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The upstream is a closed port: /v1 must come back as the proxy's 502,
+      # not as the app's index.html.
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          docker run -d --name smoke -p 8080:8080 \
+            -e LOOMCYCLE_UPSTREAM=http://127.0.0.1:9 \
+            -e LOOMBOARD_CONNECT_ORIGINS=https://example.com \
+            loomboard:smoke
+          trap 'docker logs smoke; docker rm -f smoke >/dev/null' EXIT
+          for _ in $(seq 1 20); do
+            curl -fs http://127.0.0.1:8080/healthz >/dev/null && break
+            sleep 1
+          done
+          curl -fs http://127.0.0.1:8080/healthz | grep -qx ok
+          curl -fs http://127.0.0.1:8080/ | grep -q '<div id="root"></div>'
+          curl -fs http://127.0.0.1:8080/runtime-config.js | grep -q '"https://example.com"'
+          code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/_me)"
+          [ "$code" = 502 ] || { echo "::error::/v1/_me answered $code, expected the proxy's 502"; exit 1; }
+          echo "· smoke test passed"
+
+      - name: Log in to Docker Hub
+        if: steps.v.outputs.version != '' && vars.DOCKER_PUBLISH_ENABLED == 'true'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Log in to GHCR
+        if: steps.v.outputs.version != '' && vars.DOCKER_PUBLISH_ENABLED == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push
+        if: steps.v.outputs.version != '' && vars.DOCKER_PUBLISH_ENABLED == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          cache-from: type=gha
+          labels: |
+            org.opencontainers.image.source=https://github.com/denn-gubsky/loomboard
+            org.opencontainers.image.version=${{ steps.v.outputs.version }}
+            org.opencontainers.image.licenses=Apache-2.0
+          tags: |
+            denngubsky/loomboard:${{ steps.v.outputs.version }}
+            denngubsky/loomboard:latest
+            ghcr.io/denn-gubsky/loomboard:${{ steps.v.outputs.version }}
+            ghcr.io/denn-gubsky/loomboard:latest
