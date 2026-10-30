@@ -1,0 +1,123 @@
+# Dependency version updates, after loomcycle's .github/dependabot.yml.
+#
+# Version updates run weekly. npm is one entry over both lockfiles, grouped by
+# dependency name (one PR per dependency across both); the other ecosystems
+# group minor and patch updates per entry, majors one PR each. Nothing merges
+# by itself: a bump lands only when CI is green and a person has reviewed it,
+# like any other PR. CI builds everything a bump can break (ci.yml for the
+# app, the packages, the extension, the desktop frontend and the CLI;
+# desktop.yml for the Rust side; publish-image.yml for the Docker image).
+# Security updates are not configured here: they are a repository setting
+# (Settings → Code security → Dependabot security updates), open as soon as an
+# alert fires, and are never folded into these groups
+# (`applies-to: version-updates`).
+#
+# Deliberate exclusions:
+# - @loomcycle/* is the runtime's wire contract and its UI packages. They are
+#   bumped by hand, deliberately, after the matching loomcycle release
+#   (CLAUDE.md, "Cross-repo notes").
+# - Majors of the build toolchain (typescript, vite, vitest, @types/node) and
+#   of React are taken by hand: they need code changes and rarely apply as a
+#   bare version bump.
+# - Tauri minors and majors. `tauri build` refuses an npm package and its Rust
+#   crate on different major.minor releases (@tauri-apps/api with tauri,
+#   @tauri-apps/plugin-X with tauri-plugin-X; src/tauriVersions.test.ts checks
+#   it), and Dependabot bumps npm and Cargo in separate PRs, so each would fail
+#   alone. Move both sides by hand in one PR. Patch releases still arrive.
+# - The Docker image's node base tracks the Node line CI builds with (ci.yml,
+#   node-version 22); moving to a new Node major is a toolchain decision.
+
+version: 2
+
+updates:
+  # --- npm: the app with its workspace package, and the CLI ----------------
+  # The root lockfile covers packages/workflow too (an npm workspace). cli/
+  # keeps its own lockfile, so it is a second directory of the same entry.
+  - package-ecosystem: npm
+    directories:
+      - /
+      - /cli
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "@loomcycle/*"
+      - dependency-name: "@tauri-apps/api"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@tauri-apps/plugin-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitejs/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major"]
+    groups:
+      npm-by-dependency:
+        applies-to: version-updates
+        group-by: dependency-name
+        patterns: ["*"]
+
+  # --- Cargo: the desktop app ----------------------------------------------
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # See the header: these move with their npm packages, by hand.
+      - dependency-name: "tauri"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "tauri-plugin-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      cargo-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # --- GitHub Actions -------------------------------------------------------
+  # Also moves the commit-SHA pins (publish-image.yml), keeping their comments.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # --- Docker base image (docker/Dockerfile) ---------------------------------
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # See the header: the Node line follows CI's.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]

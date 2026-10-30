@@ -1,8 +1,11 @@
 name: CI
 
-# Green-gate on every PR and every push to main: typecheck, unit tests, and the
-# package builds (the @loomboard/chat library + the @loomboard/app standalone
-# SPA + the @loomboard/workflow canvas).
+# Green-gate on every PR and every push to main: typecheck, unit tests, and every
+# build a dependency update can break (the @loomboard/chat library, the
+# @loomboard/app standalone SPA and its CLI, the @loomboard/workflow canvas, the
+# Chrome extension and the desktop app's frontend). Dependabot's weekly PRs
+# (.github/dependabot.yml) land only through this gate; the desktop app's Rust
+# side is desktop.yml.
 on:
   pull_request:
   push:
@@ -31,6 +34,16 @@ jobs:
       - run: npm test
       - run: npm run build:lib
       - run: npm run build:standalone
+
+      # The CLI keeps its own lockfile, so its dependencies are installed and
+      # updated apart from the app's. Its test runs the SPA built just above.
+      - run: npm ci --prefix cli
+      - run: npm --prefix cli test
+
+      # Built only by release.yml otherwise, on a tag: a dependency that broke
+      # them would surface as a failed release.
+      - run: npm run build:extension
+      - run: npm run build:tauri
 
       # The app's vitest excludes packages/** (it has its own config and jsdom
       # environment), so without these the package's tests would never run in
