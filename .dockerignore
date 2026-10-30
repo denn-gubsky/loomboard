@@ -1,0 +1,28 @@
+# The image is built from an allowlist: everything is left out unless named
+# here. The repo root holds .env.local with the loomcycle bearer, and a build
+# context is sent whole to the builder, so a denylist that missed one name
+# would ship the secret to it.
+*
+
+!package.json
+!package-lock.json
+!tsconfig.json
+!vite.config.ts
+!vite.config.extension.ts
+!index.html
+!public/
+!src/
+!extension/
+!packages/workflow/package.json
+!packages/workflow/src/
+!docker/serve.mjs
+
+# Build output and installs from the working copy: the image makes its own.
+**/node_modules
+**/dist
+**/*.test.*
+
+# No env file below the root at all, and at the root only the build flag the
+# standalone build loads (VITE_LOOMBOARD_STANDALONE=true, tracked, no secret).
+**/.env*
+!.env.standalone

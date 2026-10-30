@@ -4,7 +4,7 @@ An embeddable **React chat component** for the [loomcycle](https://www.npmjs.com
 
 It is a **thin client**: it talks to a running loomcycle over its `/v1/*` HTTP+SSE wire via the `@loomcycle/client` SDK. There is no backend of its own — loomcycle owns auth, persistence, and the agent loop. The component drives **one conversation**; your app owns which conversation is shown and how it's persisted.
 
-> **Just want to run it, not embed it?** Install the standalone app: `npm i -g @loomboard/app`, then `loomboard`. It serves the full UI and proxies to your loomcycle — see [`cli/`](cli/).
+> **Just want to run it, not embed it?** Install the standalone app: `npm i -g @loomboard/app`, then `loomboard`. It serves the full UI and proxies to your loomcycle — see [`cli/`](cli/). To host it next to a loomcycle, use the Docker image — see [`docker/`](docker/).
 
 ## Install
 
