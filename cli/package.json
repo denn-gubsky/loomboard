@@ -33,6 +33,7 @@
   "scripts": {
     "build": "cd .. && npm run build:standalone",
     "start": "node bin/loomboard.mjs",
+    "test": "node --test test/cli.mjs",
     "prepack": "cd .. && npm run build:standalone"
   },
   "dependencies": {

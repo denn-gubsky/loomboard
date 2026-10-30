@@ -9,7 +9,10 @@ name: Publish image
 # environment (docker/serve.mjs).
 #
 # Every run first builds the image for the runner and smoke-tests it; a pull
-# request that touches the image runs that much and pushes nothing.
+# request that touches the image runs that much and pushes nothing. That
+# includes a change to the root lockfile, Dependabot's npm bumps among them:
+# the image builds on Alpine (musl), where ci.yml builds on glibc, so a bump
+# can break the image alone.
 #
 # Gate + credentials, as in loomcycle's image workflows: the push runs only when
 # the repo variable DOCKER_PUBLISH_ENABLED is 'true', and logs in with the
@@ -27,6 +30,7 @@ on:
     paths:
       - "docker/**"
       - ".dockerignore"
+      - "package-lock.json"
       - ".github/workflows/publish-image.yml"
   workflow_dispatch:
     inputs:
