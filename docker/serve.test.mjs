@@ -81,6 +81,30 @@ describe("serve.mjs", () => {
     expect(hit.headers["x-loomcycle-target"]).toBeUndefined();
   });
 
+  it("forwards the path it checked, so dot segments cannot step out of /v1", async () => {
+    const before = runtime.seen.length;
+    // Climbs out once resolved: the app answers, the runtime never sees it.
+    for (const path of ["/v1/%2e%2e/%2e%2e/metrics", "/v1\\..\\..\\metrics", "/v1/../metrics"]) {
+      const res = await get(port, path);
+      expect(res.body).toContain("<div id=root>");
+    }
+    expect(runtime.seen.length).toBe(before);
+    // Stays inside: the runtime gets the resolved path, not the one sent.
+    await get(port, "/v1/runs/../_me");
+    expect(runtime.seen.at(-1).url).toBe("/v1/_me");
+  });
+
+  it("keeps the encoded slashes the SDK puts in ids and paths", async () => {
+    await get(port, "/v1/paths/%2Floomboard%2Fplans?depth=1");
+    expect(runtime.seen.at(-1).url).toBe("/v1/paths/%2Floomboard%2Fplans?depth=1");
+  });
+
+  it("refuses a request target that is not a plain path", async () => {
+    const before = runtime.seen.length;
+    expect((await get(port, "//evil.example/v1/_me")).status).toBe(400);
+    expect(runtime.seen.length).toBe(before);
+  });
+
   it("proxies the OAuth metadata that sign-in reads from the root", async () => {
     const res = await get(port, "/.well-known/oauth-authorization-server");
     expect(JSON.parse(res.body)).toEqual({ from: "pinned" });

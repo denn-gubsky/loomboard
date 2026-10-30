@@ -86,7 +86,7 @@ export function createServer({ root, upstream, connectOrigins }) {
   // plain data literal.
   const runtimeConfig = `window.__LOOMBOARD_CONFIG__ = ${JSON.stringify({ connectOrigins })};\n`;
 
-  function proxy(req, res) {
+  function proxy(req, res, path) {
     const headers = { ...req.headers, host: UP.host };
     delete headers["x-loomcycle-target"];
     const up = request(
@@ -94,7 +94,7 @@ export function createServer({ root, upstream, connectOrigins }) {
         protocol: UP.protocol,
         hostname: UP.hostname,
         port: UP.port || (UP.protocol === "https:" ? 443 : 80),
-        path: req.url,
+        path,
         method: req.method,
         headers,
       },
@@ -133,17 +133,26 @@ export function createServer({ root, upstream, connectOrigins }) {
   }
 
   return http.createServer((req, res) => {
+    // The proxy decision and the path it forwards are the same string: the
+    // parsed path, with dot segments (also %2e and backslash forms) resolved but
+    // still percent-encoded. Forwarding req.url instead would let a path that is
+    // checked as /v1/... reach the runtime as something else. Encoded slashes
+    // stay as they are: the SDK encodes ids and paths into its /v1 URLs.
+    const raw = req.url || "/";
+    let url;
     let pathname;
     try {
-      pathname = decodeURIComponent(new URL(req.url || "/", "http://x").pathname);
+      if (!raw.startsWith("/") || raw.startsWith("//")) throw new Error("not a path");
+      url = new URL(raw, "http://x");
+      pathname = decodeURIComponent(url.pathname);
     } catch {
       res.writeHead(400, { "content-type": "text/plain" });
       res.end("bad request");
       return;
     }
 
-    if (proxied(pathname)) {
-      if (UP) return proxy(req, res);
+    if (proxied(url.pathname)) {
+      if (UP) return proxy(req, res, url.pathname + url.search);
       res.writeHead(404, { "content-type": "text/plain" });
       res.end("no loomcycle upstream is configured");
       return;
