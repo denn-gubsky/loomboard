@@ -38,6 +38,6 @@
   },
   "dependencies": {
     "http-proxy-middleware": "^3.0.7",
-    "sirv": "^2.0.4"
+    "sirv": "^3.0.2"
   }
 }
