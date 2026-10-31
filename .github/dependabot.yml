@@ -1,10 +1,12 @@
 # Dependency version updates, after loomcycle's .github/dependabot.yml.
 #
-# Version updates run weekly. npm is one entry over both lockfiles, grouped by
-# dependency name (one PR per dependency across both); the other ecosystems
-# group minor and patch updates per entry, majors one PR each. Nothing merges
-# by itself: a bump lands only when CI is green and a person has reviewed it,
-# like any other PR. CI builds everything a bump can break (ci.yml for the
+# Version updates run weekly. Every ecosystem batches its minor and patch
+# updates into one PR per directory and opens majors one PR each, so a quiet
+# week is one or two PRs, not one per package (a per-dependency npm grouping
+# opened ten at once). The cost: one bad bump turns its batch red, and CI's
+# log names the package to drop or fix. Nothing merges by itself: a bump
+# lands only when CI is green and a person has reviewed it, like any other
+# PR. CI builds everything a bump can break (ci.yml for the
 # app, the packages, the extension, the desktop frontend and the CLI;
 # desktop.yml for the Rust side; publish-image.yml for the Docker image).
 # Security updates are not configured here: they are a repository setting
@@ -73,10 +75,9 @@ updates:
       - dependency-name: "@types/react-dom"
         update-types: ["version-update:semver-major"]
     groups:
-      npm-by-dependency:
+      npm-minor-patch:
         applies-to: version-updates
-        group-by: dependency-name
-        patterns: ["*"]
+        update-types: [minor, patch]
 
   # --- Cargo: the desktop app ----------------------------------------------
   - package-ecosystem: cargo
