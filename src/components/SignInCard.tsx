@@ -41,7 +41,9 @@ interface Props {
 // The sign-in screen shared by the app (web, desktop) and the extension's side
 // panel. The default is "Sign in with loomcycle": the person enters only the
 // Base URL and signs in on loomcycle's own page. Pasting a bearer stays
-// available under Advanced, for token-only deployments and automation.
+// available under Advanced, for token-only deployments and automation. Open,
+// Advanced is the path: its button is the primary one and the sign-in button
+// goes away, so the screen offers one action at a time.
 export default function SignInCard(p: Props) {
   const [token, setToken] = useState(p.initialToken);
   const [advanced, setAdvanced] = useState(p.initialToken !== "");
@@ -56,7 +58,11 @@ export default function SignInCard(p: Props) {
 
   function onSignIn(e: FormEvent) {
     e.preventDefault();
-    if (!p.busy) p.onSignIn();
+    if (p.busy) return;
+    // Enter in the Base URL field still submits this form when its button is
+    // hidden; with Advanced open it means the token path, the one on screen.
+    if (advanced) p.onConnectToken(token.trim());
+    else p.onSignIn();
   }
   function onToken(e: FormEvent) {
     e.preventDefault();
@@ -105,7 +111,7 @@ export default function SignInCard(p: Props) {
                 </button>
               )}
             </div>
-          ) : (
+          ) : advanced ? null : (
             <button type="submit" className="btn-primary" disabled={p.busy}>
               {p.busy ? (
                 <>
@@ -143,7 +149,7 @@ export default function SignInCard(p: Props) {
                 here.
               </small>
             </label>
-            <button type="submit" className="btn-ghost" disabled={p.busy}>
+            <button type="submit" className="btn-primary" disabled={p.busy}>
               Connect with token
             </button>
           </form>
