@@ -40,7 +40,7 @@ function dynamicLoomcycleProxy(): PluginOption {
         router: (req) => {
           const t = req.headers["x-loomcycle-target"];
           const target = Array.isArray(t) ? t[0] : t;
-          return target || undefined;
+          return target || defaultTarget;
         },
       });
       server.middlewares.use(proxy);
