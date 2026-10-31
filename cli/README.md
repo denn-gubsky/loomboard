@@ -1,6 +1,6 @@
 # @loomboard/app
 
-Run the [loomboard](https://github.com/denn-gubsky/loomboard) chat app locally — no build step, no CORS setup. Works on Linux, macOS, and Windows (anywhere Node ≥ 18 runs).
+Run the [loomboard](https://github.com/denn-gubsky/loomboard) chat app locally — no build step, no CORS setup. Works on Linux, macOS, and Windows (anywhere Node ≥ 22.15 runs).
 
 ```bash
 npm install -g @loomboard/app
