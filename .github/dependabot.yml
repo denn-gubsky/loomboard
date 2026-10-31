@@ -16,6 +16,9 @@
 # - @loomcycle/* is the runtime's wire contract and its UI packages. They are
 #   bumped by hand, deliberately, after the matching loomcycle release
 #   (CLAUDE.md, "Cross-repo notes").
+# - mermaid majors move with @loomcycle/explorer, which names mermaid as a
+#   peer for one major (^11 up to 0.9.0); a mermaid major alone fails npm ci
+#   with ERESOLVE (#153). Take it in the explorer bump that accepts it.
 # - Majors of the build toolchain (typescript, vite, vitest, @types/node) and
 #   of React are taken by hand: they need code changes and rarely apply as a
 #   bare version bump.
@@ -44,6 +47,9 @@ updates:
       prefix: "chore(deps)"
     ignore:
       - dependency-name: "@loomcycle/*"
+      # See the header: a peer of @loomcycle/explorer.
+      - dependency-name: "mermaid"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "@tauri-apps/api"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@tauri-apps/plugin-*"
