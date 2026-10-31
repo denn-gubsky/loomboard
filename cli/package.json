@@ -37,7 +37,7 @@
     "prepack": "cd .. && npm run build:standalone"
   },
   "dependencies": {
-    "http-proxy-middleware": "^3.0.7",
+    "http-proxy-middleware": "^4.2.1",
     "sirv": "^3.0.2"
   }
 }
