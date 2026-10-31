@@ -1,5 +1,8 @@
-import * as pdfjs from "pdfjs-dist";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+// The legacy build: the modern one calls Math.sumPrecise, Uint8Array#toHex and
+// the like unpolyfilled, which the desktop app's system WebView (any macOS
+// WebKit, the distro's WebKitGTK) and older browsers may lack.
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth/mammoth.browser.js";
 import { isDocx, isPdf } from "./attachments";
 
@@ -16,7 +19,10 @@ export async function extractText(file: File): Promise<string> {
 
 async function extractPdf(file: File): Promise<string> {
   const data = await file.arrayBuffer();
-  const doc = await pdfjs.getDocument({ data }).promise;
+  // pdf.js 5+ frees a document through its loading task; the document itself
+  // has no destroy() any more.
+  const task = pdfjs.getDocument({ data });
+  const doc = await task.promise;
   try {
     const pages: string[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
@@ -30,7 +36,7 @@ async function extractPdf(file: File): Promise<string> {
     }
     return pages.join("\n\n").trim();
   } finally {
-    await doc.destroy();
+    await task.destroy();
   }
 }
 
