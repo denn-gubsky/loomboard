@@ -57,7 +57,7 @@ jobs:
             tauri_args: ""
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
@@ -147,7 +147,7 @@ jobs:
     name: chrome extension
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v5
         with:
