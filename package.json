@@ -82,7 +82,7 @@
     "remark-math": "^6.0.0"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.0.0-beta.33",
+    "@crxjs/vite-plugin": "^3.0.0",
     "@loomcycle/client": "1.126.0",
     "@loomcycle/library": "0.2.0",
     "@tauri-apps/api": "^2.11.1",
