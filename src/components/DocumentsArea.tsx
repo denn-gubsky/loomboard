@@ -18,7 +18,23 @@ const UniverseNavigatorPane = lazy(() => import("./UniverseNavigatorPane"));
 // Documents" on a result): it opens straight in the viewer, by id — a document
 // id does not say where it sits in the Path tree, so the explorer cannot be
 // pointed at it.
-export default function DocumentsArea({ target, onClearTarget }: { target?: DocumentTarget; onClearTarget: () => void }) {
+// A saved star-map view another surface asked for (Boards' "Open in the star
+// map"): Documents opens on the stars navigator, in the view's scope, and the
+// map restores the view once its sky has loaded.
+export interface StarView {
+  viewId: string;
+  scope: "user" | "tenant";
+}
+
+export default function DocumentsArea({
+  target,
+  starView,
+  onClearTarget,
+}: {
+  target?: DocumentTarget;
+  starView?: StarView;
+  onClearTarget: () => void;
+}) {
   const { settings, principal, signIn } = useConnection();
   const connection = useMemo<Connection | null>(
     () => (settings ? buildConnection(settings, signIn) : null),
@@ -48,6 +64,11 @@ export default function DocumentsArea({ target, onClearTarget }: { target?: Docu
       <PathExplorer
         connection={connection}
         principal={principal ?? undefined}
+        // `navigator` asks the explorer for stars (and is remembered like the
+        // toggle); `defaultScope` is read once, on mount — Boards always
+        // mounts Documents afresh, so a view lands in its own scope.
+        navigator={starView ? "stars" : undefined}
+        defaultScope={starView?.scope}
         onError={(e) => console.error("[explorer]", e)}
         // Supplying the slot is what makes the explorer show its `tree | stars`
         // toggle (persisted under localStorage `loomcycle.explorer.navigator`);
@@ -55,7 +76,7 @@ export default function DocumentsArea({ target, onClearTarget }: { target?: Docu
         // DocumentViewer and has no navigator.
         renderNavigator={(ctx) => (
           <Suspense fallback={<div className="explorer-pane__loading">Loading the star map…</div>}>
-            <UniverseNavigatorPane ctx={ctx} connection={connection} />
+            <UniverseNavigatorPane ctx={ctx} connection={connection} initialView={starView?.viewId} />
           </Suspense>
         )}
       />

@@ -65,10 +65,10 @@
   },
   "dependencies": {
     "@loomcycle/def-fields": "0.4.0",
-    "@loomcycle/explorer": "0.11.0",
-    "@loomcycle/loomboard": "0.1.0",
+    "@loomcycle/explorer": "0.12.0",
+    "@loomcycle/loomboard": "0.2.0",
     "@loomcycle/memory-view": "0.1.0",
-    "@loomcycle/universe": "0.1.0",
+    "@loomcycle/universe": "0.2.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.19.1",
     "lucide-react": "^1.62.0",
