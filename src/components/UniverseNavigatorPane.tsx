@@ -16,9 +16,14 @@ import type { Connection } from "../chat/lib/createClient";
 export default function UniverseNavigatorPane({
   ctx,
   connection,
+  initialView,
 }: {
   ctx: NavigatorContext;
   connection: Connection;
+  // A saved star-map view (its document id) to open on once the sky has
+  // loaded — how a Boards view lands here. The map reports the view's
+  // selection through onSelect, so the explorer's viewer opens it too.
+  initialView?: string;
 }) {
   return (
     <UniverseNavigator
@@ -31,6 +36,7 @@ export default function UniverseNavigatorPane({
       maximized={ctx.maximized}
       onToggleMaximize={ctx.onToggleMaximize}
       subject={ctx.subject}
+      initialView={initialView}
     />
   );
 }

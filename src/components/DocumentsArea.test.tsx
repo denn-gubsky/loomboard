@@ -22,14 +22,24 @@ const ctx: NavigatorContext = {
 
 vi.mock("@loomcycle/explorer", () => ({
   PathExplorer: (props: ComponentProps<typeof RealPathExplorer>) => (
-    <div data-testid="explorer">{props.renderNavigator ? props.renderNavigator(ctx) : "tree only"}</div>
+    <div data-testid="explorer" data-navigator={props.navigator ?? ""} data-scope={props.defaultScope ?? ""}>
+      {props.renderNavigator ? props.renderNavigator(ctx) : "tree only"}
+    </div>
   ),
   DocumentViewer: () => <div data-testid="viewer" />,
 }));
 
 vi.mock("./UniverseNavigatorPane", () => ({
-  default: ({ ctx, connection }: { ctx: NavigatorContext; connection: { baseUrl: string } }) => (
-    <div data-testid="stars">
+  default: ({
+    ctx,
+    connection,
+    initialView,
+  }: {
+    ctx: NavigatorContext;
+    connection: { baseUrl: string };
+    initialView?: string;
+  }) => (
+    <div data-testid="stars" data-initial-view={initialView ?? ""}>
       {ctx.scope}/{ctx.subject}/{ctx.reloadToken}@{connection.baseUrl}
     </div>
   ),
@@ -59,6 +69,19 @@ describe("DocumentsArea", () => {
     const stars = await screen.findByTestId("stars");
     expect(stars.textContent).toBe("tenant/ada/3@https://lc.example");
     expect(screen.queryByText("tree only")).toBeNull();
+    // No saved view asked for: the explorer keeps its own navigator choice
+    // and scope, and the map opens on nothing in particular.
+    expect(screen.getByTestId("explorer").dataset.navigator).toBe("");
+    expect(screen.getByTestId("explorer").dataset.scope).toBe("");
+    expect(stars.dataset.initialView).toBe("");
+  });
+
+  it("opens a saved star-map view on the stars navigator, in its scope, and hands the map the view id", async () => {
+    render(<DocumentsArea starView={{ viewId: "view-7", scope: "tenant" }} onClearTarget={() => {}} />);
+    const stars = await screen.findByTestId("stars");
+    expect(screen.getByTestId("explorer").dataset.navigator).toBe("stars");
+    expect(screen.getByTestId("explorer").dataset.scope).toBe("tenant");
+    expect(stars.dataset.initialView).toBe("view-7");
   });
 
   it("opens a targeted document in a plain viewer, without a navigator", () => {

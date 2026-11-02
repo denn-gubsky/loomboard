@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { Library } from "@loomcycle/library";
 import type { DocumentTarget } from "@loomboard/workflow";
 import { MemoryView } from "@loomcycle/memory-view";
-import { Loomboard } from "@loomcycle/loomboard";
+import { Loomboard, type BoardScope, type SavedView } from "@loomcycle/loomboard";
 import { ConnectionProvider, useConnection } from "./state/connection";
 import { serverCapabilities } from "./lib/capabilities";
 import {
@@ -16,7 +16,7 @@ import type { Connection } from "./chat/lib/createClient";
 import { buildConnection } from "./lib/buildConnection";
 import { getClient } from "./lib/loomcycle";
 import ConnectionSettings from "./components/ConnectionSettings";
-import DocumentsArea from "./components/DocumentsArea";
+import DocumentsArea, { type StarView } from "./components/DocumentsArea";
 import Sidebar, { type SidebarView } from "./components/Sidebar";
 import Chat from "./chat/Chat";
 import AgentPortfolioGrid from "./components/agentchat/AgentPortfolioGrid";
@@ -123,7 +123,7 @@ function MemoryArea() {
 // The RFC BT view layer (@loomcycle/loomboard): saved table / cards / kanban /
 // list views over loomcycle Documents. Same connection seam; its own scoped
 // styles. Boards persist as `type=view` Documents in the user/tenant scope.
-function BoardsArea() {
+function BoardsArea({ onOpenUniverse }: { onOpenUniverse?: (view: SavedView, scope: BoardScope) => void }) {
   const { settings, signIn } = useConnection();
   const connection = useMemo<Connection | null>(
     () => (settings ? buildConnection(settings, signIn) : null),
@@ -132,7 +132,13 @@ function BoardsArea() {
   if (!connection) return null;
   return (
     <section className="boards-pane">
-      <Loomboard connection={connection} onError={(e) => console.error("[loomboard]", e)} />
+      <Loomboard
+        connection={connection}
+        // A view saved from the star map (layout kind "universe") gets an
+        // "Open in the star map" button that lands in Documents → stars.
+        onOpenUniverse={onOpenUniverse}
+        onError={(e) => console.error("[loomboard]", e)}
+      />
     </section>
   );
 }
@@ -164,12 +170,20 @@ function AppShell() {
   // A document the canvas asked the Documents view to show. Picking any view
   // from the rail drops it, so Documents opens on the explorer as usual.
   const [docTarget, setDocTarget] = useState<DocumentTarget>();
+  // A saved star-map view Boards asked the Documents view to open. Same
+  // lifetime as docTarget: any pick from the rail drops it.
+  const [starView, setStarView] = useState<StarView>();
   const changeView = useCallback((v: SidebarView) => {
     setDocTarget(undefined);
+    setStarView(undefined);
     setView(v);
   }, []);
   const openDocument = useCallback((t: DocumentTarget) => {
     setDocTarget(t);
+    setView("documents");
+  }, []);
+  const openStarView = useCallback((view: SavedView, scope: BoardScope) => {
+    setStarView({ viewId: view.documentId, scope });
     setView("documents");
   }, []);
   // Dev-only preview of the agent-tile board via `?board` — no nav entry yet.
@@ -190,11 +204,11 @@ function AppShell() {
           ) : shown === "library" ? (
             <LibraryArea />
           ) : shown === "documents" ? (
-            <DocumentsArea target={docTarget} onClearTarget={() => setDocTarget(undefined)} />
+            <DocumentsArea target={docTarget} starView={starView} onClearTarget={() => setDocTarget(undefined)} />
           ) : shown === "memory" ? (
             <MemoryArea />
           ) : shown === "boards" ? (
-            <BoardsArea />
+            <BoardsArea onOpenUniverse={capabilities.views.documents ? openStarView : undefined} />
           ) : shown === "workflow" ? (
             <WorkflowArea />
           ) : shown === "canvas" ? (
