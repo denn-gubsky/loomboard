@@ -1,9 +1,14 @@
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { DocumentViewer, PathExplorer, type DocScope } from "@loomcycle/explorer";
 import type { DocumentTarget } from "@loomboard/workflow";
 import { useConnection } from "../state/connection";
 import type { Connection } from "../chat/lib/createClient";
 import { buildConnection } from "../lib/buildConnection";
+
+// The `stars` navigator (loomcycle RFC FQ): the 3D star map of the scope, in
+// its own lazy chunk so three.js is fetched only when a reader flips the
+// explorer from `tree` to `stars`.
+const UniverseNavigatorPane = lazy(() => import("./UniverseNavigatorPane"));
 
 // The Path VFS + chunked-graph Document explorer (@loomcycle/explorer). Same
 // connection/principal seam as the Library. Documents need SQL Memory enabled
@@ -44,6 +49,15 @@ export default function DocumentsArea({ target, onClearTarget }: { target?: Docu
         connection={connection}
         principal={principal ?? undefined}
         onError={(e) => console.error("[explorer]", e)}
+        // Supplying the slot is what makes the explorer show its `tree | stars`
+        // toggle (persisted under localStorage `loomcycle.explorer.navigator`);
+        // the tree stays the default. The `target` branch above is a single
+        // DocumentViewer and has no navigator.
+        renderNavigator={(ctx) => (
+          <Suspense fallback={<div className="explorer-pane__loading">Loading the star map…</div>}>
+            <UniverseNavigatorPane ctx={ctx} connection={connection} />
+          </Suspense>
+        )}
       />
     </section>
   );
