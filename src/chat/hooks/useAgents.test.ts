@@ -54,4 +54,27 @@ describe("pickableAgents", () => {
     const list = [agent("a"), agent("b")];
     expect(pickableAgents(list, "a")).toEqual(list);
   });
+
+  const isChat = (name: string) => name.startsWith("chat/");
+
+  it("offers only the agents the host's filter accepts", () => {
+    const list = [agent("chat/medium"), agent("team/writer"), agent("chat/local")];
+    expect(pickableAgents(list, "", isChat).map((a) => a.name)).toEqual(["chat/medium", "chat/local"]);
+  });
+
+  it("keeps the selected agent even when the filter rejects it", () => {
+    const list = [agent("chat/medium"), agent("team/writer")];
+    expect(pickableAgents(list, "team/writer", isChat).map((a) => a.name)).toEqual(["chat/medium", "team/writer"]);
+  });
+
+  it("still hides a retired agent the filter accepts", () => {
+    const list = [agent("chat/medium"), agent("chat/old", { active_retired: true })];
+    expect(pickableAgents(list, "", isChat).map((a) => a.name)).toEqual(["chat/medium"]);
+  });
+
+  it("ignores a filter that would leave nothing else to pick", () => {
+    const list = [agent("default"), agent("team/writer")];
+    expect(pickableAgents(list, "", isChat)).toEqual(list);
+    expect(pickableAgents(list, "default", isChat)).toEqual(list);
+  });
 });

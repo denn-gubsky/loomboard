@@ -35,11 +35,21 @@ export function isRetiredAgent(a: AgentEntry): boolean {
   return !a.in_static && a.version_count > 0 && !a.live_version_count;
 }
 
-/** Agents pickable in the dropdown: retired ones are hidden, except the
- *  currently-selected agent (`selected`) — a chat already on a since-retired
- *  agent must still show its selection rather than silently switch. Pure. */
-export function pickableAgents(agents: AgentEntry[], selected: string): AgentEntry[] {
-  return agents.filter((a) => !isRetiredAgent(a) || a.name === selected);
+/** Agents pickable in the dropdown: retired ones are hidden, and so are the
+ *  ones the host's `filter` rejects — except the currently-selected agent
+ *  (`selected`): a chat already on a since-retired or filtered-out agent must
+ *  still show its selection rather than silently switch. A filter that would
+ *  leave nothing else to pick is ignored, so a runtime without the agents it
+ *  looks for still offers every agent instead of an empty list. Pure. */
+export function pickableAgents(
+  agents: AgentEntry[],
+  selected: string,
+  filter?: (name: string) => boolean,
+): AgentEntry[] {
+  const live = agents.filter((a) => !isRetiredAgent(a) || a.name === selected);
+  if (!filter) return live;
+  const kept = live.filter((a) => a.name === selected || filter(a.name));
+  return kept.some((a) => a.name !== selected) ? kept : live;
 }
 
 /** A runnable-agent catalog row (RFC BY) as a minimal AgentEntry — enough for the

@@ -53,7 +53,11 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   // The active chat's live run state, published by <Chat> — the aggregate feed
   // lags a just-started run and can't tell working from parked, so its tile dot
   // would otherwise read stale (and pulse forever on a parked question).
-  const { status: activeStatus, setRecap } = useActiveChat();
+  // showAllAgents is off by default: the list is the user's CHATS, and
+  // loomcycle gives a session to plenty of non-chat work (team members,
+  // board-spawned agents) that would otherwise crowd it out. Ticking "All
+  // agents" shows every session in scope, and every agent in the chat's picker.
+  const { status: activeStatus, setRecap, showAllAgents, setShowAllAgents } = useActiveChat();
 
   // Newest run per session — for the tile's live status dot + preview refresh.
   const runBySession = useMemo(() => {
@@ -111,10 +115,6 @@ export default function ConversationList({ collapsed }: { collapsed: boolean }) 
   });
 
   const [showArchived, setShowArchived] = useState(false);
-  // Off by default: the list is the user's CHATS, and loomcycle gives a session
-  // to plenty of non-chat work (team members, board-spawned agents) that would
-  // otherwise crowd it out. Ticking this shows every session in scope.
-  const [showAllAgents, setShowAllAgents] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>(NO_FILTER);
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
   const [renamingKey, setRenamingKey] = useState<string | null>(null);

@@ -13,6 +13,7 @@ import {
 import { ActiveChatProvider, useActiveChat } from "./state/activeChat";
 import type { Connection } from "./chat/lib/createClient";
 import { buildConnection } from "./lib/buildConnection";
+import { isChatAgent } from "./lib/chatIndex";
 import { getClient } from "./lib/loomcycle";
 import ConnectionSettings from "./components/ConnectionSettings";
 import DocumentsArea, { type DocTarget, type StarView } from "./components/DocumentsArea";
@@ -47,7 +48,7 @@ function initialDocPanelWidth(): number {
 function ChatArea({ onOpenInDocuments }: { onOpenInDocuments?: (t: DocTarget) => void }) {
   const { settings, principal, signIn, capabilities } = useConnection();
   const { conversations, active, update } = useConversations();
-  const { setStatus, recap } = useActiveChat();
+  const { setStatus, recap, showAllAgents } = useActiveChat();
   // Agents the user has run before — suggestions for the picker's free-text
   // fallback when the agent library can't be listed (a user token).
   const knownAgents = useMemo(
@@ -115,6 +116,8 @@ function ChatArea({ onOpenInDocuments }: { onOpenInDocuments?: (t: DocTarget) =>
           onRunStatus={setStatus}
           recap={recap ?? undefined}
           knownAgents={knownAgents}
+          // The sidebar's "All agents" box widens the picker with the list.
+          agentFilter={showAllAgents ? undefined : isChatAgent}
           // Same gate as the canvas's "Open in Documents": a principal who
           // cannot read Documents gets previews only.
           onOpenDocument={capabilities.views.documents ? openLinked : undefined}

@@ -14,6 +14,9 @@ import {
 //  - recap flows sidebar → main: the History summary lives with the chat list
 //    (useChatHistory); ConversationList publishes it and the main pane renders
 //    it as a ghost message (the tile has no room for it).
+//  - showAllAgents is one switch for both sides: off, the chat list and the
+//    chat's agent picker offer only chat agents (lib/chatIndex isChatAgent);
+//    the sidebar's "All agents" box turns it on for both.
 
 export interface ActiveChatStatus {
   /** The agent is actively working right now (not parked awaiting input). */
@@ -30,6 +33,8 @@ interface ActiveChatState {
   /** The active chat's stored recap summary, or null. */
   recap: string | null;
   setRecap: (s: string | null) => void;
+  showAllAgents: boolean;
+  setShowAllAgents: (v: boolean) => void;
 }
 
 const Ctx = createContext<ActiveChatState | null>(null);
@@ -37,9 +42,10 @@ const Ctx = createContext<ActiveChatState | null>(null);
 export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ActiveChatStatus>(IDLE);
   const [recap, setRecap] = useState<string | null>(null);
+  const [showAllAgents, setShowAllAgents] = useState(false);
   const value = useMemo(
-    () => ({ status, setStatus, recap, setRecap }),
-    [status, recap],
+    () => ({ status, setStatus, recap, setRecap, showAllAgents, setShowAllAgents }),
+    [status, recap, showAllAgents],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

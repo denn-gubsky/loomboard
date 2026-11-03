@@ -46,6 +46,11 @@ export interface ChatProps {
   /** Agent-name suggestions for the free-text fallback the picker shows when the
    *  agent library can't be read (a user token 403s on the tenant-scoped list). */
   knownAgents?: string[];
+  /** Which agents the picker offers, by name — e.g. only a host's chat
+   *  agents. The conversation's current agent is always offered, and a filter
+   *  that matches no agent is ignored, so the picker is never left empty.
+   *  Omit to offer every agent. */
+  agentFilter?: (name: string) => boolean;
   /** Whether pressing Escape cancels this chat's current turn (RFC BH). Default
    *  true. The Escape listener is window-global, so a host stacking several
    *  <Chat> panes must set this true for ONLY the focused pane — otherwise one
@@ -76,6 +81,7 @@ export default function Chat({
   onRunStatus,
   recap,
   knownAgents,
+  agentFilter,
   escapeStops = true,
   initialInput,
   onOpenDocument,
@@ -167,6 +173,7 @@ export default function Chat({
           loading={loading}
           error={error}
           knownAgents={knownAgents}
+          agentFilter={agentFilter}
         />
         <button
           className={custom ? "config-toggle active" : "config-toggle"}
