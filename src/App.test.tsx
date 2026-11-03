@@ -14,7 +14,7 @@ import App from "./App";
 // Everything around that path is stubbed; the rail is two buttons.
 
 // vi.mock factories hoist above every statement, so what they share is hoisted too.
-const { passthrough, skyView, ctx, chatMounts, viewerMounts, chatConversation } = vi.hoisted(() => {
+const { passthrough, skyView, ctx, chatMounts, viewerMounts, chatConversation, activeChat, chatProps } = vi.hoisted(() => {
   const passthrough = ({ children }: { children: React.ReactNode }) => <>{children}</>;
   // Boards' one universe view.
   const skyView = {
@@ -38,7 +38,10 @@ const { passthrough, skyView, ctx, chatMounts, viewerMounts, chatConversation } 
   // document must move the open viewer, not replace it.
   const viewerMounts = { n: 0 };
   const chatConversation = { id: "chat-1", title: "", baseAgent: "helper", config: {} };
-  return { passthrough, skyView, ctx, chatMounts, viewerMounts, chatConversation };
+  // The sidebar's "All agents" box, and the agent filter the chat was last given.
+  const activeChat = { showAllAgents: false };
+  const chatProps: { agentFilter?: (name: string) => boolean } = {};
+  return { passthrough, skyView, ctx, chatMounts, viewerMounts, chatConversation, activeChat, chatProps };
 });
 
 vi.mock("./state/connection", () => ({
@@ -58,7 +61,7 @@ vi.mock("./state/conversations", () => ({
 }));
 vi.mock("./state/activeChat", () => ({
   ActiveChatProvider: passthrough,
-  useActiveChat: () => ({ setStatus: vi.fn(), recap: null }),
+  useActiveChat: () => ({ setStatus: vi.fn(), recap: null, showAllAgents: activeChat.showAllAgents }),
 }));
 vi.mock("./lib/buildConnection", () => ({
   buildConnection: (s: { baseUrl: string }) => ({ baseUrl: s.baseUrl }),
@@ -117,7 +120,14 @@ vi.mock("./components/UniverseNavigatorPane", () => ({
 vi.mock("./chat/Chat", async () => {
   const { useEffect } = await import("react");
   return {
-    default: ({ onOpenDocument }: { onOpenDocument?: (t: import("./chat").DocumentOpenTarget) => void }) => {
+    default: ({
+      onOpenDocument,
+      agentFilter,
+    }: {
+      onOpenDocument?: (t: import("./chat").DocumentOpenTarget) => void;
+      agentFilter?: (name: string) => boolean;
+    }) => {
+      chatProps.agentFilter = agentFilter;
       useEffect(() => {
         chatMounts.n += 1;
       }, []);
@@ -156,6 +166,8 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   chatMounts.n = 0;
+  activeChat.showAllAgents = false;
+  chatProps.agentFilter = undefined;
   viewerMounts.n = 0;
 });
 
@@ -227,5 +239,19 @@ describe("App — a document linked in the chat", () => {
     const viewer = screen.getByTestId("viewer");
     expect(viewer.textContent).toBe("doc-1");
     expect(viewer.dataset.chunk).toBe("chunk-1");
+  });
+});
+
+describe("App — the chat's agent picker", () => {
+  it("offers only chat agents by default", () => {
+    render(<App />);
+    expect(chatProps.agentFilter?.("chat/medium")).toBe(true);
+    expect(chatProps.agentFilter?.("team/writer")).toBe(false);
+  });
+
+  it("offers every agent when the sidebar's All agents box is ticked", () => {
+    activeChat.showAllAgents = true;
+    render(<App />);
+    expect(chatProps.agentFilter).toBeUndefined();
   });
 });
