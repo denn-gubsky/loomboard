@@ -23,10 +23,13 @@ npm install @loomboard/workflow @loomcycle/def-fields react react-dom
 
 `react` (18 or 19), `react-dom` and `@loomcycle/def-fields` (0.4) are peer dependencies.
 
+The JSON view's editor is [`@loomcycle/code-editor`](https://www.npmjs.com/package/@loomcycle/code-editor), installed with the canvas. Import its stylesheet before the canvas's own, as below: the canvas sets its colours to match the canvas theme, but its layout and syntax colouring come from that stylesheet.
+
 ## Use
 
 ```tsx
 import { WorkflowCanvas, type WorkflowDataLayer } from "@loomboard/workflow";
+import "@loomcycle/code-editor/styles.css";
 import "@loomboard/workflow/styles.css";
 
 export function TeamEditor({ dataLayer, team }: { dataLayer: WorkflowDataLayer; team: string }) {
@@ -126,6 +129,11 @@ Built against loomcycle 1.111. Saving needs 1.104 or later (a team's own definit
 | A run's sub-agents as rows | 1.111 |
 
 ## Changes
+
+### Unreleased
+
+- The JSON view runs on `@loomcycle/code-editor`: long lines wrap (a Wrap toggle, remembered per browser), and keys and values are coloured in light and dark. Hosts add `import "@loomcycle/code-editor/styles.css"`.
+- `codemirror` and `@codemirror/*` are no longer direct dependencies.
 
 ### 0.2.0
 
