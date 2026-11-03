@@ -1118,3 +1118,125 @@
   font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.95em;
 }
+
+/* ---- document links (DocRef): a cited document or chunk ---- */
+.loomchat .docref {
+  color: var(--accent);
+  white-space: normal;
+}
+.loomchat .docref.missing {
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--border);
+}
+/* Two small controls after the title: preview (hover, focus or tap) and open. */
+.loomchat .docref-ctl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  vertical-align: -3px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--overlay);
+  color: var(--accent);
+  cursor: pointer;
+}
+.loomchat .docref-ctl:hover,
+.loomchat .docref-ctl:focus-visible,
+.loomchat .docref-ctl[aria-expanded="true"] {
+  border-color: var(--accent-dim);
+  outline: none;
+}
+.loomchat .docref.missing .docref-ctl {
+  color: var(--text-dim);
+}
+/* A finger needs a bigger target than a pointer. */
+@media (pointer: coarse) {
+  .loomchat .docref-ctl {
+    width: 26px;
+    height: 26px;
+    vertical-align: -8px;
+    margin-left: 4px;
+  }
+}
+.loomchat .docref-pop {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  max-height: min(60vh, 420px);
+  overflow: auto;
+  padding: 0.7em 0.8em;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px var(--shadow);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  white-space: normal;
+  text-align: left;
+}
+.loomchat .docref-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  color: var(--accent);
+}
+.loomchat .docref-pop-title {
+  font-weight: 600;
+  color: var(--text);
+}
+.loomchat .docref-pop-meta {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+.loomchat .docref-pop-excerpt {
+  border-top: 1px solid var(--border);
+  padding-top: 0.35em;
+}
+.loomchat .docref-pop-excerpt > :first-child {
+  margin-top: 0;
+}
+.loomchat .docref-pop-excerpt > :last-child {
+  margin-bottom: 0;
+}
+.loomchat .docref-pop-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45em;
+  color: var(--text-dim);
+}
+.loomchat .docref-pop-status.err {
+  color: var(--danger);
+}
+.loomchat .docref-pop-reason {
+  display: block;
+  margin-top: 0.2em;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  word-break: break-word;
+}
+.loomchat .docref-pop-open {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  margin-top: 0.2em;
+  padding: 0.25em 0.6em;
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.loomchat .docref-pop-open:hover {
+  background: var(--overlay);
+}

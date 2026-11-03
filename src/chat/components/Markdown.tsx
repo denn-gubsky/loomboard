@@ -10,8 +10,10 @@ import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import DiagramBlock from "./DiagramBlock";
 import GraphicFigure from "./GraphicFigure";
+import DocRef from "./DocRef";
 import { codeLanguage, shouldRenderDiagram } from "../lib/diagram";
 import { shouldRenderSvg, isDataImageUrl } from "../lib/graphic";
+import { parseDocRef } from "../lib/docRefs";
 import { nodeText } from "../lib/nodeText";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
@@ -25,10 +27,11 @@ const remarkPlugins = [remarkGfm, remarkMath, remarkGemoji];
 const rehypePlugins = [rehypeKatex, rehypeHighlight];
 
 // Allow `data:image/*` URLs (react-markdown's default strips every data: URL) so
-// LLM/tool-emitted base64 images render, while keeping the default sanitization
+// LLM/tool-emitted base64 images render, and an agent's `loom:` document link
+// (lib/docRefs, matched strictly), while keeping the default sanitization
 // (javascript:, etc.) for everything else.
 function urlTransform(url: string): string {
-  return isDataImageUrl(url) ? url : defaultUrlTransform(url);
+  return isDataImageUrl(url) || parseDocRef(url) ? url : defaultUrlTransform(url);
 }
 
 type CodeProps = { className?: string; children?: ReactNode };
@@ -76,6 +79,17 @@ function MarkdownImpl({
           return <GraphicFigure source={src} />;
         }
         return <pre {...rest}>{preChildren}</pre>;
+      },
+      // A `loom:` link is a cited document or chunk: preview and open controls,
+      // not an anchor. Every other link renders as before.
+      a({ node: _node, href, children: linkChildren, ...rest }) {
+        const ref = typeof href === "string" ? parseDocRef(href) : null;
+        if (ref) return <DocRef target={ref}>{linkChildren}</DocRef>;
+        return (
+          <a href={href} {...rest}>
+            {linkChildren}
+          </a>
+        );
       },
       // A data:image/* markdown image renders with copy/download; other images
       // (remote/relative) stay a plain constrained <img>.
