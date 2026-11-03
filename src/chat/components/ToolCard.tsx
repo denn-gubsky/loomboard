@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   ChevronRight,
   Wrench,
@@ -7,6 +7,8 @@ import {
   Loader2,
 } from "lucide-react";
 import type { ToolCall } from "../lib/eventReducer";
+import { refsInToolResult } from "../lib/docRefs";
+import DocRef from "./DocRef";
 
 function formatInput(input: unknown): string {
   if (input == null) return "";
@@ -16,6 +18,30 @@ function formatInput(input: unknown): string {
   } catch {
     return String(input);
   }
+}
+
+// A Document tool result with each document and chunk id it names given the
+// same preview / open controls as an agent's link. The text itself is
+// unchanged: the controls sit after the ids.
+function ResultText({ call, result }: { call: ToolCall; result: string }) {
+  const refs = useMemo(
+    () => (call.isError ? [] : refsInToolResult(call.name, call.input, result)),
+    [call.isError, call.name, call.input, result],
+  );
+  if (refs.length === 0) return <>{result}</>;
+  const out: ReactNode[] = [];
+  let at = 0;
+  refs.forEach((r, i) => {
+    out.push(result.slice(at, r.start));
+    out.push(
+      <DocRef key={i} target={r.ref}>
+        {result.slice(r.start, r.end)}
+      </DocRef>,
+    );
+    at = r.end;
+  });
+  out.push(result.slice(at));
+  return <>{out}</>;
 }
 
 // Collapsible tool invocation: name + status badge in the header, input and
@@ -55,7 +81,7 @@ export default function ToolCard({ call }: { call: ToolCall }) {
             <>
               <div className="tool-label">result</div>
               <pre className={call.isError ? "tool-pre error" : "tool-pre"}>
-                {call.result}
+                <ResultText call={call} result={call.result ?? ""} />
               </pre>
             </>
           )}
