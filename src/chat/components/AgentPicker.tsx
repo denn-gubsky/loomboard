@@ -10,6 +10,8 @@ interface Props {
   /** Agent names to suggest when the library list is unavailable (a delegated
    *  user token can't read /v1/_library/agents) — e.g. the user's recent agents. */
   knownAgents?: string[];
+  /** Which agents to offer (see ChatProps.agentFilter). */
+  agentFilter?: (name: string) => boolean;
 }
 
 // Presentational agent selector. The agent list is fetched by the parent (Chat)
@@ -23,13 +25,17 @@ export default function AgentPicker({
   loading,
   error,
   knownAgents = [],
+  agentFilter,
 }: Props) {
   if (error) {
     const commit = (raw: string) => {
       const name = raw.trim();
       if (name && name !== value) onChange(name);
     };
-    const suggestions = Array.from(new Set(knownAgents.filter(Boolean)));
+    const known = Array.from(new Set(knownAgents.filter(Boolean)));
+    // Same rule as the list: a filter that matches none of them is ignored.
+    const matching = agentFilter ? known.filter(agentFilter) : known;
+    const suggestions = matching.length > 0 ? matching : known;
     return (
       <label className="agent-picker">
         <Bot size={16} />
@@ -59,7 +65,7 @@ export default function AgentPicker({
     );
   }
 
-  const options = pickableAgents(agents, value);
+  const options = pickableAgents(agents, value, agentFilter);
 
   return (
     <label className="agent-picker">
