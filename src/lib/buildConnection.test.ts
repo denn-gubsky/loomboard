@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TokenProvider } from "@loomcycle/client";
-import { LOCAL_BASE_URL, blankBaseUrlMeans, buildConnection } from "./buildConnection";
+import { LOCAL_BASE_URL, blankBaseUrlMeans, buildConnection, hostedBaseUrl } from "./buildConnection";
 import { createLoomcycleClient } from "../chat/lib/createClient";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -65,5 +65,25 @@ describe("blankBaseUrlMeans", () => {
   });
   it("is nothing in the extension, whose page is not loomcycle's", () => {
     expect(blankBaseUrlMeans("chrome-extension://abc", { tauri: false, extension: true, proxy: false })).toBeNull();
+  });
+
+  // The Docker image is the standalone (proxy) build and proxies a blank Base
+  // URL to its fixed upstream, whose issuer is the address its server offers.
+  it("is the Base URL a hosting server offers, on a web build", () => {
+    const hosted = "https://loomcycle.example";
+    expect(blankBaseUrlMeans(page, { tauri: false, extension: false, proxy: true }, hosted)).toBe(hosted);
+    expect(blankBaseUrlMeans(page, { tauri: false, extension: false, proxy: false }, hosted)).toBe(hosted);
+  });
+});
+
+describe("hostedBaseUrl", () => {
+  const config = { connectOrigins: [], baseUrl: "https://loomcycle.example" };
+  it("reads the hosting server's Base URL on a web build", () => {
+    expect(hostedBaseUrl({ tauri: false, extension: false, proxy: true }, config)).toBe("https://loomcycle.example");
+    expect(hostedBaseUrl({ tauri: false, extension: false, proxy: false }, config)).toBe("https://loomcycle.example");
+  });
+  it("is ignored by the desktop app and the extension, which nobody hosts", () => {
+    expect(hostedBaseUrl({ tauri: true, extension: false, proxy: false }, config)).toBeNull();
+    expect(hostedBaseUrl({ tauri: false, extension: true, proxy: false }, config)).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { apiPrefix, bearerFetch } from "./bearerFetch";
 import type { ConnectionSettings as ConnSettings } from "../state/settings";
 import { isExtension, isTauri, proxyMode } from "./proxyMode";
 import { getNativeFetch } from "./nativeTransport";
+import { readRuntimeBaseUrl } from "./runtimeConfig";
 
 /** How the app reaches a loomcycle: the address to call and the fetch to call
  *  it with. `fetch` undefined = the browser's own. */
@@ -23,9 +24,25 @@ export interface Platform {
   proxy: boolean;
 }
 
+const CURRENT: Platform = { tauri: isTauri, extension: isExtension, proxy: proxyMode };
+
+/** The loomcycle Base URL a hosting server offers in /runtime-config.js, on a
+ *  web build only. The desktop app and the extension ship the file too, empty,
+ *  and are not hosted by anyone, so they never read it. */
+export function hostedBaseUrl(
+  platform: Platform = CURRENT,
+  config: unknown = typeof window === "undefined" ? undefined : window.__LOOMBOARD_CONFIG__,
+): string | null {
+  if (platform.tauri || platform.extension) return null;
+  return readRuntimeBaseUrl(config);
+}
+
 /** The loomcycle a blank Base URL reaches, the same answer transportFor
  *  gives. A sign-in's issuer must be on this address, so it must not guess.
  *  - The desktop app calls LOCAL_BASE_URL.
+ *  - A hosted web build calls the Base URL its server offers (hostedBaseUrl):
+ *    the Docker image proxies a blank one to its fixed upstream, whose issuer
+ *    that is.
  *  - The dev/CLI proxy calls its own default target, which is LOCAL_BASE_URL
  *    unless LOOMBOARD_PROXY_TARGET says otherwise. The browser can't see that
  *    variable; if it was changed, the issuer check fails and its message asks
@@ -35,10 +52,13 @@ export interface Platform {
  *  - The extension has no origin of loomcycle's, so blank means nothing: null. */
 export function blankBaseUrlMeans(
   pageOrigin: string | undefined,
-  platform: Platform = { tauri: isTauri, extension: isExtension, proxy: proxyMode },
+  platform: Platform = CURRENT,
+  hosted: string | null = hostedBaseUrl(platform),
 ): string | null {
-  if (platform.tauri || platform.proxy) return LOCAL_BASE_URL;
+  if (platform.tauri) return LOCAL_BASE_URL;
   if (platform.extension) return null;
+  if (hosted) return hosted;
+  if (platform.proxy) return LOCAL_BASE_URL;
   return pageOrigin ?? null;
 }
 
@@ -66,7 +86,9 @@ export function transportFor(baseUrl: string): Transport {
       },
     };
   }
-  return { baseUrl };
+  // A blank Base URL on a hosted build means the one its server offers, as
+  // blankBaseUrlMeans says; elsewhere it stays same-origin.
+  return { baseUrl: baseUrl || hostedBaseUrl() || "" };
 }
 
 // Build the <Chat>-facing Connection from the persisted settings. Shared so
