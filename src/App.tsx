@@ -1,7 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Library } from "@loomcycle/library";
-import type { DocumentTarget } from "@loomboard/workflow";
 import { MemoryView } from "@loomcycle/memory-view";
 import { Loomboard, type BoardScope, type SavedView } from "@loomcycle/loomboard";
 import { ConnectionProvider, useConnection } from "./state/connection";
@@ -16,7 +15,10 @@ import type { Connection } from "./chat/lib/createClient";
 import { buildConnection } from "./lib/buildConnection";
 import { getClient } from "./lib/loomcycle";
 import ConnectionSettings from "./components/ConnectionSettings";
-import DocumentsArea, { type StarView } from "./components/DocumentsArea";
+import DocumentsArea, { type DocTarget, type StarView } from "./components/DocumentsArea";
+import DocSidePanel from "./components/DocSidePanel";
+import Splitter from "./components/workflow/Splitter";
+import type { DocumentOpenTarget } from "./chat";
 import Sidebar, { type SidebarView } from "./components/Sidebar";
 import Chat from "./chat/Chat";
 import AgentPortfolioGrid from "./components/agentchat/AgentPortfolioGrid";
@@ -26,8 +28,24 @@ import PendingApprovals from "./components/PendingApprovals";
 import MyAccess from "./components/MyAccess";
 import AppClients from "./components/AppClients";
 
-function ChatArea() {
-  const { settings, signIn } = useConnection();
+// The linked-document panel beside the chat: its width is the reader's own,
+// kept between sessions; the chat keeps at least CHAT_MIN.
+const DOC_PANEL_KEY = "loomboard.docPanelWidth";
+const DOC_PANEL_MIN = 320;
+const CHAT_MIN = 360;
+
+function initialDocPanelWidth(): number {
+  try {
+    const saved = Number(localStorage.getItem(DOC_PANEL_KEY));
+    if (saved >= DOC_PANEL_MIN) return saved;
+  } catch {
+    // storage blocked: fall through to the default
+  }
+  return Math.max(DOC_PANEL_MIN, Math.round(window.innerWidth * 0.45));
+}
+
+function ChatArea({ onOpenInDocuments }: { onOpenInDocuments?: (t: DocTarget) => void }) {
+  const { settings, principal, signIn, capabilities } = useConnection();
   const { conversations, active, update } = useConversations();
   const { setStatus, recap } = useActiveChat();
   // Agents the user has run before — suggestions for the picker's free-text
@@ -47,6 +65,25 @@ function ChatArea() {
     },
     [activeId, update],
   );
+  // The document a link in this chat opened. Tied to the conversation, so
+  // switching chats closes it.
+  const [linked, setLinked] = useState<{ chatId: string; target: DocumentOpenTarget }>();
+  const openLinked = useCallback(
+    (target: DocumentOpenTarget) => {
+      if (activeId) setLinked({ chatId: activeId, target });
+    },
+    [activeId],
+  );
+  const shown = linked && linked.chatId === activeId ? linked.target : undefined;
+  const [panelWidth, setPanelWidth] = useState(initialDocPanelWidth);
+  useEffect(() => {
+    try {
+      localStorage.setItem(DOC_PANEL_KEY, String(panelWidth));
+    } catch {
+      // storage blocked: the width lasts for this session only
+    }
+  }, [panelWidth]);
+  const paneRef = useRef<HTMLDivElement>(null);
 
   if (!connection) return null;
   if (!active) {
@@ -60,20 +97,50 @@ function ChatArea() {
     );
   }
   return (
-    <Chat
-      // Remount per conversation: a fresh useChat per chat tears the previous
-      // run down cleanly. Without this the one reused instance leaks the prior
-      // chat's session/run onto the newly-selected conversation (the persist
-      // effect fires with the old state but the new conversation). Mirrors the
-      // extension's PanelApp, which keys <Chat> for the same reason.
-      key={active.id}
-      connection={connection}
-      conversation={active}
-      onConversationChange={onConversationChange}
-      onRunStatus={setStatus}
-      recap={recap ?? undefined}
-      knownAgents={knownAgents}
-    />
+    // Always this wrapper, panel or not: the chat must keep its place in the
+    // tree when a document opens beside it, or it remounts and drops the turn
+    // it is streaming.
+    <div className="chat-split-pane" ref={paneRef}>
+      <div className="chat-split-pane__chat">
+        <Chat
+          // Remount per conversation: a fresh useChat per chat tears the previous
+          // run down cleanly. Without this the one reused instance leaks the prior
+          // chat's session/run onto the newly-selected conversation (the persist
+          // effect fires with the old state but the new conversation). Mirrors the
+          // extension's PanelApp, which keys <Chat> for the same reason.
+          key={active.id}
+          connection={connection}
+          conversation={active}
+          onConversationChange={onConversationChange}
+          onRunStatus={setStatus}
+          recap={recap ?? undefined}
+          knownAgents={knownAgents}
+          // Same gate as the canvas's "Open in Documents": a principal who
+          // cannot read Documents gets previews only.
+          onOpenDocument={capabilities.views.documents ? openLinked : undefined}
+        />
+      </div>
+      {shown && (
+        <>
+          <Splitter
+            getSize={() => panelWidth}
+            setSize={setPanelWidth}
+            min={DOC_PANEL_MIN}
+            max={Math.max(DOC_PANEL_MIN, (paneRef.current?.clientWidth ?? window.innerWidth) - CHAT_MIN)}
+            invert
+            label="Resize the document panel"
+          />
+          <DocSidePanel
+            connection={connection}
+            principal={principal ?? undefined}
+            target={shown}
+            width={panelWidth}
+            onClose={() => setLinked(undefined)}
+            onOpenInDocuments={onOpenInDocuments && (() => onOpenInDocuments(shown))}
+          />
+        </>
+      )}
+    </div>
   );
 }
 
@@ -169,7 +236,7 @@ function AppShell() {
   const [view, setView] = useState<SidebarView>("chat");
   // A document the canvas asked the Documents view to show. Picking any view
   // from the rail drops it, so Documents opens on the explorer as usual.
-  const [docTarget, setDocTarget] = useState<DocumentTarget>();
+  const [docTarget, setDocTarget] = useState<DocTarget>();
   // A saved star-map view Boards asked the Documents view to open. Same
   // lifetime as docTarget: any pick from the rail drops it.
   const [starView, setStarView] = useState<StarView>();
@@ -178,7 +245,7 @@ function AppShell() {
     setStarView(undefined);
     setView(v);
   }, []);
-  const openDocument = useCallback((t: DocumentTarget) => {
+  const openDocument = useCallback((t: DocTarget) => {
     setDocTarget(t);
     setView("documents");
   }, []);
@@ -220,7 +287,7 @@ function AppShell() {
           ) : shown === "access" ? (
             <MyAccess />
           ) : (
-            <ChatArea />
+            <ChatArea onOpenInDocuments={capabilities.views.documents ? openDocument : undefined} />
           )}
         </div>
       </ActiveChatProvider>

@@ -8,6 +8,8 @@ import { useChat } from "./hooks/useChat";
 import { useEffectiveConfig } from "./hooks/useEffectiveConfig";
 import { effectiveFields, inertSettings } from "./lib/effective";
 import { estimateConversationTokens } from "./lib/metrics";
+import { createDocPreviewCache } from "./lib/docPreview";
+import { DocLinksContext, type DocLinks, type DocumentOpenTarget } from "./hooks/useDocLinks";
 import AgentPicker from "./components/AgentPicker";
 import OverridesPanel from "./components/OverridesPanel";
 import MessageList from "./components/MessageList";
@@ -53,6 +55,11 @@ export interface ChatProps {
    *  it). Lets a host open a chat pre-filled with a task — e.g. the workflow
    *  board starting an orchestrator with the board's context. */
   initialInput?: string;
+  /** Show a document the agent linked (`[title](loom:doc/<id>)` or
+   *  `loom:chunk/<id>`, and the ids in its Document tool results). A chunk link
+   *  arrives with its document already looked up. Omit it and the links still
+   *  preview on hover, with no control to open them. */
+  onOpenDocument?: (target: DocumentOpenTarget) => void;
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -71,6 +78,7 @@ export default function Chat({
   knownAgents,
   escapeStops = true,
   initialInput,
+  onOpenDocument,
 }: ChatProps) {
   const client = useMemo(
     () => createLoomcycleClient(connection),
@@ -79,6 +87,9 @@ export default function Chat({
     [connection.baseUrl, connection.token, connection.fetch],
   );
   const { agents, loading, error } = useAgents(client);
+  // One preview cache per client, shared by every link in the conversation.
+  const previews = useMemo(() => createDocPreviewCache((input) => client.document(input)), [client]);
+  const docLinks = useMemo<DocLinks>(() => ({ previews, open: onOpenDocument }), [previews, onOpenDocument]);
   const [showConfig, setShowConfig] = useState(false);
 
   const baseDef = agents.find(
@@ -196,12 +207,14 @@ export default function Chat({
         />
       )}
 
-      <MessageList
-        messages={chat.state.messages}
-        running={chat.running}
-        recap={recap}
-        compacting={chat.compacting}
-      />
+      <DocLinksContext.Provider value={docLinks}>
+        <MessageList
+          messages={chat.state.messages}
+          running={chat.running}
+          recap={recap}
+          compacting={chat.compacting}
+        />
+      </DocLinksContext.Provider>
 
       {chat.state.pendingInterrupt && (
         <InterruptCard

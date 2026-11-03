@@ -14,6 +14,10 @@ export type {
 } from "./types";
 export { configIsCustom, sameConfig } from "./types";
 
+// What `onOpenDocument` receives when the user opens a document an agent linked.
+export type { DocumentOpenTarget } from "./hooks/useDocLinks";
+export type { DocRefScope } from "./lib/docRefs";
+
 export { createLoomcycleClient } from "./lib/createClient";
 export type { Connection } from "./lib/createClient";
 
