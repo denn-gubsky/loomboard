@@ -1,6 +1,5 @@
 import { lazy, Suspense, useMemo } from "react";
 import { DocumentViewer, PathExplorer, type DocScope } from "@loomcycle/explorer";
-import type { DocumentTarget } from "@loomboard/workflow";
 import { useConnection } from "../state/connection";
 import type { Connection } from "../chat/lib/createClient";
 import { buildConnection } from "../lib/buildConnection";
@@ -15,9 +14,18 @@ const UniverseNavigatorPane = lazy(() => import("./UniverseNavigatorPane"));
 // server-side; when it's off the component surfaces the refusal via onError.
 //
 // `target` is one document another surface asked for (the canvas's "Open in
-// Documents" on a result): it opens straight in the viewer, by id — a document
-// id does not say where it sits in the Path tree, so the explorer cannot be
-// pointed at it.
+// Documents" on a result, a chat's linked-document panel): it opens straight
+// in the viewer, by id — a document id does not say where it sits in the Path
+// tree, so the explorer cannot be pointed at it. The canvas's DocumentTarget
+// and a chat link's target both fit; neither's chunk reaches the viewer yet,
+// as the explorer has no prop for it (loomcycle G28).
+export interface DocTarget {
+  documentId: string;
+  chunkId?: string;
+  scope?: string;
+  title?: string;
+}
+
 // A saved star-map view another surface asked for (Boards' "Open in the star
 // map"): Documents opens on the stars navigator, in the view's scope, and the
 // map restores the view once its sky has loaded.
@@ -31,7 +39,7 @@ export default function DocumentsArea({
   starView,
   onClearTarget,
 }: {
-  target?: DocumentTarget;
+  target?: DocTarget;
   starView?: StarView;
   onClearTarget: () => void;
 }) {

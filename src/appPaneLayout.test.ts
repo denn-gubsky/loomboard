@@ -112,7 +112,7 @@ describe("a hosted <Chat> scrolls", () => {
   // refuses to shrink below its whole transcript: the message list then never
   // scrolls — and never follows the tail. Every pane that hosts one has to
   // let it shrink.
-  const HOSTS = ["wf-pane-chat", "run-chat-pane__chat"];
+  const HOSTS = ["wf-pane-chat", "run-chat-pane__chat", "chat-split-pane__chat"];
   const minHeightZero = selectorsDeclaring("min-height", "0");
 
   it.each(HOSTS)(".%s lets its .loomchat shrink, so the transcript scrolls", (host) => {

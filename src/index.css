@@ -1528,6 +1528,77 @@ button {
   min-height: 0;
 }
 
+/* ---- the chat with a linked document beside it (ChatArea + DocSidePanel) ---- */
+.chat-split-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  position: relative;
+}
+.chat-split-pane__chat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* As in .wf-pane-chat: without it the transcript cannot scroll. */
+.chat-split-pane__chat .loomchat {
+  min-height: 0;
+}
+.doc-side-panel {
+  flex: none;
+  min-width: 320px;
+  /* A width saved on a wider window must still leave the chat its room. */
+  max-width: calc(100% - 360px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+}
+.doc-side-panel__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+.doc-side-panel__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.doc-side-panel__close {
+  display: inline-flex;
+  padding: 0.2rem;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.doc-side-panel > .loomcycle-explorer {
+  flex: 1;
+  min-height: 0;
+}
+/* Too narrow for two columns: the document covers the chat until closed. */
+@media (max-width: 760px) {
+  .doc-side-panel {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    width: auto !important;
+    max-width: none;
+    min-width: 0;
+    border-left: none;
+  }
+  .chat-split-pane > .wf-splitter {
+    display: none;
+  }
+}
+
 /* ---- chat area empty placeholder (app chrome; the chat surface itself is the
    @loomboard/chat component, which ships its own scoped styles) ---- */
 
