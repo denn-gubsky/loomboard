@@ -35,12 +35,12 @@ export default function DocSidePanel({
         </button>
       </header>
       <DocumentViewer
-        // A new link is a new viewer. The chunk is not passed: the explorer has
-        // no prop for the chunk to land on yet (loomcycle G28), so a chunk link
-        // opens its document at the top until it does.
-        key={`${target.scope}:${target.documentId}:${target.chunkId ?? ""}`}
+        // A new document is a new viewer. Another section of the same one is
+        // not: the viewer moves its selection to a changed chunkId in place.
+        key={`${target.scope}:${target.documentId}`}
         connection={connection}
         documentId={target.documentId}
+        chunkId={target.chunkId}
         scope={target.scope as DocScope}
         titleHint={target.title}
         principal={principal}

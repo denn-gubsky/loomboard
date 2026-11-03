@@ -17,8 +17,8 @@ const UniverseNavigatorPane = lazy(() => import("./UniverseNavigatorPane"));
 // Documents" on a result, a chat's linked-document panel): it opens straight
 // in the viewer, by id — a document id does not say where it sits in the Path
 // tree, so the explorer cannot be pointed at it. The canvas's DocumentTarget
-// and a chat link's target both fit; neither's chunk reaches the viewer yet,
-// as the explorer has no prop for it (loomcycle G28).
+// and a chat link's target both fit; the viewer opens on the chunk when one
+// is named.
 export interface DocTarget {
   documentId: string;
   chunkId?: string;
@@ -60,6 +60,7 @@ export default function DocumentsArea({
         <DocumentViewer
           connection={connection}
           documentId={target.documentId}
+          chunkId={target.chunkId}
           scope={(target.scope ?? "user") as DocScope}
           titleHint={target.title}
           principal={principal ?? undefined}
