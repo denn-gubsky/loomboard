@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useConnection } from "../state/connection";
 import { isTauri } from "../lib/proxyMode";
 import { CALLBACK_PATH } from "../lib/appSignIn";
-import { blankBaseUrlMeans } from "../lib/buildConnection";
+import { blankBaseUrlMeans, hostedBaseUrl } from "../lib/buildConnection";
 import SignInCard, { type Registration } from "./SignInCard";
 
 // The sign-in screen of the app (web SPA, desktop). Shown whenever we are not
@@ -10,7 +10,10 @@ import SignInCard, { type Registration } from "./SignInCard";
 export default function ConnectionSettings() {
   const { settings, status, error, problem, connect, signInWithLoomcycle, retrySignIn, cancelSignIn } =
     useConnection();
-  const [baseUrl, setBaseUrl] = useState(settings?.baseUrl ?? "");
+  // A hosted loomboard offers its loomcycle's address, so a first visit starts
+  // with it filled in; saved settings (even a blank Base URL) win.
+  const hosted = hostedBaseUrl();
+  const [baseUrl, setBaseUrl] = useState(settings?.baseUrl ?? hosted ?? "");
 
   // What the operator registers for this build. The desktop app's addresses
   // ship in loomcycle's `loomboard` preset; in `tauri dev` its webview is the
@@ -25,7 +28,7 @@ export default function ConnectionSettings() {
       intro="loomboard is a thin client over a loomcycle runtime. Enter its address, then sign in on loomcycle's own page."
       baseUrl={baseUrl}
       onBaseUrlChange={setBaseUrl}
-      baseUrlPlaceholder="https://loomcycle.example.com — blank = local default"
+      baseUrlPlaceholder={hosted ?? "https://loomcycle.example.com — blank = local default"}
       baseUrlHint={
         <>
           Any reachable loomcycle (local, a LAN box like TrueNAS, or remote).

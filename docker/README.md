@@ -19,6 +19,7 @@ All of it is read when the container starts; nothing is built in.
 |---|---|---|
 | `LOOMCYCLE_UPSTREAM` | none | The runtime `/v1` and `/.well-known/oauth-authorization-server` go to. Fixed: the app's `x-loomcycle-target` header is dropped, so the container is never an open proxy. Unset, the container serves the app alone and answers `/v1` with 404, for a deployment that routes `/v1` to the runtime itself. |
 | `LOOMBOARD_CONNECT_ORIGINS` | none | Comma-separated origins allowed to hand the app a bearer by `postMessage` (`{type:'loomboard.connect', token}`), e.g. a landing page that already holds it. Each must be a bare origin, `https://example.com`: anything else stops the container at start. Unset, no page can. |
+| `LOOMBOARD_BASE_URL` | the upstream's OAuth issuer | The loomcycle address people sign in to (its `LOOMCYCLE_PUBLIC_URL`). The sign-in screen starts with it filled in, and a blank field means it. Must be a bare origin, `https://loomcycle.example.com`: anything else stops the container at start. Unset, the container reads the issuer from `LOOMCYCLE_UPSTREAM`'s `/.well-known/oauth-authorization-server` at start and logs what it adopted; with neither, people type the address. |
 | `PORT` | `8080` | Listen port. |
 
 The bearer is entered in the app (or handed to it as above) and lives in the
@@ -34,6 +35,8 @@ services:
     read_only: true
     environment:
       LOOMCYCLE_UPSTREAM: http://loomcycle:8787
+      # The address people sign in to; unset, the upstream's issuer is used.
+      LOOMBOARD_BASE_URL: https://loomcycle.example.com
     ports:
       - "8080:8080"
 ```

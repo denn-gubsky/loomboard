@@ -26,6 +26,7 @@ interface Window {
   /** Set by /runtime-config.js, a classic script index.html loads before the
    *  app. A hosting server writes its own copy from the environment (the Docker
    *  image does); every build ships public/runtime-config.js, which sets
-   *  nothing. Unvalidated: read it through readConnectOrigins. */
+   *  nothing. Unvalidated: read it through readConnectOrigins and
+   *  readRuntimeBaseUrl. */
   readonly __LOOMBOARD_CONFIG__?: unknown;
 }
