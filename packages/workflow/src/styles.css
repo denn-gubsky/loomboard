@@ -1215,25 +1215,65 @@
 .loomboard-workflow .lb-wf-body--json .lb-wf-json {
   border-left: none;
 }
+.loomboard-workflow .lb-wf-json__head {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--lb-wf-border);
+  background: var(--lb-wf-surface);
+}
 .loomboard-workflow .lb-wf-json__editor {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
   display: flex;
+  flex-direction: column;
 }
-.loomboard-workflow .lb-wf-json__editor > .cm-editor {
+.loomboard-workflow .lb-wf-json__editor > .loomcycle-code-editor {
   flex: 1;
-  min-width: 0;
-}
-.loomboard-workflow .lb-wf-json__plain {
-  flex: 1;
-  margin: 0;
-  padding: 8px;
   border: none;
-  resize: none;
-  background: var(--lb-wf-bg);
-  color: var(--lb-wf-fg);
-  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  border-radius: 0;
+}
+/* @loomcycle/code-editor's colours (RFC FW). Its defaults follow the OS
+ * colour scheme; the canvas deliberately does not (see the theme block at the
+ * top), so every variable is pinned here — otherwise an OS in dark mode would
+ * colour the syntax for dark on a light canvas. Values match the loomcycle
+ * Web UI. */
+.loomboard-workflow .loomcycle-code-editor,
+.loomboard-workflow .loomcycle-structured-editor {
+  --lc-ce-bg: var(--lb-wf-bg);
+  --lc-ce-fg: var(--lb-wf-fg);
+  --lc-ce-gutter-bg: var(--lb-wf-surface);
+  --lc-ce-gutter-fg: var(--lb-wf-muted);
+  --lc-ce-rule: var(--lb-wf-border);
+  --lc-ce-font: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --lc-ce-font-size: 12px;
+  --lc-ce-active-line: rgba(140, 149, 159, 0.1);
+  --lc-ce-selection: rgba(84, 174, 255, 0.3);
+  --lc-ce-match: rgba(84, 174, 255, 0.18);
+  --lc-ce-error: #cf222e;
+  --lc-ce-key: #0550ae;
+  --lc-ce-string: #0a3069;
+  --lc-ce-number: #953800;
+  --lc-ce-bool: #8250df;
+  --lc-ce-null: #8250df;
+  --lc-ce-punct: #57606a;
+  --lc-ce-comment: #6e7781;
+  --lc-ce-meta: #cf222e;
+}
+.loomboard-workflow[data-theme="dark"] :is(.loomcycle-code-editor, .loomcycle-structured-editor),
+[data-theme="dark"] .loomboard-workflow:not([data-theme="light"]) :is(.loomcycle-code-editor, .loomcycle-structured-editor) {
+  --lc-ce-active-line: rgba(110, 118, 129, 0.12);
+  --lc-ce-selection: rgba(56, 139, 253, 0.35);
+  --lc-ce-match: rgba(56, 139, 253, 0.2);
+  --lc-ce-error: #ff7b72;
+  --lc-ce-key: #79c0ff;
+  --lc-ce-string: #a5d6ff;
+  --lc-ce-number: #ffa657;
+  --lc-ce-bool: #d2a8ff;
+  --lc-ce-null: #d2a8ff;
+  --lc-ce-punct: #8b949e;
+  --lc-ce-comment: #8b949e;
+  --lc-ce-meta: #ff7b72;
 }
 .loomboard-workflow .lb-wf-json-banner {
   padding: 6px 10px;
