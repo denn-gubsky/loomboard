@@ -8,6 +8,7 @@ import {
   type TeamSummary,
   type TeamTemplate,
 } from "@loomboard/workflow";
+import "@loomcycle/code-editor/styles.css";
 import "@loomboard/workflow/styles.css";
 import { useConnection, useLoomcycle } from "../../state/connection";
 import { buildConnection } from "../../lib/buildConnection";

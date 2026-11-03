@@ -1,16 +1,15 @@
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import type { EditorView } from "@codemirror/view";
+import { useState, type Ref } from "react";
+import { CodeEditor, type CodeEditorHandle } from "@loomcycle/code-editor";
 
 // The JSON view of the team (RFC DX): the definition as editable text.
 //
-// CodeMirror 6 is imported only when this view first mounts, so a host that
-// never opens it never loads the editor (decision 1). Until it has loaded —
-// or if it cannot load — a plain textarea edits the same text, so the view is
-// never blank and never read-only for want of the editor.
-//
-// The component is a controlled view over `text`: an edit calls `onChange`; a
-// new `text` from outside (the canvas changed the team) replaces the editor's
-// content without echoing back as an edit.
+// The editor is @loomcycle/code-editor's (RFC FW), which grew out of this
+// view and keeps its contract: CodeMirror is loaded on first mount, a plain
+// textarea edits the text until then (or if it cannot load), an external
+// `text` replaces the content without echoing as an edit, and the cursor is
+// reported only when the operator moves it. Its stylesheet is a second
+// import for the host (see the README); the --lc-ce-* colours are pinned to
+// the canvas theme in styles.css.
 
 export interface JsonDiagnostic {
   /** Offsets into `text`. */
@@ -20,15 +19,7 @@ export interface JsonDiagnostic {
   message: string;
 }
 
-export interface TeamJsonViewHandle {
-  /** Put the cursor at `offset`, scroll it into view and focus the editor. */
-  goto(offset: number): void;
-  /** Put the cursor at `offset` and scroll it into view, WITHOUT taking the
-   *  focus: the canvas selected something, and its keys must stay its own. */
-  reveal(offset: number): void;
-  /** Where the cursor is, once the editor has loaded. */
-  cursor(): number | undefined;
-}
+export type TeamJsonViewHandle = CodeEditorHandle;
 
 export interface TeamJsonViewProps {
   text: string;
@@ -43,187 +34,57 @@ export interface TeamJsonViewProps {
   handle?: Ref<TeamJsonViewHandle>;
 }
 
-type CM = {
-  view: typeof import("@codemirror/view");
-  state: typeof import("@codemirror/state");
-  lint: typeof import("@codemirror/lint");
-  language: typeof import("@codemirror/language");
-};
+const WRAP_KEY = "loomboard.workflow.json.wrap";
+
+// Per browser, and only a convenience: storage can be missing or throw.
+function readWrap(): boolean {
+  try {
+    return localStorage.getItem(WRAP_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function writeWrap(on: boolean) {
+  try {
+    localStorage.setItem(WRAP_KEY, on ? "on" : "off");
+  } catch {
+    // Not remembered; the toggle still works for this view.
+  }
+}
 
 export function TeamJsonView({ text, onChange, readOnly, diagnostics, foldAt, onCursor, handle }: TeamJsonViewProps) {
-  const host = useRef<HTMLDivElement>(null);
-  const view = useRef<EditorView | null>(null);
-  const cm = useRef<CM | null>(null);
-  const external = useRef(false);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const onCursorRef = useRef(onCursor);
-  onCursorRef.current = onCursor;
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const readOnlyCompartment = useRef<import("@codemirror/state").Compartment | null>(null);
-  // The values as of mount, for the editor's first state; later changes go
-  // through the effects below.
-  const initial = useRef({ text, readOnly });
-  // `layout` is folded once, when the editor first has the text to fold —
-  // which can arrive after it loads.
-  const folded = useRef(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      import("codemirror"),
-      import("@codemirror/lang-json"),
-      import("@codemirror/lint"),
-      import("@codemirror/state"),
-      import("@codemirror/view"),
-      import("@codemirror/language"),
-    ])
-      .then(([{ basicSetup }, { json }, lint, state, viewMod, language]) => {
-        if (cancelled || !host.current) return;
-        cm.current = { view: viewMod, state, lint, language };
-        const ro = new state.Compartment();
-        readOnlyCompartment.current = ro;
-        const { text: doc, readOnly: r } = initial.current;
-        const v = new viewMod.EditorView({
-          parent: host.current,
-          state: state.EditorState.create({
-            doc,
-            extensions: [
-              basicSetup,
-              json(),
-              lint.lintGutter(),
-              ro.of(readOnlyExtensions(state, viewMod, !!r)),
-              viewMod.EditorView.updateListener.of((u) => {
-                if (u.docChanged && !external.current) onChangeRef.current(u.state.doc.toString());
-                // `external` also covers goto / reveal: only the operator's own
-                // cursor moves are reported.
-                else if (u.selectionSet && !u.docChanged && !external.current) onCursorRef.current?.(u.state.selection.main.head);
-              }),
-              viewMod.EditorView.theme({
-                "&": { height: "100%", backgroundColor: "var(--lb-wf-bg)", color: "var(--lb-wf-fg)" },
-                ".cm-gutters": { backgroundColor: "var(--lb-wf-surface)", color: "var(--lb-wf-muted)", border: "none" },
-                ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "12px" },
-              }),
-            ],
-          }),
-        });
-        view.current = v;
-        setLoaded(true);
-      })
-      .catch((e) => {
-        console.warn("[canvas] the JSON editor could not load; editing as plain text:", e);
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-      view.current?.destroy();
-      view.current = null;
-    };
-  }, []);
-
-  // A new text from outside replaces the content, without echoing as an edit.
-  useEffect(() => {
-    const v = view.current;
-    if (!v || v.state.doc.toString() === text) return;
-    external.current = true;
-    try {
-      v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: text } });
-    } finally {
-      external.current = false;
-    }
-  }, [text, loaded]);
-
-  useEffect(() => {
-    const v = view.current;
-    if (!v || !cm.current || folded.current || foldAt === undefined || v.state.doc.toString() !== text) return;
-    folded.current = true;
-    foldLineAt(v, cm.current.language, foldAt);
-  }, [foldAt, text, loaded]);
-
-  useEffect(() => {
-    const v = view.current;
-    if (!v || !cm.current || !readOnlyCompartment.current) return;
-    v.dispatch({ effects: readOnlyCompartment.current.reconfigure(readOnlyExtensions(cm.current.state, cm.current.view, !!readOnly)) });
-  }, [readOnly, loaded]);
-
-  useEffect(() => {
-    const v = view.current;
-    if (!v || !cm.current) return;
-    const len = v.state.doc.length;
-    const diags = (diagnostics ?? []).map((d) => ({
-      from: Math.min(d.from, len),
-      to: Math.min(Math.max(d.to, d.from), len),
-      severity: d.severity === "error" ? ("error" as const) : ("info" as const),
-      message: d.message,
-    }));
-    v.dispatch(cm.current.lint.setDiagnostics(v.state, diags));
-  }, [diagnostics, loaded, text]);
-
-  useImperativeHandle(
-    handle,
-    () => ({
-      goto(offset: number) {
-        const v = view.current;
-        if (v) {
-          place(v, offset);
-          v.focus();
-          return;
-        }
-        const ta = host.current?.querySelector("textarea");
-        if (ta) {
-          ta.focus();
-          ta.setSelectionRange(offset, offset);
-        }
-      },
-      reveal(offset: number) {
-        if (view.current) place(view.current, offset);
-      },
-      cursor() {
-        return view.current?.state.selection.main.head;
-      },
-    }),
-    [],
-  );
-
-  // A cursor this component places, kept apart from one the operator moves.
-  function place(v: EditorView, offset: number) {
-    external.current = true;
-    try {
-      v.dispatch({ selection: { anchor: Math.min(offset, v.state.doc.length) }, scrollIntoView: true });
-    } finally {
-      external.current = false;
-    }
-  }
-
+  // Wrapped by default: an own agent's system_prompt is one escaped line.
+  const [wrap, setWrap] = useState(readWrap);
   return (
     <div className="lb-wf-json" data-testid="json-view">
-      <div ref={host} className="lb-wf-json__editor" data-loaded={loaded || undefined}>
-        {!loaded && (
-          <textarea
-            className="lb-wf-json__plain"
-            aria-label="Team definition (JSON)"
-            spellCheck={false}
-            value={text}
-            readOnly={readOnly}
-            onChange={(e) => onChange(e.target.value)}
+      <div className="lb-wf-json__head">
+        <label className="lb-wf-toggle" title="Wrap long lines, such as an agent's system prompt, to the width of the view.">
+          <input
+            type="checkbox"
+            checked={wrap}
+            onChange={(e) => {
+              setWrap(e.target.checked);
+              writeWrap(e.target.checked);
+            }}
           />
-        )}
+          Wrap
+        </label>
       </div>
-      {failed && <div className="lb-wf-team__hint">The JSON editor could not load; this is plain text editing.</div>}
+      <div className="lb-wf-json__editor">
+        <CodeEditor
+          language="json"
+          value={text}
+          onChange={onChange}
+          wrap={wrap}
+          readOnly={readOnly}
+          diagnostics={diagnostics}
+          foldAt={foldAt}
+          onCursor={onCursor}
+          handle={handle}
+          ariaLabel="Team definition (JSON)"
+        />
+      </div>
     </div>
   );
-}
-
-function readOnlyExtensions(state: CM["state"], viewMod: CM["view"], readOnly: boolean) {
-  return [state.EditorState.readOnly.of(readOnly), viewMod.EditorView.editable.of(!readOnly)];
-}
-
-/** Fold the value on the line holding `offset` (the `layout` key), if it can. */
-function foldLineAt(v: EditorView, language: CM["language"], offset: number) {
-  const line = v.state.doc.lineAt(Math.min(offset, v.state.doc.length));
-  // The syntax tree is built incrementally; make sure it covers the line.
-  language.ensureSyntaxTree(v.state, line.to, 200);
-  const range = language.foldable(v.state, line.from, line.to);
-  if (range) v.dispatch({ effects: language.foldEffect.of(range) });
 }

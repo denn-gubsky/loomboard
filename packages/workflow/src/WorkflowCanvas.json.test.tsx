@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";
 import { foldedRanges } from "@codemirror/language";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import { locate } from "./lib/teamJson";
 import type { TeamDefDetail, WorkflowDataLayer } from "./types";
@@ -199,5 +199,29 @@ describe("WorkflowCanvas — the JSON view (RFC DX)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Split" }));
     await screen.findByTestId("node-write");
     expect(inspected()).toBeUndefined();
+  });
+});
+
+describe("WorkflowCanvas — wrapping in the JSON view (RFC FW)", () => {
+  // This test environment has no working localStorage; a Map stands in.
+  beforeEach(() => {
+    const m = new Map<string, string>();
+    vi.stubGlobal("localStorage", { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("wraps long lines by default, so an agent's escaped system prompt fits the view", async () => {
+    const { v } = await open();
+    expect(v.contentDOM.classList.contains("cm-lineWrapping")).toBe(true);
+  });
+
+  it("stops wrapping when Wrap is cleared, and remembers that for the next view", async () => {
+    const { v } = await open();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Wrap" }));
+    await waitFor(() => expect(v.contentDOM.classList.contains("cm-lineWrapping")).toBe(false));
+    cleanup();
+    const again = await open();
+    expect((screen.getByRole("checkbox", { name: "Wrap" }) as HTMLInputElement).checked).toBe(false);
+    expect(again.v.contentDOM.classList.contains("cm-lineWrapping")).toBe(false);
   });
 });
