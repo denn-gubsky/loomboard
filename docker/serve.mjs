@@ -14,6 +14,9 @@
 //   LOOMCYCLE_UPSTREAM         the runtime, e.g. http://loomcycle:8787 (optional)
 //   LOOMBOARD_CONNECT_ORIGINS  comma-separated origins allowed to hand the app a
 //                              bearer by postMessage (optional; unset = none)
+//   LOOMBOARD_BASE_URL         the loomcycle Base URL people sign in to, its
+//                              LOOMCYCLE_PUBLIC_URL (optional; unset = the
+//                              upstream's OAuth issuer, if it names one)
 import http from "node:http";
 import https from "node:https";
 import { stat } from "node:fs/promises";
@@ -73,18 +76,61 @@ export function parseConnectOrigins(raw) {
   return origins;
 }
 
+/** Parse LOOMBOARD_BASE_URL: null when unset or blank, else a bare http(s)
+ *  origin. The app checks a sign-in's issuer against this address, so one with
+ *  a path or a trailing slash would make every sign-in fail: refuse it at start
+ *  instead. */
+export function parseBaseUrl(raw) {
+  const v = (raw ?? "").trim();
+  if (!v) return null;
+  if (!isOrigin(v)) {
+    throw new Error(
+      `LOOMBOARD_BASE_URL: "${v}" is not an origin (scheme://host[:port], no path or trailing slash)`,
+    );
+  }
+  return v;
+}
+
+function isOrigin(v) {
+  try {
+    const u = new URL(v);
+    return /^https?:$/.test(u.protocol) && u.origin === v;
+  } catch {
+    return false;
+  }
+}
+
+/** The Base URL to offer when LOOMBOARD_BASE_URL is unset: the issuer the
+ *  upstream's OAuth metadata names. The upstream is the operator's runtime and
+ *  its issuer is the address a sign-in has to match anyway. Null when the
+ *  metadata can't be read in time or its issuer is not a bare origin: the app
+ *  then keeps its usual default, and nothing stops the container. */
+export async function discoverBaseUrl(upstream, { timeoutMs = 5000, fetchImpl = fetch } = {}) {
+  try {
+    const res = await fetchImpl(new URL(OAUTH_METADATA, upstream), {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return null;
+    const issuer = (await res.json())?.issuer;
+    return typeof issuer === "string" && isOrigin(issuer) ? issuer : null;
+  } catch {
+    return null;
+  }
+}
+
 function proxied(pathname) {
   return pathname === "/v1" || pathname.startsWith("/v1/") || pathname === OAUTH_METADATA;
 }
 
 /** The server, unstarted. `upstream` is a URL string or empty. */
-export function createServer({ root, upstream, connectOrigins }) {
+export function createServer({ root, upstream, connectOrigins, baseUrl }) {
   const ROOT = resolve(root);
   const UP = upstream ? new URL(upstream) : null;
   const request = UP?.protocol === "https:" ? https.request : http.request;
-  // The origins were checked by parseConnectOrigins, so JSON.stringify yields a
-  // plain data literal.
-  const runtimeConfig = `window.__LOOMBOARD_CONFIG__ = ${JSON.stringify({ connectOrigins })};\n`;
+  // The origins and the Base URL were checked (parseConnectOrigins, parseBaseUrl
+  // or discoverBaseUrl), so JSON.stringify yields a plain data literal.
+  const config = baseUrl ? { connectOrigins, baseUrl } : { connectOrigins };
+  const runtimeConfig = `window.__LOOMBOARD_CONFIG__ = ${JSON.stringify(config)};\n`;
 
   function proxy(req, res, path) {
     const headers = { ...req.headers, host: UP.host };
@@ -211,21 +257,31 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const port = Number(process.env.PORT || 8080);
   const upstream = process.env.LOOMCYCLE_UPSTREAM || "";
   let connectOrigins;
+  let baseUrl;
   try {
     connectOrigins = parseConnectOrigins(process.env.LOOMBOARD_CONNECT_ORIGINS);
+    baseUrl = parseBaseUrl(process.env.LOOMBOARD_BASE_URL);
   } catch (err) {
     console.error(`loomboard: ${err.message}`);
     process.exit(1);
+  }
+  // An explicit LOOMBOARD_BASE_URL wins; without one, adopt the upstream's issuer.
+  let baseUrlFrom = baseUrl ? "LOOMBOARD_BASE_URL" : "";
+  if (!baseUrl && upstream) {
+    baseUrl = await discoverBaseUrl(upstream);
+    if (baseUrl) baseUrlFrom = "the upstream's OAuth issuer";
   }
   const server = createServer({
     root: process.env.SRV_ROOT || "/srv",
     upstream,
     connectOrigins,
+    baseUrl,
   });
   server.listen(port, () => {
     console.log(
       `loomboard: serving on :${port}; /v1 -> ${upstream || "(none)"}; ` +
-        `connect handoff from ${connectOrigins.length ? connectOrigins.join(", ") : "(none)"}`,
+        `connect handoff from ${connectOrigins.length ? connectOrigins.join(", ") : "(none)"}; ` +
+        `Base URL ${baseUrl ? `${baseUrl} (from ${baseUrlFrom})` : "(none)"}`,
     );
   });
   // PID 1 in a container gets no default signal handling: without this, `docker
