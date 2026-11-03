@@ -96,7 +96,8 @@ export async function loadDocPreview(call: DocumentCall, ref: DocRef): Promise<D
         documentId,
         chunkId: id,
         title: str(chunk.title) ?? "Untitled section",
-        documentTitle: str(doc.title),
+        // A document's root chunk is the document: "in <itself>" says nothing.
+        documentTitle: str(doc.root_chunk_id) === id ? undefined : str(doc.title),
         type: str(chunk.type),
         tags: tags(chunk.tags),
         excerpt: ex.text,

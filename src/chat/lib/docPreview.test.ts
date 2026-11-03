@@ -69,6 +69,12 @@ describe("loadDocPreview", () => {
     });
   });
 
+  it("leaves out the document's title when the chunk is that document's root", async () => {
+    const res = await loadDocPreview(store(), { kind: "chunk", id: ROOT, scope: "user" });
+    expect(res.ok && res.preview.title).toBe("Release plan");
+    expect(res.ok && res.preview.documentTitle).toBeUndefined();
+  });
+
   it("reports an id the store does not hold as not found, with the runtime's reason", async () => {
     const res = await loadDocPreview(store(), { kind: "chunk", id: DOC, scope: "user" });
     expect(res).toEqual({ ok: false, notFound: true, reason: `get_chunk: no such chunk: ${DOC}` });
