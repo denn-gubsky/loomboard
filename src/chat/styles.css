@@ -1240,3 +1240,27 @@
 .loomchat .docref-pop-open:hover {
   background: var(--overlay);
 }
+
+/* read-aloud (RFC FX) */
+.loomchat .msg-actions.active {
+  opacity: 1;
+}
+.loomchat .msg-actions {
+  align-items: center;
+}
+.loomchat .speak-btn:disabled {
+  cursor: default;
+}
+.loomchat .speak-failed {
+  color: var(--danger);
+}
+.loomchat .speak-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-left: 0.25rem;
+}
+.loomchat .speak-error {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin-left: 0.25rem;
+}

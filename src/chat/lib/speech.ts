@@ -100,6 +100,24 @@ export function splitForSpeech(text: string, max: number = PIECE_CHARS): string[
   return pieces;
 }
 
+/** The language to name for one piece, or undefined to let loomcycle pick.
+ *  loomcycle (1.140) detects only Cyrillic: Latin text goes to the
+ *  deployment's default language, so with `uk` as the default the Ukrainian
+ *  voice reads an English reply as near-silence. A piece whose Latin letters
+ *  outnumber its Cyrillic ones is named `en` when the deployment speaks it.
+ *  Remove once loomcycle picks the configured Latin-script language itself
+ *  (G30 follow-up G31). Pure. */
+export function speechLanguage(piece: string, languages: Record<string, unknown> | undefined): string | undefined {
+  if (!languages || !("en" in languages)) return undefined;
+  let latin = 0;
+  let cyrillic = 0;
+  for (const ch of piece) {
+    if (/\p{Script=Latin}/u.test(ch) && /\p{L}/u.test(ch)) latin++;
+    else if (/\p{Script=Cyrillic}/u.test(ch) && /\p{L}/u.test(ch)) cyrillic++;
+  }
+  return latin > cyrillic ? "en" : undefined;
+}
+
 /** The read-aloud format to ask for: the encoded format the deployment offers
  *  when this browser plays it, else WAV, which every deployment returns.
  *  `formats` is `wav` plus at most one of mp3 / ogg — whichever the operator's
