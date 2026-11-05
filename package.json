@@ -85,7 +85,7 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^3.0.0",
-    "@loomcycle/client": "1.134.0",
+    "@loomcycle/client": "1.140.0",
     "@loomcycle/library": "0.2.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/cli": "^2.11.4",
