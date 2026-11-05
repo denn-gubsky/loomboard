@@ -66,7 +66,7 @@ export default function MessageList({
   return (
     <div className="messages" ref={containerRef} onScroll={onScroll}>
       {messages.map((m, i) => (
-        <Message key={i} message={m} />
+        <Message key={i} message={m} speechKey={String(i)} />
       ))}
       {waiting && <TypingIndicator />}
       {compacting && (

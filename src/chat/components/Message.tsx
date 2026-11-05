@@ -4,8 +4,13 @@ import Markdown from "./Markdown";
 import ThinkingBlock from "./ThinkingBlock";
 import ToolCard from "./ToolCard";
 import CopyButton from "./CopyButton";
+import SpeakButton from "./SpeakButton";
+import { answerText } from "../lib/speech";
+import { useReadAloudContext } from "../hooks/useReadAloud";
 
-export default function Message({ message }: { message: ChatMessage }) {
+/** `speechKey` names the reply to read-aloud; without it there is no speaker. */
+export default function Message({ message, speechKey }: { message: ChatMessage; speechKey?: string }) {
+  const speech = useReadAloudContext();
   if (message.role === "user") {
     // User text is shown verbatim (not parsed as markdown).
     return (
@@ -31,11 +36,12 @@ export default function Message({ message }: { message: ChatMessage }) {
   }
 
   const streaming = message.status === "streaming";
-  // Copy the answer text (the markdown parts) — not thinking or tool output.
-  const copyText = message.parts
-    .flatMap((p) => (p.type === "text" ? [p.text] : []))
-    .join("\n\n")
-    .trim();
+  // Copy (and read aloud) the answer text — not thinking or tool output.
+  const copyText = answerText(message.parts);
+  // The actions show on hover; keep them up while this reply is read aloud, or
+  // says why reading it failed.
+  const speaking =
+    speechKey !== undefined && (speech?.state.key === speechKey || speech?.state.error?.key === speechKey);
 
   return (
     <div className="msg assistant">
@@ -74,8 +80,9 @@ export default function Message({ message }: { message: ChatMessage }) {
         )}
 
         {!streaming && copyText && (
-          <div className="msg-actions">
+          <div className={speaking ? "msg-actions active" : "msg-actions"}>
             <CopyButton text={copyText} title="Copy message" />
+            {speechKey !== undefined && <SpeakButton speechKey={speechKey} text={copyText} />}
           </div>
         )}
       </div>

@@ -10,6 +10,7 @@ import { effectiveFields, inertSettings } from "./lib/effective";
 import { estimateConversationTokens } from "./lib/metrics";
 import { createDocPreviewCache } from "./lib/docPreview";
 import { DocLinksContext, type DocLinks, type DocumentOpenTarget } from "./hooks/useDocLinks";
+import { ReadAloudContext, useReadAloud } from "./hooks/useReadAloud";
 import AgentPicker from "./components/AgentPicker";
 import OverridesPanel from "./components/OverridesPanel";
 import MessageList from "./components/MessageList";
@@ -65,6 +66,10 @@ export interface ChatProps {
    *  arrives with its document already looked up. Omit it and the links still
    *  preview on hover, with no control to open them. */
   onOpenDocument?: (target: DocumentOpenTarget) => void;
+  /** Voice controls (RFC FX). Each shows only where the connected loomcycle
+   *  (1.140+) offers it to this user, as its `whoami` reports. `false` turns
+   *  voice off for this host; `{ output: false }` hides read-aloud. */
+  voice?: false | { output?: boolean };
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -85,6 +90,7 @@ export default function Chat({
   escapeStops = true,
   initialInput,
   onOpenDocument,
+  voice,
 }: ChatProps) {
   const client = useMemo(
     () => createLoomcycleClient(connection),
@@ -97,6 +103,7 @@ export default function Chat({
   const previews = useMemo(() => createDocPreviewCache((input) => client.document(input)), [client]);
   const docLinks = useMemo<DocLinks>(() => ({ previews, open: onOpenDocument }), [previews, onOpenDocument]);
   const [showConfig, setShowConfig] = useState(false);
+  const readAloud = useReadAloud(client, voice !== false && voice?.output !== false, conversation.id);
 
   const baseDef = agents.find(
     (a) => a.name === conversation.baseAgent,
@@ -215,12 +222,14 @@ export default function Chat({
       )}
 
       <DocLinksContext.Provider value={docLinks}>
-        <MessageList
-          messages={chat.state.messages}
-          running={chat.running}
-          recap={recap}
-          compacting={chat.compacting}
-        />
+        <ReadAloudContext.Provider value={readAloud}>
+          <MessageList
+            messages={chat.state.messages}
+            running={chat.running}
+            recap={recap}
+            compacting={chat.compacting}
+          />
+        </ReadAloudContext.Provider>
       </DocLinksContext.Provider>
 
       {chat.state.pendingInterrupt && (
