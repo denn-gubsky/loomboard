@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 import { LoomcycleError, type LoomcycleClient, type SpeechDirectionInfo } from "@loomcycle/client";
 import { pickSpeechFormat, speechLanguage, splitForSpeech } from "../lib/speech";
 import { createSpeechPlayer, type AudioLike, type SpeechPlayerState } from "../lib/speechPlayer";
@@ -22,30 +22,6 @@ export function useReadAloudContext(): ReadAloud | null {
   return useContext(ReadAloudContext);
 }
 
-/** Whether the server offers read-aloud to this caller, and how. Asked once
- *  per client, never by trying a request: `whoami` says whether the engine is
- *  on and the caller passes the route's gates (loomcycle 1.140+), and only
- *  then is `speechInfo` read. A client without speechInfo (the package's peer
- *  range starts below 1.140) or any failure means no read-aloud. */
-function useSpeechOutputInfo(client: LoomcycleClient, enabled: boolean): SpeechDirectionInfo | null {
-  const [info, setInfo] = useState<SpeechDirectionInfo | null>(null);
-  useEffect(() => {
-    setInfo(null);
-    if (!enabled || typeof (client as Partial<LoomcycleClient>).speechInfo !== "function") return;
-    let live = true;
-    (async () => {
-      const me = await client.whoami();
-      if (!me.effective?.surfaces?.speech) return;
-      const { speech } = await client.speechInfo();
-      if (live && speech.enabled) setInfo(speech);
-    })().catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [client, enabled]);
-  return info;
-}
-
 // A 403 (scope, access rule, an agent-limited token) or the engine switched
 // off: read-aloud is not this user's any more. Anything else is one failure.
 function isUnavailable(e: unknown): boolean {
@@ -55,10 +31,14 @@ function isUnavailable(e: unknown): boolean {
 
 const MIME = { wav: "audio/wav", mp3: "audio/mpeg", ogg: "audio/ogg", opus: "audio/ogg" } as const;
 
-/** Read-aloud for one chat, or null when it is not offered here. `resetKey`
- *  (the conversation) stops a reading when it changes. */
-export function useReadAloud(client: LoomcycleClient, enabled: boolean, resetKey: string): ReadAloud | null {
-  const info = useSpeechOutputInfo(client, enabled);
+/** Read-aloud for one chat, or null when it is not offered here (`info` is
+ *  useSpeechCaps' speech direction). `resetKey` (the conversation) stops a
+ *  reading when it changes. */
+export function useReadAloud(
+  client: LoomcycleClient,
+  info: SpeechDirectionInfo | null,
+  resetKey: string,
+): ReadAloud | null {
   const format = useMemo(() => {
     if (!info) return null;
     const probe = typeof Audio === "undefined" ? null : new Audio();

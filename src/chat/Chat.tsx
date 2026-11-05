@@ -11,6 +11,7 @@ import { estimateConversationTokens } from "./lib/metrics";
 import { createDocPreviewCache } from "./lib/docPreview";
 import { DocLinksContext, type DocLinks, type DocumentOpenTarget } from "./hooks/useDocLinks";
 import { ReadAloudContext, useReadAloud } from "./hooks/useReadAloud";
+import { useSpeechCaps } from "./hooks/useSpeechCaps";
 import AgentPicker from "./components/AgentPicker";
 import OverridesPanel from "./components/OverridesPanel";
 import MessageList from "./components/MessageList";
@@ -103,7 +104,8 @@ export default function Chat({
   const previews = useMemo(() => createDocPreviewCache((input) => client.document(input)), [client]);
   const docLinks = useMemo<DocLinks>(() => ({ previews, open: onOpenDocument }), [previews, onOpenDocument]);
   const [showConfig, setShowConfig] = useState(false);
-  const readAloud = useReadAloud(client, voice !== false && voice?.output !== false, conversation.id);
+  const speechCaps = useSpeechCaps(client, { output: voice !== false && voice?.output !== false, input: false });
+  const readAloud = useReadAloud(client, speechCaps.speech, conversation.id);
 
   const baseDef = agents.find(
     (a) => a.name === conversation.baseAgent,
