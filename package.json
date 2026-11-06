@@ -81,7 +81,7 @@
     "remark-gemoji": "^8.0.0",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
-    "three": "0.186.1"
+    "three": "0.187.0"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^3.0.0",
