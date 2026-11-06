@@ -108,6 +108,18 @@ describe("MicButton", () => {
     expect(voice.pickLanguage).toHaveBeenCalledWith("en");
   });
 
+  it("names each language in itself", () => {
+    show(stub());
+    const picker = screen.getByLabelText("Voice input language") as HTMLSelectElement;
+    expect([...picker.options].map((o) => o.textContent)).toEqual(["uk · Українська", "en · English"]);
+  });
+
+  it("hides the language switch when the server offers one language", () => {
+    show(stub({}, { languages: ["uk"], language: "uk" }));
+    expect(screen.getByLabelText("Voice input")).toBeTruthy();
+    expect(screen.queryByLabelText("Voice input language")).toBeNull();
+  });
+
   it("inserts the transcript at the caret and does not send", () => {
     const { ref, onSend } = show(stub());
     const ta = document.querySelector("textarea")!;

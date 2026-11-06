@@ -47,6 +47,18 @@ export function voiceLanguages(
   return [...new Set(all.filter((l): l is string => !!l))];
 }
 
+/** A language's name in itself ("Українська" for uk), for the picker; the
+ *  code where the runtime has no name for it. */
+export function languageName(code: string): string {
+  try {
+    const name = new Intl.DisplayNames([code], { type: "language" }).of(code);
+    if (name && name !== code) return name.charAt(0).toLocaleUpperCase(code) + name.slice(1);
+  } catch {
+    // an engine without Intl.DisplayNames, or a code it does not take
+  }
+  return code;
+}
+
 /** The language to transcribe in (RFC FX D5): the one picked for this
  *  conversation, else the host's, else the server's default, else the first
  *  browser language the mic offers; undefined leaves it to the server. Sent

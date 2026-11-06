@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, Loader2, Mic, RotateCcw, Square, X } from "lucide-react";
 import type { VoiceInput } from "../hooks/useVoiceInput";
+import { languageName } from "../lib/voiceInput";
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -154,7 +155,8 @@ export function VoiceStatus({ voice }: { voice: VoiceInput }) {
   return null;
 }
 
-/** The transcription language, when there is more than one to choose. */
+/** The transcription language, when the server offers more than one: its
+ *  speech-to-text default and the languages it speaks (useVoiceInput). */
 export function VoiceLanguage({ voice }: { voice: VoiceInput }) {
   if (voice.languages.length < 2 || voice.state.status !== "idle" || voice.unavailable) return null;
   return (
@@ -167,7 +169,7 @@ export function VoiceLanguage({ voice }: { voice: VoiceInput }) {
     >
       {voice.languages.map((l) => (
         <option key={l} value={l}>
-          {l}
+          {l} · {languageName(l)}
         </option>
       ))}
     </select>
