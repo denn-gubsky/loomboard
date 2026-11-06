@@ -28,6 +28,7 @@ import CanvasArea from "./components/workflow/CanvasArea";
 import PendingApprovals from "./components/PendingApprovals";
 import MyAccess from "./components/MyAccess";
 import AppClients from "./components/AppClients";
+import { appVoice } from "./lib/voice";
 
 // The linked-document panel beside the chat: its width is the reader's own,
 // kept between sessions; the chat keeps at least CHAT_MIN.
@@ -104,6 +105,7 @@ function ChatArea({ onOpenInDocuments }: { onOpenInDocuments?: (t: DocTarget) =>
     <div className="chat-split-pane" ref={paneRef}>
       <div className="chat-split-pane__chat">
         <Chat
+          voice={appVoice}
           // Remount per conversation: a fresh useChat per chat tears the previous
           // run down cleanly. Without this the one reused instance leaks the prior
           // chat's session/run onto the newly-selected conversation (the persist

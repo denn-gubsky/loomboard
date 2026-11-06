@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Settings2 } from "lucide-react";
 import { createLoomcycleClient, type Connection } from "./lib/createClient";
 import { configIsCustom, type ChatConversation } from "./types";
@@ -11,10 +11,12 @@ import { estimateConversationTokens } from "./lib/metrics";
 import { createDocPreviewCache } from "./lib/docPreview";
 import { DocLinksContext, type DocLinks, type DocumentOpenTarget } from "./hooks/useDocLinks";
 import { ReadAloudContext, useReadAloud } from "./hooks/useReadAloud";
+import { useSpeechCaps } from "./hooks/useSpeechCaps";
+import { useVoiceInput } from "./hooks/useVoiceInput";
 import AgentPicker from "./components/AgentPicker";
 import OverridesPanel from "./components/OverridesPanel";
 import MessageList from "./components/MessageList";
-import Composer from "./components/Composer";
+import Composer, { type ComposerHandle } from "./components/Composer";
 import MetricsHud from "./components/MetricsHud";
 import CompactButton from "./components/CompactButton";
 import InterruptCard from "./components/InterruptCard";
@@ -68,8 +70,10 @@ export interface ChatProps {
   onOpenDocument?: (target: DocumentOpenTarget) => void;
   /** Voice controls (RFC FX). Each shows only where the connected loomcycle
    *  (1.140+) offers it to this user, as its `whoami` reports. `false` turns
-   *  voice off for this host; `{ output: false }` hides read-aloud. */
-  voice?: false | { output?: boolean };
+   *  voice off for this host; `{ output: false }` hides read-aloud and
+   *  `{ input: false }` the microphone. `language` is the host's preferred
+   *  language for voice input, until the user picks one in the chat. */
+  voice?: false | { output?: boolean; input?: boolean; language?: string };
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -103,7 +107,23 @@ export default function Chat({
   const previews = useMemo(() => createDocPreviewCache((input) => client.document(input)), [client]);
   const docLinks = useMemo<DocLinks>(() => ({ previews, open: onOpenDocument }), [previews, onOpenDocument]);
   const [showConfig, setShowConfig] = useState(false);
-  const readAloud = useReadAloud(client, voice !== false && voice?.output !== false, conversation.id);
+  const speechCaps = useSpeechCaps(client, {
+    output: voice !== false && voice?.output !== false,
+    input: voice !== false && voice?.input !== false,
+  });
+  const readAloud = useReadAloud(client, speechCaps.speech, conversation.id);
+  const composerRef = useRef<ComposerHandle>(null);
+  const pickVoiceLanguage = useCallback(
+    (language: string) => onConversationChange({ voiceLanguage: language }),
+    [onConversationChange],
+  );
+  const voiceInput = useVoiceInput(client, speechCaps.transcription, speechCaps.speech, {
+    picked: conversation.voiceLanguage,
+    onPick: pickVoiceLanguage,
+    host: voice ? voice.language : undefined,
+    onText: (text) => composerRef.current?.insert(text),
+    resetKey: conversation.id,
+  });
 
   const baseDef = agents.find(
     (a) => a.name === conversation.baseAgent,
@@ -241,6 +261,8 @@ export default function Chat({
       )}
 
       <Composer
+        ref={composerRef}
+        voice={voiceInput}
         disabled={noAgent || !!chat.state.pendingInterrupt}
         running={chat.running}
         freeTokens={freeTokens}

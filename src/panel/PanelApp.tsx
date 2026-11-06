@@ -32,6 +32,7 @@ import Connect from "./Connect";
 import ActionBar from "./ActionBar";
 import ModeToggle from "./ModeToggle";
 import BridgeStatusBar from "./BridgeStatusBar";
+import { appVoice } from "../lib/voice";
 
 /** "signing-in" = the sign-in window is open; the panel keeps its form up. */
 type Status = "idle" | "connecting" | "signing-in" | "connected" | "error";
@@ -387,6 +388,7 @@ export default function PanelApp({
         </div>
       </div>
       <Chat
+        voice={appVoice}
         // Remount cleanly on a new conversation so no stale session/transcript
         // carries over.
         key={conversation.id}

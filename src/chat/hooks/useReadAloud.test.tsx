@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LoomcycleClient } from "@loomcycle/client";
+import type { LoomcycleClient, SpeechDirectionInfo } from "@loomcycle/client";
 import { useReadAloud } from "./useReadAloud";
 
 // jsdom implements neither media playback nor object URLs. Record what each
@@ -24,59 +24,25 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function fakeClient(over: { surfaces?: Record<string, boolean>; formats?: string[]; noSpeechInfo?: boolean } = {}) {
+const INFO: SpeechDirectionInfo = { enabled: true, formats: ["wav"], languages: { uk: { voices: ["ukrainian_tts"], default_voice: "ukrainian_tts" }, en: { voices: ["af_heart"], default_voice: "af_heart" } } };
+
+function fakeClient() {
   const calls = {
-    whoami: vi.fn(async () => ({ subject: "u1", effective: { surfaces: over.surfaces ?? { speech: true } } })),
-    speechInfo: vi.fn(async () => ({
-      speech: { enabled: true, formats: over.formats ?? ["wav"], languages: { uk: {}, en: {} } },
-      transcription: { enabled: false },
-    })),
     speech: vi.fn(async (_input: string, _opts?: Record<string, unknown>) => ({ bytes: new Uint8Array([82, 73, 70, 70]), contentType: "audio/wav" })),
   };
-  const client = {
-    whoami: calls.whoami,
-    speech: calls.speech,
-    ...(over.noSpeechInfo ? {} : { speechInfo: calls.speechInfo }),
-  } as unknown as LoomcycleClient;
-  return { client, calls };
+  return { client: { speech: calls.speech } as unknown as LoomcycleClient, calls };
 }
 
 describe("useReadAloud", () => {
-  it("offers read-aloud when whoami reports the speech surface", async () => {
-    const { client, calls } = fakeClient();
-    const { result } = renderHook(() => useReadAloud(client, true, "c1"));
-    await waitFor(() => expect(result.current).not.toBeNull());
-    expect(calls.speechInfo).toHaveBeenCalledTimes(1);
-  });
-
-  it("hides read-aloud when whoami reports no speech surface, without reading speechInfo", async () => {
-    const { client, calls } = fakeClient({ surfaces: { speech: false } });
-    const { result } = renderHook(() => useReadAloud(client, true, "c1"));
-    await waitFor(() => expect(calls.whoami).toHaveBeenCalled());
-    await act(async () => undefined);
+  it("offers nothing without the speech direction", () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useReadAloud(client, null, "c1"));
     expect(result.current).toBeNull();
-    expect(calls.speechInfo).not.toHaveBeenCalled();
-  });
-
-  it("asks loomcycle nothing when the host turns voice off", async () => {
-    const { client, calls } = fakeClient();
-    const { result } = renderHook(() => useReadAloud(client, false, "c1"));
-    await act(async () => undefined);
-    expect(result.current).toBeNull();
-    expect(calls.whoami).not.toHaveBeenCalled();
-  });
-
-  it("hides read-aloud on a client that predates speechInfo", async () => {
-    const { client, calls } = fakeClient({ noSpeechInfo: true });
-    const { result } = renderHook(() => useReadAloud(client, true, "c1"));
-    await act(async () => undefined);
-    expect(result.current).toBeNull();
-    expect(calls.whoami).not.toHaveBeenCalled();
   });
 
   it("reads each piece through client.speech in the chosen format, with a signal to cancel", async () => {
     const { client, calls } = fakeClient();
-    const { result } = renderHook(() => useReadAloud(client, true, "c1"));
+    const { result } = renderHook(() => useReadAloud(client, INFO, "c1"));
     await waitFor(() => expect(result.current).not.toBeNull());
     act(() => result.current!.play("0", "Привіт, це перевірка голосу."));
     await waitFor(() => expect(result.current!.state.status).toBe("playing"));
@@ -88,7 +54,7 @@ describe("useReadAloud", () => {
 
   it("names en for an English piece, and leaves a Ukrainian one to loomcycle", async () => {
     const { client, calls } = fakeClient();
-    const { result } = renderHook(() => useReadAloud(client, true, "c1"));
+    const { result } = renderHook(() => useReadAloud(client, INFO, "c1"));
     await waitFor(() => expect(result.current).not.toBeNull());
     act(() => result.current!.play("0", "Привіт, це перевірка голосу.\n\n" + "Leaves change colour. ".repeat(40)));
     await waitFor(() => expect(calls.speech).toHaveBeenCalledTimes(2));
@@ -98,7 +64,7 @@ describe("useReadAloud", () => {
 
   it("never puts the bearer token in an audio URL: it plays only blob: URLs and the unlock clip", async () => {
     const { client } = fakeClient();
-    const { result } = renderHook(() => useReadAloud(client, true, "c1"));
+    const { result } = renderHook(() => useReadAloud(client, INFO, "c1"));
     await waitFor(() => expect(result.current).not.toBeNull());
     act(() => result.current!.play("0", "Hello."));
     await waitFor(() => expect(result.current!.state.status).toBe("playing"));
@@ -109,7 +75,7 @@ describe("useReadAloud", () => {
 
   it("stops reading when the conversation changes", async () => {
     const { client } = fakeClient();
-    const { result, rerender } = renderHook(({ id }) => useReadAloud(client, true, id), {
+    const { result, rerender } = renderHook(({ id }) => useReadAloud(client, INFO, id), {
       initialProps: { id: "c1" },
     });
     await waitFor(() => expect(result.current).not.toBeNull());
