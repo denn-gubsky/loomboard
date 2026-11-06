@@ -36,13 +36,17 @@ export function canSendRecording(info: TranscriptionDirectionInfo, recording: { 
   return true;
 }
 
-/** The languages the mic offers: the server's speech-to-text default, then
- *  the languages it speaks, then the host's. Pure. */
+/** The languages the mic offers. The operator's list when the server
+ *  publishes one (`transcription.stt.languages`, loomcycle 1.143+), in its
+ *  order: a request in any other language is refused. Without one, the
+ *  server's speech-to-text default, then the languages it speaks, then the
+ *  host's. Pure. */
 export function voiceLanguages(
   transcription: TranscriptionDirectionInfo,
   speech: SpeechDirectionInfo | null,
   host?: string,
 ): string[] {
+  if (transcription.languages && transcription.languages.length > 0) return [...new Set(transcription.languages)];
   const all = [transcription.default_language, ...Object.keys(speech?.languages ?? {}), host];
   return [...new Set(all.filter((l): l is string => !!l))];
 }

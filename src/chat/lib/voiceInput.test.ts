@@ -56,6 +56,20 @@ describe("voiceLanguages", () => {
     expect(voiceLanguages(info({ default_language: "uk" }), null)).toEqual(["uk"]);
     expect(voiceLanguages(info(), null)).toEqual([]);
   });
+
+  it("offers exactly the operator's list, in its order, when the server publishes one", () => {
+    const speech = { enabled: true, languages: { de: { voices: [], default_voice: "" } } };
+    const listed = info({ default_language: "uk", languages: ["uk", "ru", "en"] });
+    expect(voiceLanguages(listed, speech, "fr")).toEqual(["uk", "ru", "en"]);
+  });
+});
+
+describe("voiceLanguage with the operator's list", () => {
+  it("keeps to the list: a stored pick or host language off it gives way to the server's default", () => {
+    const options = ["uk", "ru", "en"];
+    expect(voiceLanguage(options, "de", "fr", "uk", ["de-DE"])).toBe("uk");
+    expect(voiceLanguage(options, "ru", undefined, "uk", [])).toBe("ru");
+  });
 });
 
 describe("languageName", () => {
