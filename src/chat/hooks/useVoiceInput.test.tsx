@@ -106,6 +106,24 @@ describe("useVoiceInput", () => {
     expect(track.stopped).toBe(true);
   });
 
+  it("never puts Qwen3-ASR's header in the draft: a header alone means no speech", async () => {
+    const { result, transcribe, onText } = setup();
+    transcribe.mockResolvedValueOnce({ text: "language None<asr_text>" });
+    act(() => result.current!.start());
+    await waitFor(() => expect(result.current!.state.status).toBe("recording"));
+    act(() => result.current!.stop());
+    await waitFor(() => expect(result.current!.state.status).toBe("error"));
+    expect(result.current!.state.error).toBe("No speech was recognised. Check that the level bar moves while you speak.");
+    expect(onText).not.toHaveBeenCalled();
+
+    transcribe.mockResolvedValueOnce({ text: "language English<asr_text>Hello there." });
+    act(() => result.current!.dismiss());
+    act(() => result.current!.start());
+    await waitFor(() => expect(result.current!.state.status).toBe("recording"));
+    act(() => result.current!.stop());
+    await waitFor(() => expect(onText).toHaveBeenCalledWith("Hello there."));
+  });
+
   it("defaults to the server's language", () => {
     const { result } = setup();
     expect(result.current?.language).toBe("uk");

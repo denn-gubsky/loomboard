@@ -5,6 +5,7 @@ import {
   canSendRecording,
   insertTranscript,
   languageName,
+  transcriptText,
   recordingLimitSeconds,
   typeAccepted,
   voiceLanguage,
@@ -69,6 +70,31 @@ describe("voiceLanguage with the operator's list", () => {
     const options = ["uk", "ru", "en"];
     expect(voiceLanguage(options, "de", "fr", "uk", ["de-DE"])).toBe("uk");
     expect(voiceLanguage(options, "ru", undefined, "uk", [])).toBe("ru");
+  });
+});
+
+describe("transcriptText", () => {
+  it("removes Qwen3-ASR's header", () => {
+    expect(transcriptText("language Russian<asr_text>Привет. Сегодня мы проверяем голосовой ввод.")).toBe(
+      "Привет. Сегодня мы проверяем голосовой ввод.",
+    );
+  });
+
+  it("is empty when the model heard no speech", () => {
+    expect(transcriptText("language None<asr_text>")).toBe("");
+  });
+
+  it("removes the header of every piece of a cut recording", () => {
+    expect(transcriptText("language Russian<asr_text>Первая часть. language Russian<asr_text>Вторая часть.")).toBe(
+      "Первая часть. Вторая часть.",
+    );
+  });
+
+  it("leaves an ordinary transcript alone, even one that says language", () => {
+    expect(transcriptText("Which language English speakers use<asr is fine.")).toBe(
+      "Which language English speakers use<asr is fine.",
+    );
+    expect(transcriptText("  Hello\nworld  ")).toBe("Hello\nworld");
   });
 });
 

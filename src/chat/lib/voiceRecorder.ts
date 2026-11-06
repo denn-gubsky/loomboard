@@ -113,7 +113,7 @@ export function createVoiceRecorder(deps: VoiceRecorderDeps): VoiceRecorder {
       if (gen !== generation) return;
       kept = null;
       if (!text) {
-        set({ status: "error", startedAt: null, error: "No speech was recognised.", canRetry: false });
+        set({ status: "error", startedAt: null, error: "No speech was recognised. Check that the level bar moves while you speak.", canRetry: false });
         return;
       }
       set(IDLE);

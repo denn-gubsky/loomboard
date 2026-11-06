@@ -179,6 +179,6 @@ describe("voiceRecorder", () => {
     transcribeCalls[0].resolve("   ");
     await tick();
     expect(texts).toEqual([]);
-    expect(rec.getState()).toMatchObject({ status: "error", error: "No speech was recognised.", canRetry: false });
+    expect(rec.getState()).toMatchObject({ status: "error", error: "No speech was recognised. Check that the level bar moves while you speak.", canRetry: false });
   });
 });

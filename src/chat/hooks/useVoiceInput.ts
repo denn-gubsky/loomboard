@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { LoomcycleClient, SpeechDirectionInfo, TranscriptionDirectionInfo } from "@loomcycle/client";
-import { canSendRecording, recordingLimitSeconds, voiceLanguage, voiceLanguages } from "../lib/voiceInput";
+import { canSendRecording, recordingLimitSeconds, transcriptText, voiceLanguage, voiceLanguages } from "../lib/voiceInput";
 import { createVoiceRecorder, type RecorderLike, type VoiceRecorderState } from "../lib/voiceRecorder";
 import { recordingToWav } from "../lib/wav";
 import { describeError } from "../lib/errors";
@@ -123,7 +123,7 @@ export function useVoiceInput(
           filename: `recording.${EXTENSION[type] ?? "bin"}`,
           ...(lang ? { language: lang } : {}),
         });
-        return r.text;
+        return transcriptText(r.text);
       },
       onText: (text) => latest.current.onText(text),
       describe: describeError,
