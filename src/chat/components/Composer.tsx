@@ -1,5 +1,7 @@
 import {
+  forwardRef,
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
   type ClipboardEvent,
@@ -26,6 +28,9 @@ import {
   estimateTextTokens,
 } from "../lib/attachmentBudget";
 import { navigateHistory, noHistoryNav } from "../lib/inputHistory";
+import { insertTranscript } from "../lib/voiceInput";
+import type { VoiceInput } from "../hooks/useVoiceInput";
+import { MicButton, VoiceLanguage, VoiceStatus } from "./MicButton";
 
 interface Props {
   disabled: boolean;
@@ -41,6 +46,15 @@ interface Props {
   onSend: (text: string, attachments: StagedAttachment[]) => void;
   onStop: () => void;
   placeholder?: string;
+  /** Voice input (RFC FX), null where loomcycle does not offer it. */
+  voice?: VoiceInput | null;
+}
+
+/** What <Chat> may do to the draft from outside. */
+export interface ComposerHandle {
+  /** Put a voice transcript into the draft at the caret, for the user to
+   *  read and send (RFC FX D2). */
+  insert(text: string): void;
 }
 
 /** Pasted screenshots arrive as unnamed File blobs; give them a stable name so
@@ -78,7 +92,7 @@ function AttChip({
   );
 }
 
-export default function Composer({
+export default forwardRef<ComposerHandle, Props>(function Composer({
   disabled,
   running,
   freeTokens,
@@ -88,7 +102,8 @@ export default function Composer({
   onSend,
   onStop,
   placeholder,
-}: Props) {
+  voice,
+}, ref) {
   // Seed once on mount; the user edits/sends from there (a later switch to a
   // different pre-filled chat remounts via the host's React key).
   const [text, setText] = useState(initialText ?? "");
@@ -96,6 +111,23 @@ export default function Composer({
   const [dragging, setDragging] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const histRef = useRef(noHistoryNav);
+
+  useImperativeHandle(ref, () => ({
+    insert(transcript) {
+      const ta = taRef.current;
+      const end = ta ? ta.selectionEnd : text.length;
+      const start = ta ? ta.selectionStart : end;
+      const next = insertTranscript(text, start, end, transcript);
+      setText(next.text);
+      histRef.current = noHistoryNav;
+      requestAnimationFrame(() => {
+        const t = taRef.current;
+        if (!t) return;
+        t.focus();
+        t.selectionStart = t.selectionEnd = next.caret;
+      });
+    },
+  }), [text]);
 
   // Reset the recall cursor when switching conversations (history is per-chat).
   useEffect(() => {
@@ -276,6 +308,8 @@ export default function Composer({
         </div>
       )}
 
+      {voice && <VoiceStatus voice={voice} />}
+
       <div className="composer">
         {/* A <label> wrapping a visually-hidden input opens the native file
             dialog on click in every browser — more robust than calling
@@ -297,6 +331,8 @@ export default function Composer({
             }}
           />
         </label>
+        {voice && <MicButton voice={voice} disabled={disabled} />}
+        {voice && <VoiceLanguage voice={voice} />}
         <textarea
           ref={taRef}
           className="composer-input"
@@ -329,4 +365,4 @@ export default function Composer({
       </div>
     </div>
   );
-}
+});

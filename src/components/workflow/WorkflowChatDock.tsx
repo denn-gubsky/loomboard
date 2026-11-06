@@ -4,6 +4,7 @@ import type { InterruptRow, LoomcycleClient } from "@loomcycle/client";
 import { Chat, type ChatConversation, type Connection } from "../../chat";
 import { agentIdentity } from "../../lib/agentIdentity";
 import PendingQuestionBar from "../agentchat/PendingQuestionBar";
+import { appVoice } from "../../lib/voice";
 
 // One chat pane in the dock. A run pane attaches to an existing run (runId +
 // sessionId, from a card miniature); the orchestrator pane starts a fresh run
@@ -144,6 +145,7 @@ function DockPane({
 
       <div className="wf-pane-chat">
         <Chat
+          voice={appVoice}
           connection={connection}
           conversation={conv}
           onConversationChange={onConversationChange}

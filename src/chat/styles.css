@@ -1264,3 +1264,97 @@
   color: var(--danger);
   margin-left: 0.25rem;
 }
+
+/* voice input (RFC FX) */
+.loomchat .mic-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.loomchat .mic-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg);
+  border-color: var(--border);
+}
+.loomchat .mic-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.loomchat .mic-btn.recording {
+  color: #fff;
+  background: var(--danger);
+}
+.loomchat .voice-lang {
+  flex: none;
+  align-self: center;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.1rem 0.2rem;
+}
+.loomchat .voice-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  padding: 0.25rem 0.5rem;
+}
+.loomchat .voice-status.error {
+  color: var(--danger);
+}
+.loomchat .voice-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.loomchat .voice-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.loomchat .voice-level {
+  width: 4rem;
+  height: 0.3rem;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.loomchat .voice-level > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.08s linear;
+}
+.loomchat .voice-spacer {
+  flex: 1;
+}
+.loomchat .voice-x {
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.loomchat .voice-x:hover {
+  border-color: var(--border);
+  color: var(--text);
+}

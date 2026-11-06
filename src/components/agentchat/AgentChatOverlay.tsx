@@ -5,6 +5,7 @@ import { Chat, type ChatConversation, type Connection } from "../../chat";
 import type { RunTile } from "../../lib/runStates";
 import type { AgentIdentity } from "../../lib/agentIdentity";
 import PendingQuestionBar from "./PendingQuestionBar";
+import { appVoice } from "../../lib/voice";
 
 // The enlarge view: a modal that mounts the full <Chat> for the run (history +
 // composer + interrupts + stop, for free) recolored to the agent's accent. If
@@ -85,6 +86,7 @@ export default function AgentChatOverlay({
 
         <div className="aco-chat">
           <Chat
+            voice={appVoice}
             connection={connection}
             conversation={conv}
             onConversationChange={onConversationChange}

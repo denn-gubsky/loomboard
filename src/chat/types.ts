@@ -48,6 +48,9 @@ export interface ChatConversation {
   /** loomcycle session + interactive run, set after the first turn. */
   sessionId?: string;
   runId?: string;
+  /** The language voice input transcribes in, once the user picks one for
+   *  this conversation (RFC FX D5). */
+  voiceLanguage?: string;
 }
 
 /** Whether a key carries a real setting. Absent, `undefined` and `""` are all

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { LoomcycleClient } from "@loomcycle/client";
 import type { RunChatTarget } from "@loomboard/workflow";
 import { Chat, type ChatConversation, type Connection } from "../../chat";
+import { appVoice } from "../../lib/voice";
 
 // The canvas's Run-mode chat for ONE member run of a team walk: its full
 // transcript, and a composer.
@@ -68,7 +69,7 @@ export function RunChatPane({
       {error && <p className="run-chat-pane__error">Could not open this run: {error}</p>}
       {conv && (
         <div className="run-chat-pane__chat">
-          <Chat connection={connection} conversation={conv} onConversationChange={onConversationChange} />
+          <Chat connection={connection} conversation={conv} onConversationChange={onConversationChange} voice={appVoice} />
         </div>
       )}
     </div>
