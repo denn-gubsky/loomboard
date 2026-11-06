@@ -72,8 +72,10 @@ export interface ChatProps {
    *  (1.140+) offers it to this user, as its `whoami` reports. `false` turns
    *  voice off for this host; `{ output: false }` hides read-aloud and
    *  `{ input: false }` the microphone. `language` is the host's preferred
-   *  language for voice input, until the user picks one in the chat. */
-  voice?: false | { output?: boolean; input?: boolean; language?: string };
+   *  language for voice input, until the user picks one in the chat;
+   *  `languages` limits the picker to these codes, in this order (default:
+   *  every language loomcycle accepts). */
+  voice?: false | { output?: boolean; input?: boolean; language?: string; languages?: string[] };
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -121,6 +123,7 @@ export default function Chat({
     picked: conversation.voiceLanguage,
     onPick: pickVoiceLanguage,
     host: voice ? voice.language : undefined,
+    hostLanguages: voice ? voice.languages : undefined,
     onText: (text) => composerRef.current?.insert(text),
     resetKey: conversation.id,
   });

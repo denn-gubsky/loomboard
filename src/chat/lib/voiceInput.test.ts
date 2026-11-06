@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { TranscriptionDirectionInfo } from "@loomcycle/client";
 import {
   CLIENT_MAX_SECONDS,
+  TRANSCRIPTION_LANGUAGES,
+  languageName,
   canSendRecording,
   insertTranscript,
   recordingLimitSeconds,
@@ -49,11 +51,39 @@ describe("canSendRecording", () => {
 });
 
 describe("voiceLanguages", () => {
-  it("offers the server's default first, then the languages it speaks, then the host's, once each", () => {
-    const speech = { enabled: true, languages: { en: { voices: [], default_voice: "" }, uk: { voices: [], default_voice: "" } } };
-    expect(voiceLanguages(info({ default_language: "uk" }), speech, "de")).toEqual(["uk", "en", "de"]);
-    expect(voiceLanguages(info({ default_language: "uk" }), null)).toEqual(["uk"]);
-    expect(voiceLanguages(info(), null)).toEqual([]);
+  const speech = { enabled: true, languages: { en: { voices: [], default_voice: "" }, uk: { voices: [], default_voice: "" } } };
+
+  it("offers every language loomcycle accepts, the likely ones first", () => {
+    const list = voiceLanguages(info({ default_language: "uk" }), speech, "de", ["pl-PL", "en-GB"]);
+    expect(list.slice(0, 4)).toEqual(["uk", "de", "pl", "en"]);
+    expect([...list].sort()).toEqual([...TRANSCRIPTION_LANGUAGES].sort());
+  });
+
+  it("offers the full list even when the server names only one language", () => {
+    const list = voiceLanguages(info({ default_language: "uk" }), null);
+    expect(list[0]).toBe("uk");
+    expect(list.length).toBe(TRANSCRIPTION_LANGUAGES.length);
+  });
+
+  it("offers only the host's languages, in its order, when it names them", () => {
+    expect(voiceLanguages(info({ default_language: "uk" }), speech, undefined, ["uk-UA"], ["ru", "en"])).toEqual(["ru", "en"]);
+    expect(voiceLanguages(info(), null, undefined, [], ["en", "xx", "ru"])).toEqual(["en", "ru"]);
+  });
+
+  it("leaves out codes loomcycle would refuse", () => {
+    expect(voiceLanguages(info({ default_language: "uk" }), null, "xx", ["tlh"])).not.toContain("xx");
+  });
+});
+
+describe("languageName", () => {
+  it("names a language in itself, capitalised", () => {
+    expect(languageName("uk")).toBe("Українська");
+    expect(languageName("en")).toBe("English");
+    expect(languageName("de")).toBe("Deutsch");
+  });
+
+  it("falls back to the code", () => {
+    expect(languageName("not-a-code!")).toBe("not-a-code!");
   });
 });
 
@@ -66,9 +96,13 @@ describe("voiceLanguage", () => {
     expect(voiceLanguage(options, undefined, undefined, "uk", ["en-US"])).toBe("uk");
   });
 
-  it("falls back to the first browser language on offer, and else to none", () => {
+  it("falls back to the first browser language on offer, else to the first offered", () => {
     expect(voiceLanguage(options, undefined, undefined, undefined, ["de-DE", "en-GB"])).toBe("en");
-    expect(voiceLanguage(options, "fr", undefined, undefined, ["de"])).toBeUndefined();
+    expect(voiceLanguage(options, "fr", undefined, undefined, ["de"])).toBe("uk");
+  });
+
+  it("does not fall back to a server default the host left out", () => {
+    expect(voiceLanguage(["ru", "en"], undefined, undefined, "uk", ["uk-UA"])).toBe("ru");
   });
 });
 

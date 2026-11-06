@@ -76,6 +76,8 @@ interface Options {
   onPick(language: string): void;
   /** The host's preferred language (ChatProps.voice.language). */
   host: string | undefined;
+  /** The only languages the host offers (ChatProps.voice.languages). */
+  hostLanguages?: readonly string[];
   /** Where a transcript goes: the composer, at its caret. */
   onText(text: string): void;
   /** The conversation: a recording is dropped when it changes. */
@@ -91,8 +93,11 @@ export function useVoiceInput(
   opts: Options,
 ): VoiceInput | null {
   const languages = useMemo(
-    () => (transcription ? voiceLanguages(transcription, speech, opts.host) : []),
-    [transcription, speech, opts.host],
+    () =>
+      transcription
+        ? voiceLanguages(transcription, speech, opts.host, navigator.languages ?? [], opts.hostLanguages)
+        : [],
+    [transcription, speech, opts.host, opts.hostLanguages],
   );
   const language = transcription
     ? voiceLanguage(languages, opts.picked, opts.host, transcription.default_language, navigator.languages ?? [])
