@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, Loader2, Mic, RotateCcw, Square, X } from "lucide-react";
 import type { VoiceInput } from "../hooks/useVoiceInput";
-import { languageName } from "../lib/voiceInput";
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -155,11 +154,9 @@ export function VoiceStatus({ voice }: { voice: VoiceInput }) {
   return null;
 }
 
-/** The language the next recording is transcribed in. Always shown with the
- *  mic: the language is sent explicitly (RFC FX D5), so the user must be able
- *  to see and change it. */
+/** The transcription language, when there is more than one to choose. */
 export function VoiceLanguage({ voice }: { voice: VoiceInput }) {
-  if (voice.languages.length === 0 || voice.state.status !== "idle" || voice.unavailable) return null;
+  if (voice.languages.length < 2 || voice.state.status !== "idle" || voice.unavailable) return null;
   return (
     <select
       className="voice-lang"
@@ -170,7 +167,7 @@ export function VoiceLanguage({ voice }: { voice: VoiceInput }) {
     >
       {voice.languages.map((l) => (
         <option key={l} value={l}>
-          {l} · {languageName(l)}
+          {l}
         </option>
       ))}
     </select>

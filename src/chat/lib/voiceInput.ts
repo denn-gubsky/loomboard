@@ -36,55 +36,20 @@ export function canSendRecording(info: TranscriptionDirectionInfo, recording: { 
   return true;
 }
 
-/** The languages loomcycle accepts as a transcription hint: its closed list
- *  (`transcriptionLanguages` in loomcycle's internal/config/transcription.go,
- *  as of 1.140). A code off it is a 400, and speechInfo does not publish the
- *  list, so it is mirrored here. */
-export const TRANSCRIPTION_LANGUAGES: readonly string[] = [
-  "uk", "ru", "en", "be", "pl", "de", "fr", "es", "it", "pt", "nl", "cs", "sk", "bg", "sr", "hr", "sl", "ro",
-  "hu", "lt", "lv", "et", "fi", "sv", "no", "da", "el", "tr", "ka", "hy", "kk", "az", "uz", "ar", "he", "fa",
-  "hi", "zh", "ja", "ko", "vi", "th", "id",
-];
-
-/** The languages the mic offers. A host may name them (`only`, in its
- *  order); otherwise every language loomcycle accepts, most likely first: the
- *  server's speech-to-text default, the host's, the browser's, the languages
- *  the server speaks, then the rest. Codes loomcycle would refuse are left
- *  out. Pure. */
+/** The languages the mic offers: the server's speech-to-text default, then
+ *  the languages it speaks, then the host's. Pure. */
 export function voiceLanguages(
   transcription: TranscriptionDirectionInfo,
   speech: SpeechDirectionInfo | null,
   host?: string,
-  browser: readonly string[] = [],
-  only?: readonly string[],
 ): string[] {
-  const known = new Set(TRANSCRIPTION_LANGUAGES);
-  if (only && only.length > 0) return [...new Set(only.filter((l) => known.has(l)))];
-  const likely = [
-    transcription.default_language,
-    host,
-    ...browser.map((b) => b.split("-")[0].toLowerCase()),
-    ...Object.keys(speech?.languages ?? {}),
-  ];
-  const first = likely.filter((l): l is string => !!l && known.has(l));
-  return [...new Set([...first, ...TRANSCRIPTION_LANGUAGES])];
-}
-
-/** A language's name in itself ("Українська" for uk), for the picker; the
- *  code where the runtime has no name for it. */
-export function languageName(code: string): string {
-  try {
-    const name = new Intl.DisplayNames([code], { type: "language" }).of(code);
-    if (name && name !== code) return name.charAt(0).toLocaleUpperCase(code) + name.slice(1);
-  } catch {
-    // an engine without Intl.DisplayNames, or a code it does not take
-  }
-  return code;
+  const all = [transcription.default_language, ...Object.keys(speech?.languages ?? {}), host];
+  return [...new Set(all.filter((l): l is string => !!l))];
 }
 
 /** The language to transcribe in (RFC FX D5): the one picked for this
  *  conversation, else the host's, else the server's default, else the first
- *  browser language the mic offers, else the first it offers. Sent
+ *  browser language the mic offers; undefined leaves it to the server. Sent
  *  explicitly because whisper's own guess flips Ukrainian to Russian on short
  *  clips. Pure. */
 export function voiceLanguage(
@@ -99,7 +64,7 @@ export function voiceLanguage(
     const code = b.split("-")[0].toLowerCase();
     if (options.includes(code)) return code;
   }
-  return options[0];
+  return undefined;
 }
 
 /** Put a transcript into the draft at the selection, with a space on either

@@ -91,7 +91,7 @@ describe("useVoiceInput", () => {
 
   it("transcribes in the conversation's language and hands the text to the composer", async () => {
     const { result, transcribe, onText } = setup({ picked: "en" });
-    expect(result.current?.languages.slice(0, 2)).toEqual(["uk", "en"]);
+    expect(result.current?.languages).toEqual(["uk", "en"]);
     expect(result.current?.language).toBe("en");
     act(() => result.current!.start());
     await waitFor(() => expect(result.current!.state.status).toBe("recording"));
