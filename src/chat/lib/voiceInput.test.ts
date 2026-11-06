@@ -4,6 +4,7 @@ import {
   CLIENT_MAX_SECONDS,
   canSendRecording,
   insertTranscript,
+  languageName,
   recordingLimitSeconds,
   typeAccepted,
   voiceLanguage,
@@ -54,6 +55,18 @@ describe("voiceLanguages", () => {
     expect(voiceLanguages(info({ default_language: "uk" }), speech, "de")).toEqual(["uk", "en", "de"]);
     expect(voiceLanguages(info({ default_language: "uk" }), null)).toEqual(["uk"]);
     expect(voiceLanguages(info(), null)).toEqual([]);
+  });
+});
+
+describe("languageName", () => {
+  it("names a language in itself, capitalised", () => {
+    expect(languageName("uk")).toBe("Українська");
+    expect(languageName("ru")).toBe("Русский");
+    expect(languageName("en")).toBe("English");
+  });
+
+  it("falls back to the code", () => {
+    expect(languageName("not-a-code!")).toBe("not-a-code!");
   });
 });
 
