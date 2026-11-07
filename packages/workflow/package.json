@@ -56,7 +56,7 @@
   },
   "dependencies": {
     "@loomcycle/code-editor": "^0.1.0",
-    "@xyflow/react": "^12.12.0"
+    "@xyflow/react": "^12.12.1"
   },
   "devDependencies": {
     "@codemirror/language": "^6.13.1",
