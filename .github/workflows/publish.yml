@@ -16,13 +16,12 @@ name: Publish
 # are safe, and the packages may diverge in version. `prepack` rebuilds each package's artifacts at publish time; the gate
 # below fails fast so we never publish a red build.
 #
-# One-time setup:
-#   1. The `@loomboard` org exists on npmjs.com and you're an owner.
-#   2. Repo secret NPM_TOKEN = an npm **Automation** access token (npmjs.com →
-#      Access Tokens → Classic Token → type **Automation**). Automation tokens
-#      are the kind that bypass 2FA in CI; a Publish/Granular token still demands
-#      a one-time password and fails with EOTP.
-# Provenance (Sigstore attestation) still rides OIDC via `id-token: write`.
+# Auth is npm trusted publishing (OIDC), with no token. Each of the three packages
+# names this repo and this workflow file as its trusted publisher on npmjs.com
+# (package → Settings → Trusted publisher → GitHub Actions: denn-gubsky /
+# loomboard / publish.yml, no environment). npm exchanges the job's OIDC token
+# for a short-lived publish credential and attaches provenance itself. Renaming
+# this file breaks publishing until the npm settings are changed to match.
 
 on:
   push:
@@ -31,7 +30,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # npm provenance (Sigstore)
+  id-token: write # trusted publishing and provenance
 
 jobs:
   publish:
@@ -86,6 +85,9 @@ jobs:
       - run: npm -w @loomboard/workflow run test
       - run: npm -w @loomboard/workflow run build:lib
 
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - run: npm install -g npm@11
+
       - name: Publish @loomboard/chat
         if: github.event_name == 'workflow_dispatch' || !startsWith(github.ref_name, 'workflow-v')
         run: |
@@ -97,8 +99,6 @@ jobs:
             echo "· publishing $name@$ver"
             npm publish --provenance --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @loomboard/app
         if: github.event_name == 'workflow_dispatch' || !startsWith(github.ref_name, 'workflow-v')
@@ -112,8 +112,6 @@ jobs:
             echo "· publishing $name@$ver"
             npm publish --provenance --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @loomboard/workflow
         if: github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'workflow-v')
@@ -127,5 +125,3 @@ jobs:
             echo "· publishing $name@$ver"
             npm publish --provenance --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
