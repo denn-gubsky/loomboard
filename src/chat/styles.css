@@ -1201,6 +1201,27 @@
   border-top: 1px solid var(--border);
   padding-top: 0.35em;
 }
+/* An annotation: the brief leads, the abstract stands in for the excerpt, and
+   a stale one carries a small muted marker. */
+.loomchat .docref-pop-brief {
+  font-weight: 500;
+  color: var(--text);
+}
+.loomchat .docref-pop-abstract {
+  margin: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 0.35em;
+  white-space: pre-wrap;
+}
+.loomchat .docref-pop-stale {
+  margin-left: 0.4em;
+  padding: 0 0.3em;
+  border: 1px dashed var(--border);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
 .loomchat .docref-pop-excerpt > :first-child {
   margin-top: 0;
 }
