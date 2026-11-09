@@ -11,6 +11,8 @@ export type DocumentCall = (input: {
   op: "get_document" | "get_chunk";
   id: string;
   scope: DocRefScope;
+  /** Ask for the annotation alongside (only sent in the tenant scope). */
+  with_summary?: boolean;
 }) => Promise<unknown>;
 
 export interface DocPreview {
@@ -26,6 +28,16 @@ export interface DocPreview {
   /** The start of the body, cut on a word. */
   excerpt: string;
   truncated: boolean;
+  /** The annotation's one-sentence brief: the popover's lead line. Set only
+   *  when an annotation of this target has been written. */
+  brief?: string;
+  /** The annotation's abstract, shown in place of the excerpt. */
+  abstract?: string;
+  /** The annotation was written before the text last changed. */
+  stale?: boolean;
+  /** For a chunk: the brief of the document that holds it. */
+  documentBrief?: string;
+  documentBriefStale?: boolean;
 }
 
 export type DocPreviewResult =
@@ -55,6 +67,35 @@ function tags(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((t): t is string => typeof t === "string") : [];
 }
 
+// Annotations exist only in the tenant scope, so only there is the option sent;
+// every other read stays exactly as it was.
+function summaryOption(scope: DocRefScope): { with_summary?: true } {
+  return scope === "tenant" ? { with_summary: true } : {};
+}
+
+/** The parts of an annotation summary the popover shows. A summary without a
+ *  brief is no summary: nothing is ever made up from the body. */
+interface Summary {
+  brief: string;
+  abstract?: string;
+  stale: boolean;
+  /** Set when the record belongs to an ancestor, not the row itself. */
+  chunkId?: string;
+}
+
+function summary(v: unknown): Summary | undefined {
+  const s = row(v);
+  const brief = str(s.brief);
+  if (!brief) return undefined;
+  return { brief, abstract: str(s.abstract), stale: s.stale === true, chunkId: str(s.chunk_id) };
+}
+
+/** The preview fields of the target's own annotation. */
+function own(s: Summary | undefined): Pick<DocPreview, "brief" | "abstract" | "stale"> {
+  if (!s) return {};
+  return { brief: s.brief, ...(s.abstract ? { abstract: s.abstract } : {}), ...(s.stale ? { stale: true } : {}) };
+}
+
 function unavailable(e: unknown): DocPreviewResult {
   const reason = describeError(e);
   // loomcycle answers a missing id as a refused tool call (422) whose text is
@@ -64,14 +105,24 @@ function unavailable(e: unknown): DocPreviewResult {
 
 /** Fetch what the popover shows. Two reads: the target, then its other half —
  *  a document's root chunk for the excerpt, a chunk's document for its title.
- *  The second read failing still answers with what the first one gave. */
+ *  The second read failing still answers with what the first one gave.
+ *
+ *  In the tenant scope the reads also ask for the annotation: its brief leads
+ *  the popover and its abstract stands in for the excerpt, which stays the
+ *  fallback when no annotation has been written (a document with an abstract
+ *  needs no second read). */
 export async function loadDocPreview(call: DocumentCall, ref: DocRef): Promise<DocPreviewResult> {
   const { id, scope } = ref;
+  const opt = summaryOption(scope);
   try {
     if (ref.kind === "doc") {
-      const doc = row(await call({ op: "get_document", id, scope }));
+      const doc = row(await call({ op: "get_document", id, scope, ...opt }));
+      const ann = summary(doc.summary);
       const root = str(doc.root_chunk_id);
-      const body = root ? str(row(await call({ op: "get_chunk", id: root, scope }).catch(() => null)).body) : undefined;
+      const body =
+        root && !ann?.abstract
+          ? str(row(await call({ op: "get_chunk", id: root, scope }).catch(() => null)).body)
+          : undefined;
       const ex = excerpt(body ?? "");
       return {
         ok: true,
@@ -82,14 +133,20 @@ export async function loadDocPreview(call: DocumentCall, ref: DocRef): Promise<D
           tags: tags(doc.tags),
           excerpt: ex.text,
           truncated: ex.truncated,
+          ...own(ann),
         },
       };
     }
-    const chunk = row(await call({ op: "get_chunk", id, scope }));
+    const chunk = row(await call({ op: "get_chunk", id, scope, ...opt }));
     const documentId = str(chunk.document_id);
     if (!documentId) return { ok: false, notFound: true, reason: "The chunk has no document." };
     const doc = row(await call({ op: "get_document", id: documentId, scope }).catch(() => null));
     const ex = excerpt(str(chunk.body) ?? "");
+    // The chunk's own annotation only: a summary inherited from an ancestor
+    // describes a wider part, so the chunk then shows its excerpt — and the
+    // document's brief below it either way.
+    const ann = summary(chunk.summary);
+    const docAnn = summary(chunk.document_summary);
     return {
       ok: true,
       preview: {
@@ -102,6 +159,8 @@ export async function loadDocPreview(call: DocumentCall, ref: DocRef): Promise<D
         tags: tags(chunk.tags),
         excerpt: ex.text,
         truncated: ex.truncated,
+        ...own(ann && (!ann.chunkId || ann.chunkId === id) ? ann : undefined),
+        ...(docAnn ? { documentBrief: docAnn.brief, ...(docAnn.stale ? { documentBriefStale: true } : {}) } : {}),
       },
     };
   } catch (e) {
