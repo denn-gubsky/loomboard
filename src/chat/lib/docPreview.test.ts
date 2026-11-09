@@ -137,6 +137,25 @@ describe("loadDocPreview — annotations", () => {
     });
   }
 
+  it("falls back to the plain read on a server that does not know with_summary", async () => {
+    const inner = store();
+    const call: DocumentCall = vi.fn(async (input) => {
+      if (input.with_summary) {
+        throw new LoomcycleError("Unprocessable Entity", {
+          status: 422,
+          bodyText: JSON.stringify({ code: "tool_refused", error: 'Document: unknown argument "with_summary" — nothing was done.' }),
+        });
+      }
+      return inner(input);
+    });
+    const res = await loadDocPreview(call, docRef);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.preview.excerpt).toBe("Ships in **March**.");
+      expect(res.preview.brief).toBeUndefined();
+    }
+  });
+
   it("asks for the annotation in the tenant scope only", async () => {
     const call = annotated();
     await loadDocPreview(call, docRef);

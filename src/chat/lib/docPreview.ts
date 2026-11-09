@@ -114,9 +114,20 @@ function unavailable(e: unknown): DocPreviewResult {
 export async function loadDocPreview(call: DocumentCall, ref: DocRef): Promise<DocPreviewResult> {
   const { id, scope } = ref;
   const opt = summaryOption(scope);
+  // A server older than annotations refuses with_summary as an unknown
+  // argument: the read is asked again without it, so the popover still shows
+  // the excerpt there.
+  const first = async (input: Parameters<DocumentCall>[0]): Promise<unknown> => {
+    try {
+      return await call({ ...input, ...opt });
+    } catch (e) {
+      if (!opt.with_summary) throw e;
+      return call(input);
+    }
+  };
   try {
     if (ref.kind === "doc") {
-      const doc = row(await call({ op: "get_document", id, scope, ...opt }));
+      const doc = row(await first({ op: "get_document", id, scope }));
       const ann = summary(doc.summary);
       const root = str(doc.root_chunk_id);
       const body =
@@ -137,7 +148,7 @@ export async function loadDocPreview(call: DocumentCall, ref: DocRef): Promise<D
         },
       };
     }
-    const chunk = row(await call({ op: "get_chunk", id, scope, ...opt }));
+    const chunk = row(await first({ op: "get_chunk", id, scope }));
     const documentId = str(chunk.document_id);
     if (!documentId) return { ok: false, notFound: true, reason: "The chunk has no document." };
     const doc = row(await call({ op: "get_document", id: documentId, scope }).catch(() => null));
