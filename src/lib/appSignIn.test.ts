@@ -152,6 +152,29 @@ describe("beginSignIn", () => {
   });
 });
 
+describe("CLIENT_ID", () => {
+  // The id is fixed when the module loads, from the build's mode.
+  async function loadFor(extension: boolean) {
+    vi.resetModules();
+    vi.stubEnv("VITE_LOOMBOARD_EXTENSION", extension ? "true" : "");
+    try {
+      return await import("./appSignIn");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }
+
+  it("signs the extension in as its own app, and every other build as loomboard", async () => {
+    const ext = await loadFor(true);
+    expect(ext.CLIENT_ID).toBe("loomboard-extension");
+    const srv = fakeServer();
+    const { url } = await ext.beginSignIn(ext.oauthFor({ baseUrl: ISSUER, fetch: srv.fetch }), ISSUER, REDIRECT, null);
+    expect(new URL(url).searchParams.get("client_id")).toBe("loomboard-extension");
+
+    expect((await loadFor(false)).CLIENT_ID).toBe("loomboard");
+  });
+});
+
 describe("completeSignIn", () => {
   async function started() {
     const srv = fakeServer();

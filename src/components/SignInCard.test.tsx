@@ -73,4 +73,21 @@ describe("SignInCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancel).toHaveBeenCalledOnce();
   });
+
+  it("names the app and both addresses to register when the extension is not registered yet", () => {
+    renderCard({
+      problem: "unregistered",
+      error: "loomcycle does not know this app.",
+      registration: {
+        clientDef: "loomboard-extension",
+        redirectUri: "https://abc.chromiumapp.org/",
+        origin: "chrome-extension://abc",
+      },
+    });
+    const hint = screen.getByText(/Register this install as the app/);
+    expect(hint.textContent).toContain("loomboard-extension");
+    expect(hint.textContent).toContain("https://abc.chromiumapp.org/");
+    expect(hint.textContent).toContain("chrome-extension://abc");
+    expect(hint.textContent).not.toContain("auth.clients");
+  });
 });

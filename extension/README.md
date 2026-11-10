@@ -38,18 +38,17 @@ Dev with HMR: `npm run dev:extension` (load the generated `extension/dist`).
 5. To use skills (e.g. `marketing/*`), **register them in the loomcycle Library**
    (SkillDef); they're granted via the agent's `skills` allowlist.
 6. For **Sign in with loomcycle**: `LOOMCYCLE_PUBLIC_URL`, an interactive gate, and this
-   install registered on the `loomboard` client — the redirect URI
-   `https://<extension-id>.chromiumapp.org/` and the origin `chrome-extension://<extension-id>`
-   (the sign-in screen shows both; the ID differs between a store install and an unpacked
-   one):
+   install registered as the app **`loomboard-extension`** — a ClientDef with the redirect URI
+   `https://<extension-id>.chromiumapp.org/` and the allowed origin
+   `chrome-extension://<extension-id>`. The sign-in screen shows both; the ID differs between
+   a store install and an unpacked one, so each install is added to the same ClientDef. An
+   operator registers it in the loomboard web app under **Apps**, or with the loomcycle MCP
+   `clientdef` tool. No config edit is needed: unlike `loomboard`, which the `loomboard` preset
+   declares for the desktop app, `loomboard-extension` is not declared in config.
 
-   ```yaml
-   auth:
-     clients:
-       loomboard:            # LOOMCYCLE_PRESETS=…,loomboard declares the client
-         redirect_uris: !append [https://<extension-id>.chromiumapp.org/]
-         allowed_origins: !append [chrome-extension://<extension-id>]
-   ```
+   Upgrading from extension 0.1.x, which signed in as `loomboard`: register the ClientDef
+   and sign in again. The `!append`ed extension lines under `auth.clients.loomboard` can then
+   be removed.
 
 On first connect the extension idempotently registers the `chrome-assistant` AgentDef
 with `tools: [client__browser_*, WebFetch, WebSearch, Memory, Skill]` + the system prompt.

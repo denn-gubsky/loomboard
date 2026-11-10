@@ -7,7 +7,9 @@ import brandMark from "../assets/loomboard-favicon.svg";
  *  refuses loomboard as an app. */
 export type Registration =
   | { redirectUri: string; origin: string }
-  | { preset: true; origin?: string };
+  | { preset: true; origin?: string }
+  /** An app registered as a ClientDef of its own (the Chrome extension). */
+  | { clientDef: string; redirectUri: string; origin: string };
 
 interface Props {
   intro: ReactNode;
@@ -215,6 +217,14 @@ function RegistrationHint({ r }: { r: Registration }) {
           </>
         )}
         .
+      </p>
+    );
+  }
+  if ("clientDef" in r) {
+    return (
+      <p className="connect-register">
+        Register this install as the app <code>{r.clientDef}</code> (in loomboard: Apps): redirect URI{" "}
+        <code>{r.redirectUri}</code> and allowed origin <code>{r.origin}</code>.
       </p>
     );
   }

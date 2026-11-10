@@ -7,6 +7,7 @@ import {
 } from "@loomcycle/client";
 import { describeError } from "../chat/lib/errors";
 import type { Transport } from "./buildConnection";
+import { isExtension } from "./proxyMode";
 
 // "Sign in with loomcycle" (RFC FL): loomboard is a registered app of the
 // loomcycle it talks to. It sends the person to loomcycle's own sign-in page —
@@ -19,9 +20,17 @@ import type { Transport } from "./buildConnection";
 // each one only differs in how the person gets to the authorize URL and back,
 // and where the refresh token is kept between starts.
 
-/** The client id loomboard is registered under (loomcycle's `loomboard`
- *  preset, or the operator's `auth.clients.loomboard`). */
-export const CLIENT_ID = "loomboard";
+/** The client id the Chrome extension signs in as: a ClientDef the operator
+ *  registers per install from the Apps view. loomcycle's `loomboard` preset
+ *  declares `loomboard` for the desktop app only and hides a ClientDef of the
+ *  same name, so an extension signing in as `loomboard` needed a config edit
+ *  for every install (RFC GI D4). */
+export const EXTENSION_CLIENT_ID = "loomboard-extension";
+
+/** The client id this build signs in as. The web build and the desktop app
+ *  are `loomboard` (loomcycle's `loomboard` preset, or the operator's
+ *  `auth.clients.loomboard`). */
+export const CLIENT_ID = isExtension ? EXTENSION_CLIENT_ID : "loomboard";
 
 /** Where a web or desktop sign-in returns to. */
 export const CALLBACK_PATH = "/auth/callback";
