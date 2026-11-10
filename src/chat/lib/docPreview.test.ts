@@ -47,8 +47,9 @@ describe("loadDocPreview", () => {
       ok: true,
       preview: { documentId: DOC, title: "Release plan", type: "plan", tags: ["release"], excerpt: "Ships in **March**.", truncated: false },
     });
-    // Both reads in the link's own scope.
-    expect(call).toHaveBeenCalledWith({ op: "get_document", id: DOC, scope: "tenant" });
+    // Both reads in the link's own scope; in the tenant scope the first also
+    // asks for the annotation, and with none written the root is read.
+    expect(call).toHaveBeenCalledWith({ op: "get_document", id: DOC, scope: "tenant", with_summary: true });
     expect(call).toHaveBeenCalledWith({ op: "get_chunk", id: ROOT, scope: "tenant" });
   });
 
@@ -100,6 +101,129 @@ describe("loadDocPreview", () => {
     const res = await loadDocPreview(call, docRef);
     expect(res.ok && res.preview.title).toBe("Release plan");
     expect(res.ok && res.preview.excerpt).toBe("");
+  });
+});
+
+describe("loadDocPreview — annotations", () => {
+  // A tenant store where the document and the section carry annotations.
+  function annotated(over: { docSummary?: unknown; chunkSummary?: unknown; documentSummary?: unknown } = {}): DocumentCall {
+    return vi.fn(async ({ op, id }) => {
+      if (op === "get_document" && id === DOC) {
+        return {
+          document_id: DOC,
+          title: "Release plan",
+          root_chunk_id: ROOT,
+          ...("docSummary" in over
+            ? { summary: over.docSummary }
+            : { summary: { level: "document", brief: "When and how the release ships.", abstract: "The plan sets a March beta." } }),
+        };
+      }
+      if (op === "get_chunk" && id === ROOT) return { id: ROOT, document_id: DOC, title: "Release plan", body: "Ships in **March**." };
+      if (op === "get_chunk" && id === CHUNK) {
+        return {
+          id: CHUNK,
+          document_id: DOC,
+          title: "Timeline",
+          body: "Beta on 1 March.",
+          ...("chunkSummary" in over
+            ? { summary: over.chunkSummary }
+            : { summary: { level: "branch", brief: "The beta and GA dates.", abstract: "Beta opens on 1 March." } }),
+          ...("documentSummary" in over
+            ? { document_summary: over.documentSummary }
+            : { document_summary: { brief: "When and how the release ships.", stale: true } }),
+        };
+      }
+      throw new Error(`${op}: no such chunk: ${id}`);
+    });
+  }
+
+  it("falls back to the plain read on a server that does not know with_summary", async () => {
+    const inner = store();
+    const call: DocumentCall = vi.fn(async (input) => {
+      if (input.with_summary) {
+        throw new LoomcycleError("Unprocessable Entity", {
+          status: 422,
+          bodyText: JSON.stringify({ code: "tool_refused", error: 'Document: unknown argument "with_summary" — nothing was done.' }),
+        });
+      }
+      return inner(input);
+    });
+    const res = await loadDocPreview(call, docRef);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.preview.excerpt).toBe("Ships in **March**.");
+      expect(res.preview.brief).toBeUndefined();
+    }
+  });
+
+  it("reads a missing tenant document once, without the plain retry", async () => {
+    const call = store();
+    const res = await loadDocPreview(call, { kind: "doc", id: "missing", scope: "tenant" });
+    expect(res).toMatchObject({ ok: false, notFound: true });
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for the annotation in the tenant scope only", async () => {
+    const call = annotated();
+    await loadDocPreview(call, docRef);
+    expect(call).toHaveBeenCalledWith({ op: "get_document", id: DOC, scope: "tenant", with_summary: true });
+    const userCall = store();
+    await loadDocPreview(userCall, { kind: "doc", id: DOC, scope: "user" });
+    expect(userCall).toHaveBeenCalledWith({ op: "get_document", id: DOC, scope: "user" });
+  });
+
+  it("leads a document with its brief and shows the abstract in place of the excerpt, with no second read", async () => {
+    const call = annotated();
+    const res = await loadDocPreview(call, docRef);
+    expect(res.ok && res.preview).toMatchObject({
+      brief: "When and how the release ships.",
+      abstract: "The plan sets a March beta.",
+      excerpt: "",
+    });
+    expect(res.ok && res.preview.stale).toBeUndefined();
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the excerpt when no annotation has been written", async () => {
+    const res = await loadDocPreview(annotated({ docSummary: undefined }), docRef);
+    expect(res.ok && res.preview.excerpt).toBe("Ships in **March**.");
+    expect(res.ok && res.preview.brief).toBeUndefined();
+    expect(res.ok && res.preview.abstract).toBeUndefined();
+  });
+
+  it("keeps a stale annotation, marked", async () => {
+    const res = await loadDocPreview(
+      annotated({ docSummary: { level: "document", brief: "Old brief.", abstract: "Old abstract.", stale: true } }),
+      docRef,
+    );
+    expect(res.ok && res.preview).toMatchObject({ brief: "Old brief.", abstract: "Old abstract.", stale: true });
+  });
+
+  it("shows a chunk's own annotation, then its document's brief", async () => {
+    const res = await loadDocPreview(annotated(), { kind: "chunk", id: CHUNK, scope: "tenant" });
+    expect(res.ok && res.preview).toMatchObject({
+      brief: "The beta and GA dates.",
+      abstract: "Beta opens on 1 March.",
+      excerpt: "Beta on 1 March.",
+      documentBrief: "When and how the release ships.",
+      documentBriefStale: true,
+    });
+  });
+
+  it("does not show an ancestor's annotation as the chunk's own", async () => {
+    const res = await loadDocPreview(
+      annotated({ chunkSummary: { level: "branch", brief: "The whole schedule.", chunk_id: ROOT } }),
+      { kind: "chunk", id: CHUNK, scope: "tenant" },
+    );
+    expect(res.ok && res.preview.brief).toBeUndefined();
+    expect(res.ok && res.preview.excerpt).toBe("Beta on 1 March.");
+    expect(res.ok && res.preview.documentBrief).toBe("When and how the release ships.");
+  });
+
+  it("ignores a summary with no brief", async () => {
+    const res = await loadDocPreview(annotated({ docSummary: { level: "document", abstract: "x" } }), docRef);
+    expect(res.ok && res.preview.abstract).toBeUndefined();
+    expect(res.ok && res.preview.excerpt).toBe("Ships in **March**.");
   });
 });
 

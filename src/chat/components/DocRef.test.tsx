@@ -120,5 +120,38 @@ describe("DocRef", () => {
     expect(screen.getByText("Ghost").className).toBe("docref missing");
     expect(screen.queryByRole("button", { name: "Open section Ghost" })).toBeNull();
   });
-});
 
+  it("leads with the annotation's brief, shows its abstract instead of the excerpt, and marks it stale", async () => {
+    const annotated: DocumentCall = async ({ op, id, with_summary }) => {
+      if (op === "get_chunk" && id === CHUNK) {
+        return {
+          id: CHUNK,
+          document_id: DOC,
+          title: "Timeline",
+          body: "Beta on **1 March**.",
+          ...(with_summary ? { summary: { level: "branch", brief: "The beta date.", abstract: "Beta opens on 1 March.", stale: true } } : {}),
+          ...(with_summary ? { document_summary: { brief: "How the release ships." } } : {}),
+        };
+      }
+      if (op === "get_document" && id === DOC) return { document_id: DOC, title: "Release plan" };
+      throw new Error(`${op}: no such chunk: ${id}`);
+    };
+    render(
+      <section className="loomchat">
+        <DocLinksContext.Provider value={{ previews: createDocPreviewCache(annotated) }}>
+          <Markdown>{`[Timeline](loom:chunk/${CHUNK}?scope=tenant)`}</Markdown>
+        </DocLinksContext.Provider>
+      </section>,
+    );
+    const ctl = screen.getByRole("button", { name: "Preview section Timeline" });
+    fireEvent.pointerDown(ctl, { pointerType: "touch" });
+    fireEvent.click(ctl);
+    const pop = await screen.findByRole("dialog");
+    await vi.waitFor(() => expect(pop.textContent).toContain("The beta date."));
+    expect(pop.querySelector(".docref-pop-brief")?.textContent).toBe("The beta date.stale");
+    expect(pop.querySelector(".docref-pop-abstract")?.textContent).toBe("Beta opens on 1 March.");
+    // The excerpt is the fallback, not shown beside the abstract.
+    expect(pop.querySelector(".docref-pop-excerpt")).toBeNull();
+    expect(pop.querySelector(".docref-pop-docbrief")?.textContent).toBe("Release plan: How the release ships.");
+  });
+});

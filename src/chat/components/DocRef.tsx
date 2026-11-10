@@ -200,7 +200,17 @@ function PreviewBody({
             .join(" · ")}
         </span>
       )}
-      {p.excerpt ? (
+      {p.brief && (
+        <span className="docref-pop-brief">
+          {p.brief}
+          {p.stale && <StaleMark />}
+        </span>
+      )}
+      {p.abstract ? (
+        // The annotation's abstract, in place of the excerpt. Model-written
+        // prose, shown as plain text.
+        <p className="docref-pop-abstract">{p.abstract}</p>
+      ) : p.excerpt ? (
         <div className="docref-pop-excerpt markdown">
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={excerptComponents}>
             {p.truncated ? `${p.excerpt} …` : p.excerpt}
@@ -209,11 +219,28 @@ function PreviewBody({
       ) : (
         <span className="docref-pop-meta">No text.</span>
       )}
+      {p.documentBrief && (
+        <span className="docref-pop-meta docref-pop-docbrief">
+          {p.documentTitle ? `${p.documentTitle}: ` : "Document: "}
+          {p.documentBrief}
+          {p.documentBriefStale && <StaleMark />}
+        </span>
+      )}
       {onOpen && (
         <button type="button" className="docref-pop-open" onClick={onOpen}>
           Open <ArrowUpRight size={13} />
         </button>
       )}
     </>
+  );
+}
+
+/** A small muted marker: the annotation was written before the text last
+ *  changed. Shown, never hidden, so the reader can weigh it. */
+function StaleMark() {
+  return (
+    <span className="docref-pop-stale" title="The text has changed since this summary was written">
+      stale
+    </span>
   );
 }
