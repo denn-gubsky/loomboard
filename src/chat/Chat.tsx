@@ -121,7 +121,7 @@ export default function Chat({
     picked: conversation.voiceLanguage,
     onPick: pickVoiceLanguage,
     host: voice ? voice.language : undefined,
-    onText: (text) => composerRef.current?.insert(text),
+    onText: (text, fromHold) => composerRef.current?.insert(text, { send: fromHold }),
     resetKey: conversation.id,
   });
 

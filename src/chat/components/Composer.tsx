@@ -29,6 +29,7 @@ import {
 } from "../lib/attachmentBudget";
 import { navigateHistory, noHistoryNav } from "../lib/inputHistory";
 import { insertTranscript } from "../lib/voiceInput";
+import { SEND_DELAY_MS } from "../lib/pushToTalk";
 import type { VoiceInput } from "../hooks/useVoiceInput";
 import { MicButton, VoiceLanguage, VoiceStatus } from "./MicButton";
 
@@ -52,9 +53,11 @@ interface Props {
 
 /** What <Chat> may do to the draft from outside. */
 export interface ComposerHandle {
-  /** Put a voice transcript into the draft at the caret, for the user to
-   *  read and send (RFC FX D2). */
-  insert(text: string): void;
+  /** Put a voice transcript into the draft at the caret. With `send` (the
+   *  user held the mic to talk) the draft is sent after SEND_DELAY_MS unless
+   *  they cancel, click or type first; otherwise they read and send it
+   *  (RFC FX D2). */
+  insert(text: string, opts?: { send?: boolean }): void;
 }
 
 /** Pasted screenshots arrive as unnamed File blobs; give them a stable name so
@@ -111,15 +114,22 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
   const [dragging, setDragging] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const histRef = useRef(noHistoryNav);
+  // When a held take's transcript is sent, or null when nothing is pending.
+  const [sendAt, setSendAt] = useState<number | null>(null);
+  const cancelSend = () => setSendAt(null);
 
   useImperativeHandle(ref, () => ({
-    insert(transcript) {
+    insert(transcript, opts) {
       const ta = taRef.current;
       const end = ta ? ta.selectionEnd : text.length;
       const start = ta ? ta.selectionStart : end;
       const next = insertTranscript(text, start, end, transcript);
       setText(next.text);
       histRef.current = noHistoryNav;
+      // Only a draft the composer could send now: not while it is disabled or
+      // still reading an attachment. A running turn is fine — Enter steers it.
+      const canSend = !disabled && !atts.some((a) => a.status === "processing");
+      setSendAt(opts?.send && canSend ? Date.now() + SEND_DELAY_MS : null);
       requestAnimationFrame(() => {
         const t = taRef.current;
         if (!t) return;
@@ -127,12 +137,36 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
         t.selectionStart = t.selectionEnd = next.caret;
       });
     },
-  }), [text]);
+  }), [text, disabled, atts]);
 
-  // Reset the recall cursor when switching conversations (history is per-chat).
+  // Reset the recall cursor when switching conversations (history is per-chat),
+  // and never send a pending transcript into the conversation switched to.
   useEffect(() => {
     histRef.current = noHistoryNav;
+    setSendAt(null);
   }, [historyKey]);
+
+  // The timed send reads the draft as it is when the window closes.
+  const submitRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    if (sendAt === null) return;
+    const id = setTimeout(() => submitRef.current(), Math.max(0, sendAt - Date.now()));
+    return () => clearTimeout(id);
+  }, [sendAt]);
+
+  // Esc stops the send. Captured on window so the chat's own Escape (which
+  // stops a running turn) does not also fire.
+  useEffect(() => {
+    if (sendAt === null) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setSendAt(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [sendAt]);
 
   function patch(id: string, p: Partial<StagedAttachment>) {
     setAtts((prev) => prev.map((a) => (a.id === id ? { ...a, ...p } : a)));
@@ -225,6 +259,7 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
   const budget = attachmentBudget(readyTokens, freeTokens);
 
   function submit() {
+    setSendAt(null);
     if (disabled || processing) return;
     if (!text.trim() && ready.length === 0) return;
     onSend(text, ready);
@@ -232,6 +267,7 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
     setAtts([]);
     histRef.current = noHistoryNav;
   }
+  submitRef.current = submit;
 
   // Recall a history entry and drop the caret at the end so the next keystroke
   // edits (rather than re-triggering) it.
@@ -246,6 +282,9 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // Any key in the input means the user is working on the text: the timed
+    // send stops (Enter still sends, at once).
+    cancelSend();
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -308,7 +347,7 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
         </div>
       )}
 
-      {voice && <VoiceStatus voice={voice} />}
+      {voice && <VoiceStatus voice={voice} sendAt={sendAt} onCancelSend={cancelSend} />}
 
       <div className="composer">
         {/* A <label> wrapping a visually-hidden input opens the native file
@@ -331,17 +370,19 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
             }}
           />
         </label>
-        {voice && <MicButton voice={voice} disabled={disabled} />}
+        {voice && <MicButton voice={voice} disabled={disabled} sendAt={sendAt} onCancelSend={cancelSend} />}
         {voice && <VoiceLanguage voice={voice} />}
         <textarea
           ref={taRef}
           className="composer-input"
           value={text}
           onChange={(e) => {
+            cancelSend();
             setText(e.target.value);
             histRef.current = noHistoryNav; // typing exits recall
           }}
           onKeyDown={onKeyDown}
+          onPointerDown={cancelSend}
           onPaste={onPaste}
           placeholder={placeholder ?? "Message…"}
           rows={1}

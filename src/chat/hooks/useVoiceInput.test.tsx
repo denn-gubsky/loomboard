@@ -96,7 +96,7 @@ describe("useVoiceInput", () => {
     act(() => result.current!.start());
     await waitFor(() => expect(result.current!.state.status).toBe("recording"));
     act(() => result.current!.stop());
-    await waitFor(() => expect(onText).toHaveBeenCalledWith("Привіт, світе"));
+    await waitFor(() => expect(onText).toHaveBeenCalledWith("Привіт, світе", false));
     expect(transcribe).toHaveBeenCalledWith(expect.any(Blob), {
       signal: expect.any(AbortSignal),
       contentType: "audio/webm",
@@ -121,7 +121,7 @@ describe("useVoiceInput", () => {
     act(() => result.current!.start());
     await waitFor(() => expect(result.current!.state.status).toBe("recording"));
     act(() => result.current!.stop());
-    await waitFor(() => expect(onText).toHaveBeenCalledWith("Hello there."));
+    await waitFor(() => expect(onText).toHaveBeenCalledWith("Hello there.", false));
   });
 
   it("defaults to the server's language", () => {
@@ -148,6 +148,83 @@ describe("useVoiceInput", () => {
     act(() => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    await waitFor(() => expect(onText).toHaveBeenCalledWith("Привіт, світе"));
+    await waitFor(() => expect(onText).toHaveBeenCalledWith("Привіт, світе", false));
+  });
+
+  describe("push-to-talk (RFC FX §7.1)", () => {
+    // Date.now, which times the press, under the test's control.
+    let clock = 0;
+    beforeEach(() => {
+      clock = 1_000;
+      vi.spyOn(Date, "now").mockImplementation(() => clock);
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it("hands a held take over to be sent", async () => {
+      const { result, onText } = setup();
+      act(() => result.current!.press());
+      await waitFor(() => expect(result.current!.state.status).toBe("recording"));
+      clock += 2_000;
+      act(() => result.current!.release(true));
+      await waitFor(() => expect(onText).toHaveBeenCalledWith("Привіт, світе", true));
+    });
+
+    it("keeps a tap recording hands-free, and puts it in the draft unsent", async () => {
+      const { result, onText } = setup();
+      act(() => result.current!.press());
+      await waitFor(() => expect(result.current!.state.status).toBe("recording"));
+      clock += 120;
+      act(() => result.current!.release(true));
+      expect(result.current!.state.status).toBe("recording");
+      clock += 5_000;
+      act(() => result.current!.press()); // the next tap stops it
+      act(() => result.current!.release(true));
+      await waitFor(() => expect(onText).toHaveBeenCalledWith("Привіт, світе", false));
+    });
+
+    it("discards a hold released off the mic", async () => {
+      const { result, transcribe } = setup();
+      act(() => result.current!.press());
+      await waitFor(() => expect(result.current!.state.status).toBe("recording"));
+      clock += 2_000;
+      act(() => result.current!.release(false));
+      expect(result.current!.state.status).toBe("idle");
+      expect(track.stopped).toBe(true);
+      await act(async () => undefined);
+      expect(transcribe).not.toHaveBeenCalled();
+    });
+
+    it("drops a hold that ended before the microphone was live", async () => {
+      const { result, transcribe } = setup();
+      act(() => {
+        result.current!.press();
+        clock += 1_500;
+        result.current!.release(true);
+      });
+      await act(async () => undefined);
+      expect(result.current!.state.status).toBe("idle");
+      expect(track.stopped).toBe(true);
+      expect(transcribe).not.toHaveBeenCalled();
+    });
+
+    it("never times the send of a retried take", async () => {
+      const { result, transcribe, onText } = setup();
+      transcribe.mockRejectedValueOnce(new Error("the speech engine failed"));
+      act(() => result.current!.press());
+      await waitFor(() => expect(result.current!.state.status).toBe("recording"));
+      clock += 2_000;
+      act(() => result.current!.release(true));
+      await waitFor(() => expect(result.current!.state.canRetry).toBe(true));
+      act(() => result.current!.retry());
+      await waitFor(() => expect(onText).toHaveBeenCalledWith("Привіт, світе", false));
+    });
+
+    it("taps from the keyboard: start, then stop into the draft", async () => {
+      const { result, onText } = setup();
+      act(() => result.current!.tap());
+      await waitFor(() => expect(result.current!.state.status).toBe("recording"));
+      act(() => result.current!.tap());
+      await waitFor(() => expect(onText).toHaveBeenCalledWith("Привіт, світе", false));
+    });
   });
 });

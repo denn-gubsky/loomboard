@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { LoomcycleClient, SpeechDirectionInfo, TranscriptionDirectionInfo } from "@loomcycle/client";
+import { releaseAction, tapAction } from "../lib/pushToTalk";
 import { canSendRecording, recordingLimitSeconds, transcriptText, voiceLanguage, voiceLanguages } from "../lib/voiceInput";
-import { createVoiceRecorder, type RecorderLike, type VoiceRecorderState } from "../lib/voiceRecorder";
+import { createVoiceRecorder, type RecorderLike, type VoiceRecorder, type VoiceRecorderState } from "../lib/voiceRecorder";
 import { recordingToWav } from "../lib/wav";
 import { describeError } from "../lib/errors";
 
@@ -10,6 +11,13 @@ export interface VoiceInput {
   state: VoiceRecorderState;
   start(): void;
   stop(): void;
+  /** The mic pressed down: starts recording at once, so the first word is
+   *  not lost. Whether it is a hold or a tap is settled by release. */
+  press(): void;
+  /** The press ended, over the mic (`inside`) or off it (RFC FX §7.1). */
+  release(inside: boolean): void;
+  /** Enter, a screen reader's click, or a press during hands-free recording. */
+  tap(): void;
   cancel(): void;
   retry(): void;
   dismiss(): void;
@@ -76,8 +84,9 @@ interface Options {
   onPick(language: string): void;
   /** The host's preferred language (ChatProps.voice.language). */
   host: string | undefined;
-  /** Where a transcript goes: the composer, at its caret. */
-  onText(text: string): void;
+  /** Where a transcript goes: the composer, at its caret. `fromHold` says the
+   *  user held the mic to talk, so the composer sends it after a short window. */
+  onText(text: string, fromHold: boolean): void;
   /** The conversation: a recording is dropped when it changes. */
   resetKey: string;
 }
@@ -103,6 +112,10 @@ export function useVoiceInput(
   const latest = useRef({ language, onText: opts.onText });
   latest.current = { language, onText: opts.onText };
 
+  // The press in progress, and whether the take in flight was held to talk.
+  const pressedAt = useRef<number | null>(null);
+  const holdTake = useRef(false);
+
   const unavailable = useMemo(() => micUnavailable(platform()), []);
   const limitSeconds = transcription ? recordingLimitSeconds(transcription) : 0;
 
@@ -125,7 +138,11 @@ export function useVoiceInput(
         });
         return transcriptText(r.text);
       },
-      onText: (text) => latest.current.onText(text),
+      onText: (text) => {
+        const fromHold = holdTake.current;
+        holdTake.current = false;
+        latest.current.onText(text, fromHold);
+      },
       describe: describeError,
       limitSeconds: recordingLimitSeconds(transcription),
     });
@@ -144,6 +161,15 @@ export function useVoiceInput(
     return () => document.removeEventListener("visibilitychange", onHide);
   }, [recorder]);
 
+  function tap(rec: VoiceRecorder) {
+    const action = tapAction(rec.getState().status);
+    if (action === "start") {
+      holdTake.current = false;
+      rec.start();
+    } else if (action === "stop") rec.stop();
+    else rec.cancel();
+  }
+
   const state = useSyncExternalStore(recorder ? recorder.subscribe : noSubscribe, recorder ? recorder.getState : idle);
 
   return useMemo(() => {
@@ -152,8 +178,34 @@ export function useVoiceInput(
       state,
       start: () => recorder?.start(),
       stop: () => recorder?.stop(),
+      // A press while something is already in flight (a hands-free recording,
+      // a transcription) is a tap on it; a release then does nothing.
+      press: () => {
+        if (!recorder) return;
+        const { status } = recorder.getState();
+        if (status !== "idle" && status !== "error") return tap(recorder);
+        pressedAt.current = Date.now();
+        holdTake.current = false;
+        recorder.start();
+      },
+      release: (inside) => {
+        if (!recorder || pressedAt.current === null) return;
+        const held = Date.now() - pressedAt.current;
+        pressedAt.current = null;
+        const action = releaseAction(held, recorder.getState().status, inside);
+        if (action === "cancel") recorder.cancel();
+        if (action === "stop" || action === "send") holdTake.current = true;
+        if (action === "stop") recorder.stop();
+      },
+      tap: () => {
+        if (recorder) tap(recorder);
+      },
       cancel: () => recorder?.cancel(),
-      retry: () => recorder?.retry(),
+      // A retried take is one the user is already looking at: never timed.
+      retry: () => {
+        holdTake.current = false;
+        recorder?.retry();
+      },
       dismiss: () => recorder?.dismiss(),
       stream: () => recorder?.getStream() ?? null,
       limitSeconds,
