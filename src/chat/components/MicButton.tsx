@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, Loader2, Mic, RotateCcw, Square, X } from "lucide-react";
 import type { VoiceInput } from "../hooks/useVoiceInput";
 import { languageName } from "../lib/voiceInput";
+import { SEND_DELAY_MS } from "../lib/pushToTalk";
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -44,9 +45,24 @@ function useLevel(stream: MediaStream | null): number {
   return level;
 }
 
-/** The composer's microphone button (RFC FX P2). */
-export function MicButton({ voice, disabled }: { voice: VoiceInput; disabled: boolean }) {
+interface SendWindow {
+  /** When a held take's transcript is sent (Composer), or null. */
+  sendAt: number | null;
+  onCancelSend(): void;
+}
+
+/** The composer's microphone button (RFC FX §7.1). Hold to talk: recording
+ *  starts on the press, and a release over the mic transcribes and sends after
+ *  a short window. A tap dictates hands-free into the draft until the next
+ *  tap. Release off the mic discards. One element throughout, so pointer
+ *  capture survives the state changes a press causes. */
+export function MicButton({ voice, disabled, sendAt, onCancelSend }: { voice: VoiceInput; disabled: boolean } & SendWindow) {
   const { status } = voice.state;
+  const [holding, setHolding] = useState(false);
+  const pressed = useRef(false);
+  // The click a Space keyup may still produce: the keys already handled it.
+  const spaceUp = useRef(false);
+
   if (voice.unavailable) {
     return (
       <button type="button" className="mic-btn" disabled title={voice.unavailable} aria-label={voice.unavailable}>
@@ -54,31 +70,88 @@ export function MicButton({ voice, disabled }: { voice: VoiceInput; disabled: bo
       </button>
     );
   }
-  if (status === "recording") {
-    return (
-      <button type="button" className="mic-btn recording" onClick={voice.stop} title="Stop and transcribe" aria-label="Stop and transcribe">
-        <Square size={14} />
-      </button>
+
+  const begin = () => {
+    if (sendAt !== null) return onCancelSend();
+    pressed.current = true;
+    setHolding(status === "idle" || status === "error");
+    voice.press();
+  };
+  const end = (inside: boolean) => {
+    if (!pressed.current) return;
+    pressed.current = false;
+    setHolding(false);
+    voice.release(inside);
+  };
+
+  let label: string;
+  let icon: ReactNode;
+  let cls = "mic-btn";
+  if (sendAt !== null) {
+    label = "Cancel send";
+    cls += " sending";
+    icon = (
+      <>
+        <svg className="mic-ring" viewBox="0 0 32 32" aria-hidden key={sendAt}>
+          <circle cx="16" cy="16" r="14" style={{ animationDuration: `${Math.max(0, sendAt - Date.now())}ms` }} />
+        </svg>
+        <X size={16} />
+      </>
     );
-  }
-  if (status === "starting" || status === "transcribing") {
-    return (
-      <button type="button" className="mic-btn" onClick={voice.cancel} title="Cancel" aria-label="Cancel voice input">
-        <Loader2 size={18} className="spin" />
-      </button>
-    );
+  } else if (status === "recording") {
+    label = holding ? "Release to send" : "Stop and transcribe";
+    cls += " recording";
+    icon = holding ? <Mic size={18} /> : <Square size={14} />;
+  } else if (status === "starting" || status === "transcribing") {
+    label = "Cancel voice input";
+    icon = <Loader2 size={18} className="spin" />;
+  } else {
+    label = "Voice input";
+    icon = <Mic size={18} />;
   }
   const lang = voice.language ? ` (${voice.language})` : "";
+  const idle = sendAt === null && (status === "idle" || status === "error");
+
   return (
     <button
       type="button"
-      className="mic-btn"
-      onClick={voice.start}
-      disabled={disabled}
-      title={`Voice input${lang}`}
-      aria-label="Voice input"
+      className={cls}
+      disabled={idle && disabled}
+      title={idle ? `Hold to talk and send; tap to dictate${lang}` : label}
+      aria-label={label}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        begin();
+      }}
+      onPointerUp={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        end(e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom);
+      }}
+      // The press was taken away (a permission prompt, a scroll on touch).
+      onPointerCancel={() => end(false)}
+      onLostPointerCapture={() => end(false)}
+      onKeyDown={(e) => {
+        if (e.key !== " ") return;
+        e.preventDefault();
+        if (!e.repeat && !pressed.current) begin();
+      }}
+      onKeyUp={(e) => {
+        if (e.key !== " ") return;
+        e.preventDefault();
+        spaceUp.current = true;
+        setTimeout(() => (spaceUp.current = false), 0);
+        end(true);
+      }}
+      onClick={(e) => {
+        // Pointer presses are handled above. Enter and a screen reader's
+        // activation arrive as a click with no pointer behind it: a tap.
+        if (e.detail !== 0 || spaceUp.current) return;
+        if (sendAt !== null) onCancelSend();
+        else voice.tap();
+      }}
     >
-      <Mic size={18} />
+      {icon}
     </button>
   );
 }
@@ -86,9 +159,10 @@ export function MicButton({ voice, disabled }: { voice: VoiceInput; disabled: bo
 /** The line above the composer while voice input is busy or failed: timer,
  *  level and cancel; "Transcribing…"; or the error with Retry. Idle, it
  *  offers the language when there is a choice. */
-export function VoiceStatus({ voice }: { voice: VoiceInput }) {
+export function VoiceStatus({ voice, sendAt, onCancelSend }: { voice: VoiceInput } & SendWindow) {
   const { status, startedAt, error, canRetry } = voice.state;
   const elapsed = useElapsed(status === "recording" ? startedAt : null);
+  const sinceSendWindow = useElapsed(sendAt === null ? null : sendAt - SEND_DELAY_MS);
   const level = useLevel(status === "recording" ? voice.stream() : null);
 
   // Esc drops the recording. Captured on window so the chat's own Escape (which
@@ -106,6 +180,18 @@ export function VoiceStatus({ voice }: { voice: VoiceInput }) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [busy, voice]);
 
+  if (sendAt !== null) {
+    const left = Math.max(1, Math.ceil(SEND_DELAY_MS / 1000 - sinceSendWindow));
+    return (
+      <div className="voice-status" role="status">
+        <span>Sending in {left} s — click the text to edit it</span>
+        <span className="voice-spacer" />
+        <button type="button" className="voice-x" onClick={onCancelSend} title="Keep as a draft (Esc)" aria-label="Keep as a draft">
+          <X size={14} />
+        </button>
+      </div>
+    );
+  }
   if (status === "recording") {
     const left = voice.limitSeconds - elapsed;
     return (
