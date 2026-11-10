@@ -156,6 +156,13 @@ describe("loadDocPreview — annotations", () => {
     }
   });
 
+  it("reads a missing tenant document once, without the plain retry", async () => {
+    const call = store();
+    const res = await loadDocPreview(call, { kind: "doc", id: "missing", scope: "tenant" });
+    expect(res).toMatchObject({ ok: false, notFound: true });
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
   it("asks for the annotation in the tenant scope only", async () => {
     const call = annotated();
     await loadDocPreview(call, docRef);

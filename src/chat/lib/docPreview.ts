@@ -115,13 +115,15 @@ export async function loadDocPreview(call: DocumentCall, ref: DocRef): Promise<D
   const { id, scope } = ref;
   const opt = summaryOption(scope);
   // A server older than annotations refuses with_summary as an unknown
-  // argument: the read is asked again without it, so the popover still shows
-  // the excerpt there.
+  // argument ('Document: unknown argument "with_summary" — nothing was done.'):
+  // only then is the read asked again without it, so the popover still shows
+  // the excerpt there. Any other failure (not found, signed out, offline) is
+  // the answer, and a retry would only repeat it.
   const first = async (input: Parameters<DocumentCall>[0]): Promise<unknown> => {
     try {
       return await call({ ...input, ...opt });
     } catch (e) {
-      if (!opt.with_summary) throw e;
+      if (!opt.with_summary || !/unknown argument "with_summary"/.test(describeError(e))) throw e;
       return call(input);
     }
   };
