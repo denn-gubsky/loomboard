@@ -109,6 +109,13 @@ mode (default); switch to **Auto** to run actions immediately (a **Stop** button
 dismisses a pending action). Sensitive fields (passwords, payment) always require
 confirmation. A status line shows whether the client-tool WebSocket is connected.
 
+**Voice.** Where your loomcycle offers speech, a reply has a speaker button that reads it
+aloud. Where it offers speech-to-text, the composer has a mic: hold it to talk and send, or
+tap it to dictate into the draft. Chrome shows no microphone prompt in a side panel, so the
+first press opens a loomboard page in a tab with an **Allow microphone** button. Once you
+allow it, the tab closes, and the panel's mic works from then on. To take the permission
+back, use Chrome's site settings for `chrome-extension://<extension-id>`.
+
 ## Security & trust model
 
 This is a powerful, deliberately broad capability. Read this before using it on

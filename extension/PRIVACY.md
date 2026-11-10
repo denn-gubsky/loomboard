@@ -1,6 +1,6 @@
 # loomboard — Privacy Policy
 
-_Last updated: 2026-07-08_
+_Last updated: 2026-11-10_
 
 loomboard is a Chrome extension that puts a chat with your **own** loomcycle
 runtime in the browser side panel, and lets that assistant read and act on the
@@ -24,6 +24,11 @@ analytics, and shows no ads.
   the tab's URL/title) so the assistant can summarize it, extract data, or act on
   it at your request.
 - **Your chat messages** — what you type to the assistant.
+- **Your voice, when you use voice input** — audio from your microphone, recorded
+  only while the mic button is on. Chrome asks for the microphone once, on a page
+  of the extension's own that opens in a tab.
+- **Replies read aloud** — when you press a reply's speaker button, its text is
+  sent to be turned into speech, and the audio comes back to play.
 
 ## Where that data goes
 
@@ -37,6 +42,11 @@ analytics, and shows no ads.
   to authenticate your requests (over the `Authorization` header for HTTP and the
   `Sec-WebSocket-Protocol` subprotocol for the client-tool WebSocket). It is never
   logged, never shown, and never sent to any other party.
+- **Recordings and read-aloud text are sent only to the loomcycle server you
+  configured** (`/v1/audio/transcriptions` and `/v1/audio/speech`), which turns
+  them into text or speech. The extension keeps no recording: the transcript goes
+  into your message draft, and a recording that failed to transcribe is held in
+  memory only until you retry or dismiss it.
 - **Page content and chat messages are sent only to the loomcycle server you
   configured**, so your agent can act on your request. That server is operated by
   **you** or an operator **you** chose — not by the extension's developer.
