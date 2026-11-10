@@ -71,8 +71,11 @@ export function MicButton({ voice, disabled, sendAt, onCancelSend }: { voice: Vo
     );
   }
 
+  const idle = sendAt === null && (status === "idle" || status === "error");
   const begin = () => {
     if (sendAt !== null) return onCancelSend();
+    // Chrome still sends pointer events to a disabled button, unlike clicks.
+    if (idle && disabled) return;
     pressed.current = true;
     setHolding(status === "idle" || status === "error");
     voice.press();
@@ -110,7 +113,6 @@ export function MicButton({ voice, disabled, sendAt, onCancelSend }: { voice: Vo
     icon = <Mic size={18} />;
   }
   const lang = voice.language ? ` (${voice.language})` : "";
-  const idle = sendAt === null && (status === "idle" || status === "error");
 
   return (
     <button

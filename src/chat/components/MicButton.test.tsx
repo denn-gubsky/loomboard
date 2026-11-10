@@ -63,6 +63,20 @@ describe("MicButton", () => {
     expect(voice.tap).not.toHaveBeenCalled();
   });
 
+  it("does not record from a disabled mic, which Chrome still sends pointer events to", () => {
+    const voice = stub();
+    const ref = createRef<ComposerHandle>();
+    render(
+      <section className="loomchat">
+        <Composer ref={ref} voice={voice} disabled running={false} freeTokens={null} history={[]} onSend={vi.fn()} onStop={vi.fn()} />
+      </section>,
+    );
+    const mic = screen.getByLabelText("Voice input");
+    fireEvent.pointerDown(mic, { button: 0, pointerId: 1 });
+    fireEvent.keyDown(mic, { key: " " });
+    expect(voice.press).not.toHaveBeenCalled();
+  });
+
   it("ignores a press with another mouse button", () => {
     const voice = stub();
     show(voice);
