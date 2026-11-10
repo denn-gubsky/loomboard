@@ -25,6 +25,7 @@ function stub(state: Partial<SpeechPlayerState> = {}): ReadAloud {
     pause: vi.fn(),
     resume: vi.fn(),
     stop: vi.fn(),
+    prime: vi.fn(),
   };
 }
 

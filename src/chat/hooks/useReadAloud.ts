@@ -12,6 +12,9 @@ export interface ReadAloud {
   pause(): void;
   resume(): void;
   stop(): void;
+  /** From a mic gesture: stop reading and unlock audio for a reply read on
+   *  its own later (see SpeechPlayer.prime). */
+  prime(): void;
 }
 
 // Provided by <Chat>, read by each reply's speaker button. Null when read-aloud
@@ -78,6 +81,7 @@ export function useReadAloud(
       pause: player.pause,
       resume: player.resume,
       stop: player.stop,
+      prime: player.prime,
     };
   }, [player, state]);
 }
