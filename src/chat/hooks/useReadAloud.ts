@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 import { LoomcycleError, type LoomcycleClient, type SpeechDirectionInfo } from "@loomcycle/client";
-import { pickSpeechFormat, speechLanguage, splitForSpeech } from "../lib/speech";
+import { pickSpeechFormat, splitForSpeech } from "../lib/speech";
 import { createSpeechPlayer, type AudioLike, type SpeechPlayerState } from "../lib/speechPlayer";
 import { describeError } from "../lib/errors";
 
@@ -49,8 +49,7 @@ export function useReadAloud(
     if (!format || !info) return null;
     return createSpeechPlayer({
       synthesize: async (text, signal) => {
-        const language = speechLanguage(text, info.languages);
-        const r = await client.speech(text, { format, signal, ...(language ? { language } : {}) });
+        const r = await client.speech(text, { format, signal });
         return new Blob([r.bytes as BlobPart], { type: r.contentType || MIME[format] });
       },
       createAudio: () => new Audio() as unknown as AudioLike,

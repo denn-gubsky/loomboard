@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerText, pickSpeechFormat, speechLanguage, splitForSpeech } from "./speech";
+import { answerText, pickSpeechFormat, splitForSpeech } from "./speech";
 import type { MessagePart } from "./eventReducer";
 
 const para = (n: number, word = "word") => Array.from({ length: n }, () => word).join(" ") + ".";
@@ -83,25 +83,5 @@ describe("pickSpeechFormat", () => {
     const all = plays({ "audio/mpeg": "probably", 'audio/ogg; codecs="opus"': "probably" });
     expect(pickSpeechFormat(["wav"], all)).toBe("wav");
     expect(pickSpeechFormat(undefined, all)).toBe("wav");
-  });
-});
-
-describe("speechLanguage", () => {
-  const ukEn = { uk: {}, en: {} };
-
-  it("names en for a mostly Latin piece when the deployment speaks English", () => {
-    expect(speechLanguage("Leaves change colour in autumn.", ukEn)).toBe("en");
-    expect(speechLanguage("The capital is Київ, on the Dnipro river.", ukEn)).toBe("en");
-  });
-
-  it("leaves a mostly Cyrillic piece to loomcycle's own detection", () => {
-    expect(speechLanguage("Привіт, це перевірка голосу.", ukEn)).toBeUndefined();
-    expect(speechLanguage("Ми використовуємо React і TypeScript у проєкті.", ukEn)).toBeUndefined();
-  });
-
-  it("names nothing when English is not configured, or there are no letters", () => {
-    expect(speechLanguage("Leaves change colour.", { uk: {} })).toBeUndefined();
-    expect(speechLanguage("Leaves change colour.", undefined)).toBeUndefined();
-    expect(speechLanguage("12 + 30 = 42", ukEn)).toBeUndefined();
   });
 });
