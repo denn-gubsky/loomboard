@@ -1356,6 +1356,24 @@
   border-radius: 6px;
   padding: 0.1rem 0.2rem;
 }
+.loomchat .voice-replies {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  align-self: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.loomchat .voice-replies.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
 .loomchat .voice-status {
   display: flex;
   align-items: center;
