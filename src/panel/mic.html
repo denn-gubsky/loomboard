@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>loomboard — microphone</title>
+  </head>
+  <body>
+    <main class="mic-page">
+      <h1>Voice input for loomboard</h1>
+      <p>
+        Chrome cannot ask for the microphone inside the side panel, so it asks here, once. Audio is recorded only while
+        the mic button is on, and is sent only to your loomcycle.
+      </p>
+      <button id="allow" type="button" class="btn-primary">Allow microphone</button>
+      <p id="status" role="status"></p>
+    </main>
+    <script type="module" src="./mic.ts"></script>
+  </body>
+</html>

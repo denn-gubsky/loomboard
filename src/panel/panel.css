@@ -209,3 +209,14 @@
   color: var(--danger);
   border-color: var(--danger);
 }
+
+/* The one-time microphone page (mic.html). */
+.mic-page {
+  max-width: 32rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+  line-height: 1.5;
+}
+.mic-page h1 {
+  font-size: 1.2rem;
+}
