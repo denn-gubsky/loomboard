@@ -22,6 +22,10 @@ export interface RecorderLike {
 }
 
 export interface VoiceRecorderDeps {
+  /** Asked before the microphone is opened, when the host gets permission
+   *  another way (the Chrome extension's side panel cannot show the prompt).
+   *  false: not now — the take ends quietly and the user tries again. */
+  ensureMicrophone?(): Promise<boolean>;
   /** The microphone; asks for permission the first time. */
   getUserMedia(): Promise<MediaStream>;
   createRecorder(stream: MediaStream): RecorderLike;
@@ -131,6 +135,20 @@ export function createVoiceRecorder(deps: VoiceRecorderDeps): VoiceRecorder {
     const gen = ++generation;
     kept = null;
     set({ status: "starting", startedAt: null, error: null, canRetry: false });
+    if (deps.ensureMicrophone) {
+      let ready: boolean;
+      try {
+        ready = await deps.ensureMicrophone();
+      } catch (e) {
+        if (gen === generation) set({ status: "error", startedAt: null, error: microphoneError(e, deps.describe), canRetry: false });
+        return;
+      }
+      if (gen !== generation) return; // cancelled, or a newer take began
+      if (!ready) {
+        set(IDLE);
+        return;
+      }
+    }
     let mic: MediaStream;
     try {
       mic = await deps.getUserMedia();

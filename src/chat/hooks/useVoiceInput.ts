@@ -89,6 +89,8 @@ interface Options {
   onText(text: string, fromHold: boolean): void;
   /** The conversation: a recording is dropped when it changes. */
   resetKey: string;
+  /** ChatProps.voice.ensureMicrophone: asked before each take opens the mic. */
+  ensureMicrophone?: () => Promise<boolean>;
 }
 
 /** Voice input for one chat, or null where loomcycle does not offer
@@ -109,8 +111,10 @@ export function useVoiceInput(
 
   // Read at send time, so a recording made before a pick or a re-render uses
   // what is current then, without rebuilding the recorder.
-  const latest = useRef({ language, onText: opts.onText });
-  latest.current = { language, onText: opts.onText };
+  const latest = useRef({ language, onText: opts.onText, ensureMicrophone: opts.ensureMicrophone });
+  latest.current = { language, onText: opts.onText, ensureMicrophone: opts.ensureMicrophone };
+  // Only a host that gets permission itself puts a wait before getUserMedia.
+  const hostEnsures = !!opts.ensureMicrophone;
 
   // The press in progress, and whether the take in flight was held to talk.
   const pressedAt = useRef<number | null>(null);
@@ -122,6 +126,7 @@ export function useVoiceInput(
   const recorder = useMemo(() => {
     if (!transcription || unavailable) return null;
     return createVoiceRecorder({
+      ...(hostEnsures ? { ensureMicrophone: () => latest.current.ensureMicrophone?.() ?? Promise.resolve(true) } : {}),
       getUserMedia: () =>
         navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }),
       createRecorder,
@@ -146,7 +151,7 @@ export function useVoiceInput(
       describe: describeError,
       limitSeconds: recordingLimitSeconds(transcription),
     });
-  }, [client, transcription, unavailable]);
+  }, [client, transcription, unavailable, hostEnsures]);
 
   // A recording belongs to its conversation and its page: drop it on a switch
   // or unmount, and stop it (keeping what was said) when the tab is hidden
