@@ -54,6 +54,20 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 const SILENCE_PREFIX = "data:audio/wav;base64,";
 
 describe("speechPlayer", () => {
+  it("primes from a gesture: stops the reading and unlocks the element, with nothing fetched", async () => {
+    const { player, el, calls } = harness();
+    player.play("m1", ["Hello."]);
+    await tick();
+    calls[0].resolve(audio("one"));
+    await tick();
+    expect(player.getState().status).toBe("playing");
+    player.prime();
+    expect(player.getState()).toMatchObject({ key: null, status: "idle" });
+    expect(calls[0].signal.aborted).toBe(true); // the reading's session is over
+    expect(el.played.at(-1)?.startsWith(SILENCE_PREFIX)).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+
   it("unlocks the audio element before the first await", () => {
     const { player, el } = harness();
     player.play("m1", ["Hello."]);

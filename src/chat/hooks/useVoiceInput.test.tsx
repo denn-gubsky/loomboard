@@ -238,6 +238,24 @@ describe("useVoiceInput", () => {
       await waitFor(() => expect(onText).toHaveBeenCalledWith("Привіт, світе", false));
     });
 
+    it("reports every gesture on the mic, inside it", async () => {
+      const onGesture = vi.fn();
+      const client = { transcribe: vi.fn(async () => ({ text: "Привіт" })) } as unknown as LoomcycleClient;
+      const onPick = vi.fn();
+      const onText = vi.fn();
+      const { result } = renderHook(() =>
+        useVoiceInput(client, INFO, null, { picked: undefined, onPick, host: undefined, onText, resetKey: "c1", onGesture }),
+      );
+      act(() => result.current!.press());
+      expect(onGesture).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(result.current!.state.status).toBe("recording"));
+      clock += 2_000;
+      act(() => result.current!.release(true));
+      expect(onGesture).toHaveBeenCalledTimes(2); // a touch release is the gesture that unlocks audio
+      act(() => result.current!.tap());
+      expect(onGesture).toHaveBeenCalledTimes(3);
+    });
+
     it("taps from the keyboard: start, then stop into the draft", async () => {
       const { result, onText } = setup();
       act(() => result.current!.tap());

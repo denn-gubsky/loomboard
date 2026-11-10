@@ -45,6 +45,10 @@ export interface SpeechPlayer {
   pause(): void;
   resume(): void;
   stop(): void;
+  /** Stop any reading and unlock the audio element, from a gesture that is not
+   *  a play: the mic, before a reply is read on its own when the turn ends
+   *  (RFC FX §7.3). Stopping keeps the reply out of the recording. */
+  prime(): void;
   /** Stop and drop the cached audio (connection change, unmount). */
   dispose(): void;
 }
@@ -222,6 +226,15 @@ export function createSpeechPlayer(deps: SpeechPlayerDeps): SpeechPlayer {
     stop() {
       endSession();
       set({ key: null, status: "idle", error: null });
+    },
+    prime() {
+      endSession();
+      if (state.key !== null || state.status !== "idle") set({ key: null, status: "idle", error: null });
+      const el = (audio ??= deps.createAudio());
+      el.onended = null;
+      el.onerror = null;
+      el.src = SILENCE;
+      el.play().catch(() => undefined);
     },
     dispose() {
       endSession();

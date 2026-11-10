@@ -51,6 +51,9 @@ export interface ChatConversation {
   /** The language voice input transcribes in, once the user picks one for
    *  this conversation (RFC FX D5). */
   voiceLanguage?: string;
+  /** Voice conversation mode: a reply to a message sent from the mic is read
+   *  aloud when its turn ends (RFC FX §7.3). Off unless set. */
+  voiceReplies?: boolean;
 }
 
 /** Whether a key carries a real setting. Absent, `undefined` and `""` are all

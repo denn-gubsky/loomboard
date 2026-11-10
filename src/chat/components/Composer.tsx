@@ -16,6 +16,7 @@ import {
   Loader2,
   FileText,
   AlertCircle,
+  Volume2,
 } from "lucide-react";
 import {
   classify,
@@ -44,11 +45,15 @@ interface Props {
   historyKey?: string;
   /** Seed the input on first mount (the host may pre-fill a task to review). */
   initialText?: string;
-  onSend: (text: string, attachments: StagedAttachment[]) => void;
+  /** `origin.voice`: the draft holds a voice transcript (RFC FX §7.3). */
+  onSend: (text: string, attachments: StagedAttachment[], origin: { voice: boolean }) => void;
   onStop: () => void;
   placeholder?: string;
   /** Voice input (RFC FX), null where loomcycle does not offer it. */
   voice?: VoiceInput | null;
+  /** Voice conversation mode's toggle: replies to voice messages are read
+   *  aloud. Absent where the chat cannot both hear and speak. */
+  voiceReplies?: { on: boolean; onToggle(): void } | null;
 }
 
 /** What <Chat> may do to the draft from outside. */
@@ -106,6 +111,7 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
   onStop,
   placeholder,
   voice,
+  voiceReplies,
 }, ref) {
   // Seed once on mount; the user edits/sends from there (a later switch to a
   // different pre-filled chat remounts via the host's React key).
@@ -114,6 +120,9 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
   const [dragging, setDragging] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const histRef = useRef(noHistoryNav);
+  // Whether the draft holds a voice transcript: kept through edits, dropped
+  // when the draft is emptied, replaced from history, or sent.
+  const fromVoice = useRef(false);
   // When a held take's transcript is sent, or null when nothing is pending.
   const [sendAt, setSendAt] = useState<number | null>(null);
   const cancelSend = () => setSendAt(null);
@@ -126,6 +135,7 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
       const next = insertTranscript(text, start, end, transcript);
       setText(next.text);
       histRef.current = noHistoryNav;
+      fromVoice.current = true;
       // Only a draft the composer could send now: not while it is disabled or
       // still reading an attachment. A running turn is fine — Enter steers it.
       const canSend = !disabled && !atts.some((a) => a.status === "processing");
@@ -144,6 +154,7 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
   useEffect(() => {
     histRef.current = noHistoryNav;
     setSendAt(null);
+    fromVoice.current = false;
   }, [historyKey]);
 
   // The timed send reads the draft as it is when the window closes.
@@ -262,7 +273,8 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
     setSendAt(null);
     if (disabled || processing) return;
     if (!text.trim() && ready.length === 0) return;
-    onSend(text, ready);
+    onSend(text, ready, { voice: fromVoice.current });
+    fromVoice.current = false;
     setText("");
     setAtts([]);
     histRef.current = noHistoryNav;
@@ -275,6 +287,7 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
     const r = navigateHistory(history, histRef.current, dir, text);
     histRef.current = r.state;
     setText(r.value);
+    fromVoice.current = false;
     requestAnimationFrame(() => {
       const ta = taRef.current;
       if (ta) ta.selectionStart = ta.selectionEnd = ta.value.length;
@@ -372,12 +385,25 @@ export default forwardRef<ComposerHandle, Props>(function Composer({
         </label>
         {voice && <MicButton voice={voice} disabled={disabled} sendAt={sendAt} onCancelSend={cancelSend} />}
         {voice && <VoiceLanguage voice={voice} />}
+        {voice && voiceReplies && (
+          <button
+            type="button"
+            className={voiceReplies.on ? "voice-replies on" : "voice-replies"}
+            onClick={voiceReplies.onToggle}
+            aria-pressed={voiceReplies.on}
+            aria-label="Read replies to voice messages aloud"
+            title={voiceReplies.on ? "Replies to voice messages are read aloud" : "Read replies to voice messages aloud"}
+          >
+            <Volume2 size={16} />
+          </button>
+        )}
         <textarea
           ref={taRef}
           className="composer-input"
           value={text}
           onChange={(e) => {
             cancelSend();
+            if (!e.target.value.trim()) fromVoice.current = false;
             setText(e.target.value);
             histRef.current = noHistoryNav; // typing exits recall
           }}

@@ -89,6 +89,10 @@ interface Options {
   onText(text: string, fromHold: boolean): void;
   /** The conversation: a recording is dropped when it changes. */
   resetKey: string;
+  /** A user gesture on the mic (press, release, tap), called inside it: the
+   *  chat stops read-aloud there, which the mic would otherwise record, and
+   *  unlocks audio for a reply read on its own later (RFC FX §7.3). */
+  onGesture?(): void;
   /** ChatProps.voice.ensureMicrophone: asked before each take opens the mic. */
   ensureMicrophone?: () => Promise<boolean>;
 }
@@ -111,8 +115,8 @@ export function useVoiceInput(
 
   // Read at send time, so a recording made before a pick or a re-render uses
   // what is current then, without rebuilding the recorder.
-  const latest = useRef({ language, onText: opts.onText, ensureMicrophone: opts.ensureMicrophone });
-  latest.current = { language, onText: opts.onText, ensureMicrophone: opts.ensureMicrophone };
+  const latest = useRef({ language, onText: opts.onText, onGesture: opts.onGesture, ensureMicrophone: opts.ensureMicrophone });
+  latest.current = { language, onText: opts.onText, onGesture: opts.onGesture, ensureMicrophone: opts.ensureMicrophone };
   // Only a host that gets permission itself puts a wait before getUserMedia.
   const hostEnsures = !!opts.ensureMicrophone;
 
@@ -187,6 +191,7 @@ export function useVoiceInput(
       // a transcription) is a tap on it; a release then does nothing.
       press: () => {
         if (!recorder) return;
+        latest.current.onGesture?.();
         const { status } = recorder.getState();
         if (status !== "idle" && status !== "error") return tap(recorder);
         pressedAt.current = Date.now();
@@ -195,6 +200,8 @@ export function useVoiceInput(
       },
       release: (inside) => {
         if (!recorder || pressedAt.current === null) return;
+        // A touch press is not a gesture that unlocks audio; its release is.
+        latest.current.onGesture?.();
         const held = Date.now() - pressedAt.current;
         pressedAt.current = null;
         const action = releaseAction(held, recorder.getState().status, inside);
@@ -203,7 +210,9 @@ export function useVoiceInput(
         if (action === "stop") recorder.stop();
       },
       tap: () => {
-        if (recorder) tap(recorder);
+        if (!recorder) return;
+        latest.current.onGesture?.();
+        tap(recorder);
       },
       cancel: () => recorder?.cancel(),
       // A retried take is one the user is already looking at: never timed.

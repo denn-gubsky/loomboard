@@ -13,6 +13,8 @@ import { DocLinksContext, type DocLinks, type DocumentOpenTarget } from "./hooks
 import { ReadAloudContext, useReadAloud } from "./hooks/useReadAloud";
 import { useSpeechCaps } from "./hooks/useSpeechCaps";
 import { useVoiceInput } from "./hooks/useVoiceInput";
+import { useVoiceReplies } from "./hooks/useVoiceReplies";
+import type { StagedAttachment } from "./lib/attachments";
 import AgentPicker from "./components/AgentPicker";
 import OverridesPanel from "./components/OverridesPanel";
 import MessageList from "./components/MessageList";
@@ -128,6 +130,9 @@ export default function Chat({
     host: voice ? voice.language : undefined,
     onText: (text, fromHold) => composerRef.current?.insert(text, { send: fromHold }),
     resetKey: conversation.id,
+    // Stop a reading (the mic would record it) and unlock audio inside the
+    // gesture, so the reply to this message can be read on its own later.
+    onGesture: () => readAloud?.prime(),
     ensureMicrophone: voice ? voice.ensureMicrophone : undefined,
   });
 
@@ -135,6 +140,17 @@ export default function Chat({
     (a) => a.name === conversation.baseAgent,
   )?.static_definition;
   const chat = useChat(client, conversation, onConversationChange);
+  const voiceReplies = useVoiceReplies(readAloud, chat.running, chat.state.messages, conversation.id);
+  // Voice conversation mode (RFC FX §7.3) needs both directions.
+  const canVoiceReply = !!voiceInput && !!readAloud && !readAloud.state.unavailable;
+  const send = (text: string, attachments: StagedAttachment[], origin: { voice: boolean }) => {
+    voiceReplies.sent(origin.voice && canVoiceReply && !!conversation.voiceReplies, chat.state.messages.length);
+    void chat.send(text, attachments);
+  };
+  const stop = () => {
+    voiceReplies.cancel();
+    void chat.cancel();
+  };
   // What the live run actually uses, for the settings panel. Re-read whenever a
   // turn ends or the run changes: the report is a snapshot, and a turn is when
   // a retune or a fallback can have moved something.
@@ -159,12 +175,13 @@ export default function Chat({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        voiceReplies.cancel(); // a stopped turn's reply is not read
         void cancel();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [running, parked, cancel, escapeStops]);
+  }, [running, parked, cancel, escapeStops, voiceReplies]);
 
   // Publish the run's active state to the host (sidebar tile activity dot). A
   // run parked on a question isn't "working" (the loop stays running until the
@@ -262,7 +279,7 @@ export default function Chat({
         <InterruptCard
           interrupt={chat.state.pendingInterrupt}
           onResolve={chat.resolveInterrupt}
-          onCancel={chat.cancel}
+          onCancel={stop}
         />
       )}
 
@@ -275,8 +292,13 @@ export default function Chat({
         history={userInputs}
         historyKey={conversation.id}
         initialText={initialInput}
-        onSend={chat.send}
-        onStop={chat.cancel}
+        onSend={send}
+        onStop={stop}
+        voiceReplies={
+          canVoiceReply
+            ? { on: !!conversation.voiceReplies, onToggle: () => onConversationChange({ voiceReplies: !conversation.voiceReplies }) }
+            : null
+        }
         placeholder={
           chat.state.pendingInterrupt
             ? "Answer the agent's question above"

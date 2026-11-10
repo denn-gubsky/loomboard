@@ -203,7 +203,7 @@ describe("the send window of a held take", () => {
     act(() => vi.advanceTimersByTime(SEND_DELAY_MS - 1));
     expect(onSend).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));
-    expect(onSend).toHaveBeenCalledWith("Book the room", []);
+    expect(onSend).toHaveBeenCalledWith("Book the room", [], { voice: true });
     expect(screen.queryByLabelText("Cancel send")).toBeNull();
   });
 
@@ -257,5 +257,58 @@ describe("the send window of a held take", () => {
     );
     act(() => vi.advanceTimersByTime(SEND_DELAY_MS * 2));
     expect(onSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("voice conversation mode in the composer (RFC FX §7.3)", () => {
+  function setup(voiceReplies: { on: boolean; onToggle(): void } | null = null) {
+    const onSend = vi.fn();
+    const ref = createRef<ComposerHandle>();
+    render(
+      <section className="loomchat">
+        <Composer ref={ref} voice={stub()} voiceReplies={voiceReplies} disabled={false} running={false} freeTokens={null} history={["earlier"]} onSend={onSend} onStop={vi.fn()} />
+      </section>,
+    );
+    const ta = document.querySelector("textarea")!;
+    return { onSend, ref, ta };
+  }
+
+  it("says a sent draft came from voice, edits and all, and a typed one did not", () => {
+    const { onSend, ref, ta } = setup();
+    act(() => ref.current!.insert("Book the room"));
+    fireEvent.change(ta, { target: { value: "Book the big room" } });
+    fireEvent.keyDown(ta, { key: "Enter" });
+    expect(onSend).toHaveBeenLastCalledWith("Book the big room", [], { voice: true });
+    fireEvent.change(ta, { target: { value: "Typed" } });
+    fireEvent.keyDown(ta, { key: "Enter" });
+    expect(onSend).toHaveBeenLastCalledWith("Typed", [], { voice: false });
+  });
+
+  it("forgets the voice once the draft is emptied or replaced from history", () => {
+    const { onSend, ref, ta } = setup();
+    act(() => ref.current!.insert("Spoken"));
+    fireEvent.change(ta, { target: { value: "" } });
+    fireEvent.change(ta, { target: { value: "Typed instead" } });
+    fireEvent.keyDown(ta, { key: "Enter" });
+    expect(onSend).toHaveBeenLastCalledWith("Typed instead", [], { voice: false });
+    act(() => ref.current!.insert("Spoken"));
+    fireEvent.keyDown(ta, { key: "ArrowUp" });
+    ta.selectionStart = ta.selectionEnd = 0;
+    fireEvent.keyDown(ta, { key: "ArrowUp" });
+    expect(ta.value).toBe("earlier");
+    fireEvent.keyDown(ta, { key: "Enter" });
+    expect(onSend).toHaveBeenLastCalledWith("earlier", [], { voice: false });
+  });
+
+  it("offers the toggle only where the chat can hear and speak, and reports a press", () => {
+    setup(null);
+    expect(screen.queryByLabelText("Read replies to voice messages aloud")).toBeNull();
+    cleanup();
+    const onToggle = vi.fn();
+    setup({ on: true, onToggle });
+    const toggle = screen.getByLabelText("Read replies to voice messages aloud");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalled();
   });
 });
