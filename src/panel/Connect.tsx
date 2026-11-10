@@ -74,7 +74,7 @@ export default function Connect({ onConnect, onSignIn, onRetry, busy, error, pro
       onRetry={onRetry}
       onConnectToken={(token) => void withHostAccess((url) => onConnect({ baseUrl: url, token }))}
       initialToken={initial?.token ?? ""}
-      tokenHint="Stored in this browser's extension storage only."
+      tokenHint="Stored in this browser's extension storage only. A loomcycle that allows only sign-in tokens refuses a pasted user token; operator and service tokens still work."
       error={localError ?? error}
       problem={localError ? null : problem}
       registration={{ redirectUri, origin }}
