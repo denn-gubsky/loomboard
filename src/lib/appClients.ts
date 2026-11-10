@@ -68,3 +68,24 @@ export function withThisApp(client: AppClientConfig, app: ThisApp): AppClientCon
     allowed_origins: add(client.allowed_origins, app.origin),
   };
 }
+
+// A Chrome extension ID: 32 letters a–p (the extension's key hashed and
+// written in base 16 with the digits a–p).
+const EXT_ID = "[a-p]{32}";
+const EXT_FORMS = [
+  new RegExp(`^(${EXT_ID})$`),
+  new RegExp(`^chrome-extension://(${EXT_ID})/?$`),
+  new RegExp(`^https://(${EXT_ID})\\.chromiumapp\\.org/?$`),
+];
+
+/** The redirect URI and origin a Chrome extension install signs in from
+ *  (chrome.identity's https://<id>.chromiumapp.org/), from its ID or either
+ *  address the extension's sign-in screen shows; null for anything else. */
+export function extensionInstall(text: string): ThisApp | null {
+  const t = text.trim().toLowerCase();
+  for (const re of EXT_FORMS) {
+    const id = re.exec(t)?.[1];
+    if (id) return { redirectUri: `https://${id}.chromiumapp.org/`, origin: `chrome-extension://${id}` };
+  }
+  return null;
+}

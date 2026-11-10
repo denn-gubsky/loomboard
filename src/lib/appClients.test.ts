@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ClientDefRecord, ConfigAppClient } from "@loomcycle/client";
-import { admitsThisApp, appRow, newClient, parseLines, withThisApp } from "./appClients";
+import { admitsThisApp, appRow, extensionInstall, newClient, parseLines, withThisApp } from "./appClients";
 
 const def: ClientDefRecord = {
   name: "loomboard",
@@ -97,5 +97,25 @@ describe("withThisApp / admitsThisApp", () => {
     expect(admitsThisApp(appRow(def), local)).toBe(true);
     expect(admitsThisApp(appRow(def), web)).toBe(false);
     expect(admitsThisApp(appRow({ ...def, client: { ...def.client, allowed_origins: [] } }), local)).toBe(false);
+  });
+});
+
+describe("extensionInstall", () => {
+  const ID = "abcdefghijklmnopabcdefghijklmnop";
+  const want = { redirectUri: `https://${ID}.chromiumapp.org/`, origin: `chrome-extension://${ID}` };
+
+  it("reads an install from its ID or either address its sign-in screen shows", () => {
+    expect(extensionInstall(ID)).toEqual(want);
+    expect(extensionInstall(`  chrome-extension://${ID}/ `)).toEqual(want);
+    expect(extensionInstall(`https://${ID}.chromiumapp.org/`)).toEqual(want);
+    expect(extensionInstall(ID.toUpperCase())).toEqual(want);
+  });
+
+  it("refuses anything that is not a Chrome extension ID", () => {
+    expect(extensionInstall("")).toBeNull();
+    expect(extensionInstall(ID.slice(1))).toBeNull();
+    expect(extensionInstall("q".repeat(32))).toBeNull();
+    expect(extensionInstall(`https://${ID}.chromiumapp.org.evil.example/`)).toBeNull();
+    expect(extensionInstall(`https://evil.example/${ID}`)).toBeNull();
   });
 });
