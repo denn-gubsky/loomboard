@@ -51,16 +51,17 @@ export function voiceLanguages(
   return [...new Set(all.filter((l): l is string => !!l))];
 }
 
-// Qwen3-ASR (e.g. frozenlab/qwen3-asr on Ollama) begins each answer with
-// "language <Name><asr_text>", and "language None<asr_text>" alone when it
-// heard no speech. loomcycle 1.143 passes it through, once per piece of a cut
-// recording, so it lands in the transcript.
+// Qwen3-ASR (e.g. frozenlab/qwen3-asr on Ollama) begins each segment it
+// hears with "language <Name><asr_text>", and "language None<asr_text>" alone
+// when it heard no speech. One answer can hold several segments. loomcycle
+// 1.144 strips only a header that starts a piece, so the others still land in
+// the transcript (checked on 1.147.0, 2026-11-10).
 const ASR_HEADER = /language\s+[A-Za-z]+<asr_text>/g;
 
 /** The transcript as the user should see it: Qwen3-ASR's headers removed,
  *  wherever the runtime joined them in, and the spacing tidied. An empty
- *  result means nothing was heard. Remove once loomcycle strips them itself
- *  (G32). Pure. */
+ *  result means nothing was heard. Remove once loomcycle strips every one
+ *  itself (the G32 follow-up filed 2026-11-10). Pure. */
 export function transcriptText(raw: string): string {
   return raw.replace(ASR_HEADER, " ").replace(/[ \t]{2,}/g, " ").trim();
 }
