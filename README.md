@@ -52,11 +52,40 @@ Persist `conversation` however you like (localStorage, your DB, server state). R
 | Prop | Type | Notes |
 |---|---|---|
 | `connection` | `{ baseUrl: string; token?: string; fetch?: typeof fetch }` | How to reach loomcycle. The component builds and memoizes its client. `fetch` is an optional override (proxying, header injection). |
-| `conversation` | `ChatConversation` | Controlled record: `{ id, title, baseAgent, config, sessionId?, runId?, forkDefName? }`. |
+| `conversation` | `ChatConversation` | Controlled record: `{ id, title, baseAgent, config, sessionId?, runId?, forkDefName?, voiceLanguage?, voiceReplies? }`. |
 | `onConversationChange` | `(patch: Partial<ChatConversation>) => void` | Called when the chat produces state to persist (ids, title, agent, config). |
 | `theme` | `"light" \| "dark"` | Optional. Omit to inherit a `data-theme` ancestor (e.g. an app that themes `<html>`); defaults to dark. |
+| `voice` | `false \| { output?, input?, language?, ensureMicrophone? }` | Optional. Voice controls, shown where loomcycle offers them — see [Voice](#voice). |
 
 Also exported: `ConversationConfig`, `Connection`, `createLoomcycleClient`, and the pure helpers `configIsCustom` / `sameConfig`.
+
+## Voice
+
+Where the connected loomcycle offers speech, the chat speaks and listens. Each control shows only when loomcycle's `whoami` says this user may use it, so nothing appears on a runtime without speech.
+
+- **Read aloud** (loomcycle `speech:`): every reply gets a speaker button.
+- **Voice input** (loomcycle `transcription.stt:`): the composer gets a mic.
+  - **Hold** it to talk. On release the transcript goes into the input and is **sent after 3 seconds**, unless you press Cancel send, click or type in the input, or press Esc. Stopping the send keeps the text.
+  - **Tap** it to dictate hands-free until the next tap. The text stays in the input for you to send.
+  - Release a hold off the button, or press Esc while recording, to discard. With the mic focused, holding Space is a hold and Enter is a tap.
+  - The language picker lists what the server transcribes (`transcription.stt.languages`).
+- **Voice replies**: with both directions on, a speaker toggle next to the mic reads aloud the reply to every message you spoke. Typed messages are never read. Pressing the mic stops a reading, so it is not recorded.
+
+The `voice` prop tunes this per host. `false` turns voice off. `{ output: false }` hides read-aloud and `{ input: false }` the mic. `language` is the starting language for voice input, until the user picks one. `ensureMicrophone` is awaited before each take opens the microphone, for a host that gets permission another way (resolve `false` to end the take). The picked language and the voice-replies toggle are stored on the conversation (`voiceLanguage`, `voiceReplies`), so persist them like its other fields.
+
+**Requirements**
+
+- loomcycle **1.144 or later**: speech and transcription arrived in 1.140, and 1.144 reads English with an English voice and strips Qwen3-ASR's headers. The `@loomcycle/client` you pass must have `speechInfo()` (1.140 or later); an older one shows no voice controls.
+- The microphone needs a **secure page**: `https://`, or `http://localhost` / `127.0.0.1`. Over plain HTTP on another address the mic is shown disabled with that reason; read-aloud still works. For the Docker image, see [HTTPS for voice input](docker/README.md#https-for-voice-input).
+- Where it runs:
+
+  | | Microphone |
+  |---|---|
+  | browser | the browser's own prompt, once per site |
+  | Chrome extension | a one-time **Allow microphone** page, since a side panel cannot prompt (see [`extension/`](extension/README.md)) |
+  | desktop, macOS | the system prompt on the first take; allow or revoke it in System Settings → Privacy & Security → Microphone |
+  | desktop, Windows | the webview's prompt |
+  | desktop, Linux | none yet: Tauri's Linux webview (WebKitGTK) is built without media capture switched on, so the mic is shown disabled. Read-aloud works. |
 
 ## Styling & theming
 

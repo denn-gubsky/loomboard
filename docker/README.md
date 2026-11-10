@@ -44,6 +44,46 @@ services:
 The image has a `HEALTHCHECK` on `/healthz`, which answers without calling the
 runtime.
 
+## HTTPS for voice input
+
+Browsers open the microphone only on a secure page: `https://`, or
+`http://localhost`. The container serves plain HTTP, so opened as
+`http://<host>:8080` from another machine the chat's mic is shown disabled with
+"Voice input needs HTTPS (or localhost)". Read-aloud works either way. Put TLS
+in front of the container:
+
+- **Caddy**, with a public DNS name pointing at the host (it gets and renews the
+  certificate itself):
+
+  ```yaml
+  services:
+    loomboard:
+      image: denngubsky/loomboard:<version>
+      environment:
+        LOOMCYCLE_UPSTREAM: http://loomcycle:8787
+    caddy:
+      image: caddy:2
+      restart: unless-stopped
+      command: caddy reverse-proxy --from board.example.com --to loomboard:8080
+      ports:
+        - "80:80"
+        - "443:443"
+      volumes:
+        - caddy_data:/data
+  volumes:
+    caddy_data:
+  ```
+
+- **Tailscale**, for a host on your tailnet with no public name:
+  `tailscale serve --bg 8080` serves it at `https://<machine>.<tailnet>.ts.net`.
+
+- Any other reverse proxy that terminates TLS and forwards to port 8080 works the
+  same way; the container needs no TLS settings of its own.
+
+Then add the `https://` address to loomcycle's `auth.clients.loomboard`
+(`redirect_uris` and `allowed_origins`, see the main README's "Sign in with
+loomcycle"), since sign-in checks the origin people open the app on.
+
 ## Build it yourself
 
 From the repository root:
