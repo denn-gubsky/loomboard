@@ -43,12 +43,15 @@ Store rejects a version already published.
 > extract and collect data, fill forms with your data, click, and navigate.
 >
 > loomboard is a thin client: it has no backend of its own. You point it at a
-> loomcycle server you run (or one you've been given access to) and authenticate
-> with your bearer token. Your page content and messages go only to that server;
-> nothing is sent to the extension's developer.
+> loomcycle server you run (or one you've been given access to) and sign in on
+> that server's own page. Your page content, messages and voice go only to that
+> server; nothing is sent to the extension's developer.
 >
-> Requirements: a reachable loomcycle runtime (v1.16.x or newer) and a bearer
-> token for it. See the project README for server setup.
+> Where your server offers it, you can talk to the assistant (voice input) and
+> have its replies read aloud.
+>
+> Requirements: a reachable loomcycle runtime (v1.126 or newer) that registers
+> this extension as an app. See the project README for server setup.
 >
 > Safety: mutating actions (fill / click / navigate) are gated by an in-panel
 > approval step by default, and password/payment fields always require your
@@ -70,7 +73,8 @@ Store rejects a version already published.
 
 - **Permission justifications** (one per requested permission):
   - `sidePanel` — Hosts the assistant chat UI in the browser side panel.
-  - `storage` — Stores your loomcycle server URL, bearer token, and chat locally on your device.
+  - `storage` — Stores your loomcycle server URL, an optional pasted token, and the chat locally on your device; keeps your sign-in in session storage until the browser quits.
+  - `identity` — Opens your loomcycle server's sign-in page in a window of its own and receives the sign-in back (Sign in with loomcycle).
   - `scripting` — Injects the page-reading/acting content script on demand into the tab you're working on (e.g. a tab opened before the extension was updated).
   - `activeTab` — Access the tab you're currently working on to read/act on it at your request.
   - `tabs` — Identify the active tab and detect when a navigation you requested has completed.
@@ -79,7 +83,8 @@ Store rejects a version already published.
 
 - **Data usage** — declare that the extension handles, and transmits **only to the
   user-configured server** (never to the developer):
-  - **Authentication information** — the bearer token (stored locally; sent only to your server).
+  - **Authentication information** — your sign-in tokens, or a pasted token (kept locally; sent only to your server).
+  - **Audio** — your voice, recorded only while the mic is on and sent to your server to be transcribed; not kept by the extension.
   - **Website content** — page text/fields/links and the tab URL you ask it to work on.
   - **User communications** — your chat messages.
   - Certify: **not sold**; **not used or transferred for anything beyond the single
