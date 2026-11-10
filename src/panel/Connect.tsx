@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ConnectionSettings } from "../state/settings";
-import type { SignInProblemKind } from "../lib/appSignIn";
+import { CLIENT_ID, type SignInProblemKind } from "../lib/appSignIn";
 import { extRedirectUri } from "../lib/extSignIn";
 import SignInCard from "../components/SignInCard";
 
@@ -77,11 +77,11 @@ export default function Connect({ onConnect, onSignIn, onRetry, busy, error, pro
       tokenHint="Stored in this browser's extension storage only."
       error={localError ?? error}
       problem={localError ? null : problem}
-      registration={{ redirectUri, origin }}
+      registration={{ clientDef: CLIENT_ID, redirectUri, origin }}
       footer={
         <small className="connect-register">
-          For the operator — register this install in <code>auth.clients.loomboard</code>: redirect
-          URI <code>{redirectUri}</code>, allowed origin <code>{origin}</code>.
+          For the operator — register this install as the app <code>{CLIENT_ID}</code> (in loomboard:
+          Apps): redirect URI <code>{redirectUri}</code>, allowed origin <code>{origin}</code>.
         </small>
       }
     />
