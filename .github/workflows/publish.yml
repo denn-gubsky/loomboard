@@ -19,7 +19,10 @@ name: Publish
 # Auth is npm trusted publishing (OIDC), with no token. Each of the three packages
 # names this repo and this workflow file as its trusted publisher on npmjs.com
 # (package → Settings → Trusted publisher → GitHub Actions: denn-gubsky /
-# loomboard / publish.yml, no environment). npm exchanges the job's OIDC token
+# loomboard / publish.yml, no environment, with "npm publish" ticked under
+# Allowed actions — entries made since 2026-09 allow only staged publishing by
+# default, and a new entry expires unless its first publish lands within 2
+# days). npm exchanges the job's OIDC token
 # for a short-lived publish credential and attaches provenance itself. Renaming
 # this file breaks publishing until the npm settings are changed to match.
 
@@ -86,42 +89,23 @@ jobs:
       - run: npm -w @loomboard/workflow run build:lib
 
       # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
-      - run: npm install -g npm@11
+      # Runs only when every gate above passed, which the publish steps check.
+      - id: npm11
+        run: npm install -g npm@11
 
+      # Each package is published even when one before it failed, so one run
+      # shows every package's state (the job still fails) — but never after a
+      # failed gate: npm11 only succeeds when every gate did.
       - name: Publish @loomboard/chat
-        if: github.event_name == 'workflow_dispatch' || !startsWith(github.ref_name, 'workflow-v')
-        run: |
-          name=$(node -p "require('./package.json').name")
-          ver=$(node -p "require('./package.json').version")
-          if npm view "$name@$ver" version >/dev/null 2>&1; then
-            echo "· $name@$ver already on npm — skipping"
-          else
-            echo "· publishing $name@$ver"
-            npm publish --provenance --access public
-          fi
+        if: ${{ !cancelled() && steps.npm11.outcome == 'success' && (github.event_name == 'workflow_dispatch' || !startsWith(github.ref_name, 'workflow-v')) }}
+        run: "$GITHUB_WORKSPACE/.github/scripts/npm-publish.sh"
 
       - name: Publish @loomboard/app
-        if: github.event_name == 'workflow_dispatch' || !startsWith(github.ref_name, 'workflow-v')
+        if: ${{ !cancelled() && steps.npm11.outcome == 'success' && (github.event_name == 'workflow_dispatch' || !startsWith(github.ref_name, 'workflow-v')) }}
         working-directory: cli
-        run: |
-          name=$(node -p "require('./package.json').name")
-          ver=$(node -p "require('./package.json').version")
-          if npm view "$name@$ver" version >/dev/null 2>&1; then
-            echo "· $name@$ver already on npm — skipping"
-          else
-            echo "· publishing $name@$ver"
-            npm publish --provenance --access public
-          fi
+        run: "$GITHUB_WORKSPACE/.github/scripts/npm-publish.sh"
 
       - name: Publish @loomboard/workflow
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'workflow-v')
+        if: ${{ !cancelled() && steps.npm11.outcome == 'success' && (github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'workflow-v')) }}
         working-directory: packages/workflow
-        run: |
-          name=$(node -p "require('./package.json').name")
-          ver=$(node -p "require('./package.json').version")
-          if npm view "$name@$ver" version >/dev/null 2>&1; then
-            echo "· $name@$ver already on npm — skipping"
-          else
-            echo "· publishing $name@$ver"
-            npm publish --provenance --access public
-          fi
+        run: "$GITHUB_WORKSPACE/.github/scripts/npm-publish.sh"
