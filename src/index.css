@@ -872,6 +872,25 @@ button {
   align-items: center;
   gap: 0.5em;
 }
+.apps-ext {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5em;
+  max-width: 36rem;
+  margin-top: 0.6rem;
+}
+.apps-ext > .field {
+  flex: 1;
+  min-width: 14rem;
+}
+.apps-ext input {
+  font-family: var(--font-mono);
+}
+.apps-ext__note {
+  flex-basis: 100%;
+  color: var(--text-dim);
+}
 
 /* ---- my access (the caller's own connection and access rules) ---- */
 .access-pane {

@@ -5,7 +5,16 @@ import { useConnection, useLoomcycle } from "../state/connection";
 import { describeError } from "../chat/lib/errors";
 import { isTauri } from "../lib/proxyMode";
 import { webRedirectUri } from "../lib/webSignIn";
-import { admitsThisApp, appRow, newClient, parseLines, withThisApp, type ThisApp } from "../lib/appClients";
+import { EXTENSION_CLIENT_ID } from "../lib/appSignIn";
+import {
+  admitsThisApp,
+  appRow,
+  extensionInstall,
+  newClient,
+  parseLines,
+  withThisApp,
+  type ThisApp,
+} from "../lib/appClients";
 
 // The apps loomcycle signs people in for (RFC FL), for a tenant operator: the
 // ones in its config (read-only here) and the ones registered at runtime
@@ -104,7 +113,11 @@ export default function AppClients() {
                       {row.editable ? ` · v${row.version}` : " · in loomcycle's config, read-only here"}
                     </span>
                   </div>
-                  {row.editable && e.source === "def" && me && !admitsThisApp(row, me) && (
+                  {row.editable &&
+                    e.source === "def" &&
+                    row.name !== EXTENSION_CLIENT_ID &&
+                    me &&
+                    !admitsThisApp(row, me) && (
                     <button
                       type="button"
                       className="btn-ghost sm"
@@ -132,6 +145,17 @@ export default function AppClients() {
                   <dt>Allowed origins</dt>
                   <dd>{row.origins.join("\n") || "none"}</dd>
                 </dl>
+                {row.editable && e.source === "def" && row.name === EXTENSION_CLIENT_ID && (
+                  <ExtensionInstallField
+                    label="Add a Chrome extension install"
+                    action="Add install"
+                    disabled={busy !== undefined}
+                    admitted={(i) => admitsThisApp(row, i)}
+                    onInstall={(i) =>
+                      void act(row.name, () => client.updateClientDef(row.name, withThisApp(e.client, i)))
+                    }
+                  />
+                )}
                 {retiring === row.name && (
                   <div className="apps-confirm" role="dialog" aria-label={`Retire ${row.name}`}>
                     <p>
@@ -196,12 +220,11 @@ function RegisterForm({
   const [done, setDone] = useState<string>();
   const redirectUris = parseLines(redirects);
 
-  function fillThisApp() {
-    if (!me) return;
-    if (!name) setName("loomboard");
-    if (!label) setLabel("loomboard");
-    setRedirects(parseLines(`${redirects}\n${me.redirectUri}`).join("\n"));
-    setOrigins(parseLines(`${origins}\n${me.origin}`).join("\n"));
+  function fill(app: ThisApp, appName: string, appLabel: string) {
+    if (!name) setName(appName);
+    if (!label) setLabel(appLabel);
+    setRedirects(parseLines(`${redirects}\n${app.redirectUri}`).join("\n"));
+    setOrigins(parseLines(`${origins}\n${app.origin}`).join("\n"));
   }
 
   async function register(e: FormEvent) {
@@ -234,10 +257,15 @@ function RegisterForm({
     <form className="apps-form" onSubmit={register}>
       <h3>Register an app</h3>
       {me && (
-        <button type="button" className="btn-ghost sm" onClick={fillThisApp}>
+        <button type="button" className="btn-ghost sm" onClick={() => fill(me, "loomboard", "loomboard")}>
           Fill in this loomboard
         </button>
       )}
+      <ExtensionInstallField
+        label="Or fill in a Chrome extension install"
+        action="Fill in"
+        onInstall={(i) => fill(i, EXTENSION_CLIENT_ID, "loomboard Chrome extension")}
+      />
       <label className="field">
         <span>Name</span>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="loomboard" spellCheck={false} />
@@ -290,5 +318,64 @@ function RegisterForm({
         {busy ? <Loader2 size={14} className="spin" /> : "Register"}
       </button>
     </form>
+  );
+}
+
+/** A Chrome extension install, by its ID or either address its sign-in
+ *  screen shows. Not a <form>: it sits inside the register form. */
+function ExtensionInstallField({
+  label,
+  action,
+  disabled,
+  admitted,
+  onInstall,
+}: {
+  label: string;
+  action: string;
+  disabled?: boolean;
+  /** Whether the app already has this install, so nothing is written twice. */
+  admitted?: (install: ThisApp) => boolean;
+  onInstall: (install: ThisApp) => void;
+}) {
+  const [text, setText] = useState("");
+  const [note, setNote] = useState<string>();
+
+  function submit() {
+    const install = extensionInstall(text);
+    if (!install) {
+      setNote("Enter the extension's ID, or an address from its sign-in screen.");
+      return;
+    }
+    if (admitted?.(install)) {
+      setNote("This install is already on the app.");
+      return;
+    }
+    setNote(undefined);
+    setText("");
+    onInstall(install);
+  }
+
+  return (
+    <div className="apps-ext">
+      <label className="field">
+        <span>{label}</span>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="extension ID, or chrome-extension://…"
+          spellCheck={false}
+        />
+      </label>
+      <button type="button" className="btn-ghost sm" disabled={disabled || !text.trim()} onClick={submit}>
+        {action}
+      </button>
+      {note && <small className="apps-ext__note">{note}</small>}
+    </div>
   );
 }
