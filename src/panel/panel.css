@@ -54,6 +54,14 @@
 
 /* The panel is pinned to the browser-assistant agent; hide the in-chat agent
    picker so it can't be switched away (which would break actuation). */
+.ext-notice {
+  margin: 0;
+  padding: 0.4em 0.6em;
+  font-size: 0.75rem;
+  color: var(--warn);
+  border-bottom: 1px solid var(--border);
+}
+
 .ext-panel .agent-picker {
   display: none;
 }

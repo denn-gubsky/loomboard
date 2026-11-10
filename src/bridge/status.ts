@@ -31,3 +31,14 @@ class BridgeStatusStore {
 }
 
 export const bridgeStatus = new BridgeStatusStore();
+
+/** Why the browser tools cannot run on this server, or null when they can.
+ *  Under `auth.mode: strict` loomcycle reads no bearer from the WebSocket
+ *  subprotocol (RFC FA §4), and a browser cannot send an Authorization header
+ *  on a WebSocket, so the client-tool host would only loop on refused
+ *  handshakes. Delete once loomcycle offers a WebSocket ticket (G34). Pure. */
+export function bridgeBlockedBy(authMode: string | undefined): string | null {
+  return authMode === "strict"
+    ? "browser tools are off: this loomcycle uses strict sign-in, which needs loomcycle G34"
+    : null;
+}

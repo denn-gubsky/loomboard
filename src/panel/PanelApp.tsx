@@ -24,10 +24,10 @@ import { saveExtSettings, clearExtSettings } from "../state/extSettings";
 import { persistConversation, newConversation } from "../state/extConversation";
 import { saveMode, type ActionMode } from "../state/extMode";
 import { ASSISTANT_AGENT } from "../bridge/protocol";
-import { ensureChromeAssistant } from "../bridge/ensureAgent";
+import { agentSetupNotice, ensureChromeAssistant } from "../bridge/ensureAgent";
 import { startClientToolHost } from "../bridge/clientToolHost";
 import { approval } from "../bridge/approval";
-import { bridgeStatus } from "../bridge/status";
+import { bridgeBlockedBy, bridgeStatus } from "../bridge/status";
 import Connect from "./Connect";
 import ActionBar from "./ActionBar";
 import ModeToggle from "./ModeToggle";
@@ -93,6 +93,11 @@ export default function PanelApp({
   const [userId, setUserId] = useState<string | null>(null);
   const [conversation, setConversation] =
     useState<ChatConversation>(initialConversation);
+  // Shown above the chat when the assistant agent may be missing and this
+  // principal may not set it up.
+  const [setupNotice, setSetupNotice] = useState<string | null>(null);
+  // Why the browser tools cannot run on this server (strict sign-in), if so.
+  const [bridgeBlocked, setBridgeBlocked] = useState<string | null>(null);
 
   // Stable Connection identity (keyed on settings + sign-in) so <Chat>'s
   // client memo doesn't churn. The default fetch reaches loomcycle directly
@@ -104,17 +109,16 @@ export default function PanelApp({
 
   // Validate a client and make it the panel's connection. whoami is the only
   // hard gate. Registering the agent uses a surface a plain user token may
-  // lack scope for (agent def creation) — it must NOT block connect. The
-  // client-tool host itself only needs the bearer.
+  // lack scope for (agent def creation) — it must NOT block connect, and a
+  // refusal becomes a notice. The client-tool host itself only needs the
+  // bearer, and a server in strict sign-in mode reads none on its socket.
   const finishConnect = useCallback(async (client: LoomcycleClient, s: ConnectionSettings) => {
     const me = await client.whoami();
-    try {
-      await ensureChromeAssistant(client);
-    } catch (e) {
-      console.warn("[loomboard] could not ensure chrome-assistant agent:", e);
-    }
+    const setup = await ensureChromeAssistant(client);
     await saveExtSettings(s);
     setSettings(s);
+    setSetupNotice(agentSetupNotice(setup));
+    setBridgeBlocked(bridgeBlockedBy(me.auth?.mode));
     setUserId(me.subject);
     setError(null);
     setProblem(null);
@@ -310,6 +314,8 @@ export default function PanelApp({
     await clearExtSettings();
     setSettings(null);
     setUserId(null);
+    setSetupNotice(null);
+    setBridgeBlocked(null);
     setError(null);
     setStatus("idle");
   }, [endSignIn]);
@@ -327,6 +333,10 @@ export default function PanelApp({
   // offers the browser tools to this user's agents only while this host is live.
   useEffect(() => {
     if (status !== "connected" || !loopClient) return;
+    if (bridgeBlocked) {
+      bridgeStatus.set("off", bridgeBlocked);
+      return;
+    }
     const handle = startClientToolHost(
       loopClient,
       shouldConfirm,
@@ -337,7 +347,7 @@ export default function PanelApp({
       handle.stop();
       bridgeStatus.set("off", "");
     };
-  }, [status, loopClient, userId, shouldConfirm, connection]);
+  }, [status, loopClient, userId, shouldConfirm, connection, bridgeBlocked]);
 
   if (status === "connecting") {
     return (
@@ -364,7 +374,7 @@ export default function PanelApp({
     <div className="ext-panel">
       <BridgeStatusBar />
       <div className="ext-toolbar">
-        <ModeToggle mode={mode} onChange={onModeChange} />
+        {!bridgeBlocked && <ModeToggle mode={mode} onChange={onModeChange} />}
         <div className="ext-toolbar-right">
           <button
             className="ext-icon-btn"
@@ -374,9 +384,11 @@ export default function PanelApp({
           >
             <MessageSquarePlus size={14} />
           </button>
-          <button className="ext-stop" onClick={stop} title="Stop browser actions">
-            <Square size={12} /> Stop
-          </button>
+          {!bridgeBlocked && (
+            <button className="ext-stop" onClick={stop} title="Stop browser actions">
+              <Square size={12} /> Stop
+            </button>
+          )}
           <button
             className="ext-icon-btn"
             onClick={() => void disconnect()}
@@ -387,6 +399,11 @@ export default function PanelApp({
           </button>
         </div>
       </div>
+      {setupNotice && (
+        <p className="ext-notice" role="status">
+          {setupNotice}
+        </p>
+      )}
       <Chat
         voice={appVoice}
         // Remount cleanly on a new conversation so no stale session/transcript
