@@ -96,7 +96,7 @@ export function MicButton({ voice, disabled, sendAt, onCancelSend }: { voice: Vo
     icon = (
       <>
         <svg className="mic-ring" viewBox="0 0 32 32" aria-hidden key={sendAt}>
-          <circle cx="16" cy="16" r="14" style={{ animationDuration: `${Math.max(0, sendAt - Date.now())}ms` }} />
+          <circle cx="16" cy="16" r="14" style={{ animationDuration: `${SEND_DELAY_MS}ms` }} />
         </svg>
         <X size={16} />
       </>
