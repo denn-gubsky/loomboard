@@ -52,14 +52,16 @@ describe("useReadAloud", () => {
     });
   });
 
-  it("names en for an English piece, and leaves a Ukrainian one to loomcycle", async () => {
+  // loomcycle 1.144 picks the voice from each piece's script (G31), so an
+  // English piece is not named here either.
+  it("leaves every piece's language to loomcycle, English and Ukrainian alike", async () => {
     const { client, calls } = fakeClient();
     const { result } = renderHook(() => useReadAloud(client, INFO, "c1"));
     await waitFor(() => expect(result.current).not.toBeNull());
     act(() => result.current!.play("0", "Привіт, це перевірка голосу.\n\n" + "Leaves change colour. ".repeat(40)));
     await waitFor(() => expect(calls.speech).toHaveBeenCalledTimes(2));
     expect(calls.speech.mock.calls[0][1]).not.toHaveProperty("language");
-    expect(calls.speech.mock.calls[1][1]).toMatchObject({ language: "en" });
+    expect(calls.speech.mock.calls[1][1]).not.toHaveProperty("language");
   });
 
   it("never puts the bearer token in an audio URL: it plays only blob: URLs and the unlock clip", async () => {
