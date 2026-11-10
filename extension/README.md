@@ -27,14 +27,17 @@ Dev with HMR: `npm run dev:extension` (load the generated `extension/dist`).
 
 ## Prerequisites (on your loomcycle runtime — operator config)
 
-1. **loomcycle ≥ v1.16.0** — the release that ships client-executed tools
-   (`GET /v1/client-tools`). No channels to declare; actuation is automatic once a
-   connection is live. Browser clients additionally need the client-tool **Origin fix**
-   (recent 1.16.x) — see [Networking](#networking-behind-a-reverse-proxy--tailscale-serve).
+1. **loomcycle ≥ v1.126** for Sign in with loomcycle; **≥ v1.144** for voice (read-aloud
+   picks an English voice for English text, and speech-to-text strips most Qwen3-ASR
+   headers). The browser tools ride client-executed tools (`GET /v1/client-tools`, since
+   1.16): no channels to declare, actuation is automatic once a connection is live — see
+   [Networking](#networking-behind-a-reverse-proxy--tailscale-serve).
 2. **`LOOMCYCLE_SQLMEM_ENABLED=1`** — for the assistant's SQL save-data (`sql_scopes`).
 3. **WebSearch Brave backend** configured — for the WebSearch tool.
-4. Your **bearer token** must be allowed to create AgentDefs and to use the granted
-   tools (`client__browser_*` / WebFetch / WebSearch / Memory / Skill).
+4. You (your sign-in, or a pasted token) must be allowed to use the granted tools
+   (`client__browser_*` / WebFetch / WebSearch / Memory / Skill), and either to create
+   AgentDefs or to find `chrome-assistant` already made by an operator. When neither holds,
+   the panel says so above the chat.
 5. To use skills (e.g. `marketing/*`), **register them in the loomcycle Library**
    (SkillDef); they're granted via the agent's `skills` allowlist.
 6. For **Sign in with loomcycle**: `LOOMCYCLE_PUBLIC_URL`, an interactive gate, and this
@@ -55,6 +58,13 @@ with `tools: [client__browser_*, WebFetch, WebSearch, Memory, Skill]` + the syst
 It is **create-if-absent** — if you already have a `chrome-assistant` from an older
 (channel-bridge) build, grant it `client__browser_*` (you may drop `Channel`) so the
 browser tools are offered; the extension won't rewrite an existing def.
+
+7. **`auth.mode: strict`** — the chat works, but the browser tools do not yet: strict mode
+   reads no bearer from the client-tool WebSocket, and a browser cannot send an
+   `Authorization` header on one. The panel says so in its status line. loomcycle gap G34
+   asks for a WebSocket ticket; the extension will use it once it ships.
+8. **Voice** (optional) — `speech:` (read-aloud) and `transcription.stt:` (voice input) in
+   loomcycle's config; the panel shows each control only when loomcycle offers it to you.
 
 ## Networking: behind a reverse proxy / tailscale serve
 
@@ -108,6 +118,13 @@ this form with … and submit". Actions are gated by an **approval bar** in **Co
 mode (default); switch to **Auto** to run actions immediately (a **Stop** button
 dismisses a pending action). Sensitive fields (passwords, payment) always require
 confirmation. A status line shows whether the client-tool WebSocket is connected.
+
+**Voice.** Where your loomcycle offers speech, a reply has a speaker button that reads it
+aloud. Where it offers speech-to-text, the composer has a mic: hold it to talk and send, or
+tap it to dictate into the draft. Chrome shows no microphone prompt in a side panel, so the
+first press opens a loomboard page in a tab with an **Allow microphone** button. Once you
+allow it, the tab closes, and the panel's mic works from then on. To take the permission
+back, use Chrome's site settings for `chrome-extension://<extension-id>`.
 
 ## Security & trust model
 

@@ -124,6 +124,25 @@ describe("useVoiceInput", () => {
     await waitFor(() => expect(onText).toHaveBeenCalledWith("Hello there.", false));
   });
 
+  it("asks the host's ensureMicrophone before the microphone, and records nothing when it says not now", async () => {
+    const ensureMicrophone = vi.fn(async () => false);
+    const client = { transcribe: vi.fn() } as unknown as LoomcycleClient;
+    const { result } = renderHook(() =>
+      useVoiceInput(client, INFO, null, {
+        picked: undefined,
+        onPick: vi.fn(),
+        host: undefined,
+        onText: vi.fn(),
+        resetKey: "c1",
+        ensureMicrophone,
+      }),
+    );
+    act(() => result.current!.start());
+    await waitFor(() => expect(result.current!.state.status).toBe("idle"));
+    expect(ensureMicrophone).toHaveBeenCalledOnce();
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+  });
+
   it("defaults to the server's language", () => {
     const { result } = setup();
     expect(result.current?.language).toBe("uk");

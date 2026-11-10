@@ -181,4 +181,55 @@ describe("voiceRecorder", () => {
     expect(texts).toEqual([]);
     expect(rec.getState()).toMatchObject({ status: "error", error: "No speech was recognised. Check that the level bar moves while you speak.", canRetry: false });
   });
+
+  describe("with a host that gets permission itself (ensureMicrophone)", () => {
+    it("asks the host first, and opens the microphone only when it says yes", async () => {
+      const order: string[] = [];
+      const { rec, deps } = harness({
+        ensureMicrophone: vi.fn(async () => {
+          order.push("ensure");
+          return true;
+        }),
+      });
+      (deps.getUserMedia as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        order.push("getUserMedia");
+        return { getTracks: () => [] } as unknown as MediaStream;
+      });
+      rec.start();
+      await tick();
+      expect(order).toEqual(["ensure", "getUserMedia"]);
+      expect(rec.getState().status).toBe("recording");
+    });
+
+    it("ends the take quietly when the host says not now, without touching the microphone", async () => {
+      const { rec, deps } = harness({ ensureMicrophone: async () => false });
+      rec.start();
+      expect(rec.getState().status).toBe("starting");
+      await tick();
+      expect(rec.getState()).toEqual({ status: "idle", startedAt: null, error: null, canRetry: false });
+      expect(deps.getUserMedia).not.toHaveBeenCalled();
+    });
+
+    it("ignores the host's late answer after the take was cancelled", async () => {
+      let answer!: (ok: boolean) => void;
+      const { rec, deps } = harness({ ensureMicrophone: () => new Promise<boolean>((r) => (answer = r)) });
+      rec.start();
+      rec.cancel();
+      answer(true);
+      await tick();
+      expect(deps.getUserMedia).not.toHaveBeenCalled();
+      expect(rec.getState().status).toBe("idle");
+    });
+
+    it("reports a host that fails as a microphone error", async () => {
+      const { rec } = harness({
+        ensureMicrophone: async () => {
+          throw new DOMException("no", "NotAllowedError");
+        },
+      });
+      rec.start();
+      await tick();
+      expect(rec.getState()).toMatchObject({ status: "error", error: "Microphone access was denied." });
+    });
+  });
 });

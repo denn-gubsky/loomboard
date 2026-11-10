@@ -9,5 +9,11 @@ import manifest from "./extension/manifest.config";
 // (host_permissions bypass page CORS); see src/lib/proxyMode.ts (isExtension).
 export default defineConfig({
   plugins: [react(), crx({ manifest })],
-  build: { outDir: "extension/dist", emptyOutDir: true },
+  build: {
+    outDir: "extension/dist",
+    emptyOutDir: true,
+    // The microphone page is opened by URL (chrome.runtime.getURL), not named
+    // in the manifest, so it is an input of its own.
+    rollupOptions: { input: { mic: "src/panel/mic.html" } },
+  },
 });

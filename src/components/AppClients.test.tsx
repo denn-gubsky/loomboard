@@ -169,4 +169,64 @@ describe("AppClients", () => {
     expect(screen.queryByRole("button", { name: "Fill in this loomboard" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add this loomboard" })).toBeNull();
   });
+
+  describe("Chrome extension installs", () => {
+    const ID = "abcdefghijklmnopabcdefghijklmnop";
+    const REDIRECT = `https://${ID}.chromiumapp.org/`;
+    const EXT_ORIGIN = `chrome-extension://${ID}`;
+    const extApp: ClientDefRecord = {
+      ...registered,
+      name: "loomboard-extension",
+      label: "loomboard Chrome extension",
+      redirect_uris: [REDIRECT],
+      client: { kind: "public", redirect_uris: [REDIRECT], allowed_origins: [EXT_ORIGIN] },
+    };
+    const OTHER = "ponmlkjihgfedcbaponmlkjihgfedcba";
+
+    it("adds another install to the loomboard-extension app, from either address", async () => {
+      listClientDefs.mockResolvedValue({ clients: [registered, extApp] });
+      render(<AppClients />);
+      const field = await screen.findByLabelText("Add a Chrome extension install");
+      fireEvent.change(field, { target: { value: `chrome-extension://${OTHER}` } });
+      fireEvent.click(screen.getByRole("button", { name: "Add install" }));
+      await waitFor(() => expect(updateClientDef).toHaveBeenCalled());
+      expect(updateClientDef).toHaveBeenCalledWith("loomboard-extension", {
+        kind: "public",
+        redirect_uris: [REDIRECT, `https://${OTHER}.chromiumapp.org/`],
+        allowed_origins: [EXT_ORIGIN, `chrome-extension://${OTHER}`],
+      });
+      // Only the extension's app offers it.
+      expect(screen.getAllByLabelText("Add a Chrome extension install")).toHaveLength(1);
+      // ...and it is not offered this web loomboard's addresses.
+      expect(screen.getAllByRole("button", { name: "Add this loomboard" })).toHaveLength(1);
+    });
+
+    it("writes nothing for an install the app already has, or text that is not an extension ID", async () => {
+      listClientDefs.mockResolvedValue({ clients: [extApp] });
+      render(<AppClients />);
+      const field = await screen.findByLabelText("Add a Chrome extension install");
+      fireEvent.change(field, { target: { value: REDIRECT } });
+      fireEvent.click(screen.getByRole("button", { name: "Add install" }));
+      expect(await screen.findByText("This install is already on the app.")).toBeTruthy();
+      fireEvent.change(field, { target: { value: "not-an-id" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add install" }));
+      expect(await screen.findByText(/Enter the extension's ID/)).toBeTruthy();
+      expect(updateClientDef).not.toHaveBeenCalled();
+    });
+
+    it("registers the loomboard-extension app from an install's ID", async () => {
+      listClientDefs.mockResolvedValue({ clients: [] });
+      render(<AppClients />);
+      await screen.findByText("No apps are registered.");
+      fireEvent.change(screen.getByLabelText("Or fill in a Chrome extension install"), { target: { value: ID } });
+      fireEvent.click(screen.getByRole("button", { name: "Fill in" }));
+      fireEvent.click(screen.getByRole("button", { name: "Register" }));
+      await waitFor(() => expect(createClientDef).toHaveBeenCalled());
+      expect(createClientDef).toHaveBeenCalledWith(
+        "loomboard-extension",
+        { kind: "public", label: "loomboard Chrome extension", redirect_uris: [REDIRECT], allowed_origins: [EXT_ORIGIN] },
+        {},
+      );
+    });
+  });
 });

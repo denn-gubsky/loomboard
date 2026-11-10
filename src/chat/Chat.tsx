@@ -74,8 +74,13 @@ export interface ChatProps {
    *  (1.140+) offers it to this user, as its `whoami` reports. `false` turns
    *  voice off for this host; `{ output: false }` hides read-aloud and
    *  `{ input: false }` the microphone. `language` is the host's preferred
-   *  language for voice input, until the user picks one in the chat. */
-  voice?: false | { output?: boolean; input?: boolean; language?: string };
+   *  language for voice input, until the user picks one in the chat.
+   *  `ensureMicrophone` is asked before each take opens the microphone, for a
+   *  host that gets permission another way (a Chrome extension's side panel
+   *  cannot show the prompt): resolve false and the take ends quietly. */
+  voice?:
+    | false
+    | { output?: boolean; input?: boolean; language?: string; ensureMicrophone?: () => Promise<boolean> };
 }
 
 // The embeddable chat surface for a single conversation: agent picker, model /
@@ -128,6 +133,7 @@ export default function Chat({
     // Stop a reading (the mic would record it) and unlock audio inside the
     // gesture, so the reply to this message can be read on its own later.
     onGesture: () => readAloud?.prime(),
+    ensureMicrophone: voice ? voice.ensureMicrophone : undefined,
   });
 
   const baseDef = agents.find(

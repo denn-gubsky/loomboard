@@ -13,7 +13,7 @@ import { defineManifest } from "@crxjs/vite-plugin";
 export default defineManifest({
   manifest_version: 3,
   name: "loomboard",
-  version: "0.1.12",
+  version: "0.2.0",
   description:
     "loomboard — agentic browser assistant: a loomcycle chat in the Chrome side panel.",
   // Icons live in extension/icons/ (derived from the loomboard logo); crxjs
