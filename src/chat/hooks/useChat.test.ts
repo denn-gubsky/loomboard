@@ -17,6 +17,7 @@ function fakeClient() {
     runStreaming: vi.fn(),
     continueSession: vi.fn(),
     sendRunInput: vi.fn(async () => ({ run_id: "r1", delivered: true })),
+    cancelTurn: vi.fn(async () => ({ run_id: "r1", stopped: true, parked: true })),
     agentDef: vi.fn(async () => ({})),
   };
   const open: Array<() => void> = [];
@@ -29,6 +30,7 @@ function fakeClient() {
     runStreaming: (o: unknown) => (calls.runStreaming(o), parked()),
     continueSession: (o: unknown) => (calls.continueSession(o), parked()),
     sendRunInput: calls.sendRunInput,
+    cancelTurn: calls.cancelTurn,
     agentDef: calls.agentDef,
   } as unknown as LoomcycleClient;
   /** Release every parked stream, so nothing is left pending at teardown. */
@@ -163,5 +165,27 @@ describe("useChat — a settings change mid-conversation", () => {
     await d.send("first");
     await waitFor(() => expect(calls.continueSession).toHaveBeenCalledTimes(1));
     expect(calls.continueSession.mock.calls[0][0]).toMatchObject({ effort: "low" });
+  });
+});
+
+describe("useChat — Stop, then the next message", () => {
+  it("steers the parked run instead of starting a second one on its session", async () => {
+    // A stopped turn leaves its run parked, holding the session: a
+    // continueSession then is refused 409 session_busy ("another request is in
+    // flight on session"), and every retry with it.
+    const { client, calls, closeAll } = fakeClient();
+    const d = driver(convo({ sessionId: "s1" }), client);
+    await d.send("first");
+    await waitFor(() => expect(calls.continueSession).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await d.result.current.cancel();
+    });
+    expect(calls.cancelTurn).toHaveBeenCalledWith("r1", expect.anything());
+
+    await d.send("second");
+    await waitFor(() => expect(calls.sendRunInput).toHaveBeenCalledWith("r1", "second"));
+    expect(calls.continueSession).toHaveBeenCalledTimes(1);
+    closeAll();
   });
 });
