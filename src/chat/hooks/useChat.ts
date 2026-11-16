@@ -274,18 +274,24 @@ export function useChat(
     // which would end the chat. cancelTurn keys on run_id — known live
     // (runIdRef) or from a reopened conversation (state.runId).
     const runId = runIdRef.current || state.runId || "";
-    // Supersede any live stream so its frames stop landing while we settle; the
-    // next send resumes the parked run via continueSession.
-    genRef.current++;
-    abortRef.current?.abort();
-    liveRef.current = false;
     setRunning(false);
-    try {
-      if (runId) await client.cancelTurn(runId, { reason: "operator cancelled" });
-    } catch (e) {
-      // 409 (not mid-turn / not interactive) or 404 (run gone): nothing to
-      // stop — settle the UI anyway. Logged for devtools.
-      console.warn("[chat] cancelTurn failed", e);
+    if (!runId) {
+      // Nothing started yet to stop on the server: just drop the stream.
+      genRef.current++;
+      abortRef.current?.abort();
+      liveRef.current = false;
+    } else {
+      // Keep the live stream. The run outlives its turn, parked, and holds its
+      // session until it ends: a continueSession now is refused 409
+      // session_busy, so the next message has to steer this run, which needs
+      // the stream still attached. A run that is gone ends its stream itself.
+      try {
+        await client.cancelTurn(runId, { reason: "operator cancelled" });
+      } catch (e) {
+        // 409 (not mid-turn / not interactive) or 404 (run gone): nothing to
+        // stop — settle the UI anyway. Logged for devtools.
+        console.warn("[chat] cancelTurn failed", e);
+      }
     }
     dispatch({ kind: "turnStopped" });
   }, [client, state.runId]);
